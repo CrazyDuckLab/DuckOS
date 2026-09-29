@@ -1,0 +1,1540 @@
+/**
+ * DuckOS V1 — help & search index.
+ *
+ * DuckOS already has a global search at the top of the shell. This module
+ * extends that index with page metadata so a natural-language query
+ * resolves to a workspace page, not a destructive action.
+ *
+ * Index entry contract (kept narrow on purpose):
+ *   pageId        — matches PageRegistry page ids.
+ *   sectionId     — one of the 10 nav sections, used to group results.
+ *   languages     — which locales have copy for this entry.
+ *   keywords      — every locale-free word the operator might type.
+ *   synonyms      — natural-language phrasing (RU/DE/ES too).
+ *   relatedPages  — siblings surfaced for "explain why" panels.
+ *   easyHint      — short copy shown on the Easy home tile for this page.
+ *
+ * Search result is *always* a navigation suggestion. We never execute
+ * destructive actions from search; that is the explicit contract.
+ */
+import type { Locale } from "../i18n/messages";
+
+export interface HelpEntry {
+  pageId: string;
+  sectionId: SectionId;
+  languages: ReadonlyArray<Locale>;
+  keywords: ReadonlyArray<string>;
+  synonyms: ReadonlyArray<string>;
+  relatedPages: ReadonlyArray<string>;
+  easyHint: Record<Locale, string>;
+  /** Optional doc link shown in the inspector when one exists. */
+  docAnchor?: string;
+}
+
+export type SectionId =
+  | "interfaces"
+  | "wan"
+  | "lan"
+  | "routing"
+  | "firewall"
+  | "tunnels"
+  | "dns"
+  | "services"
+  | "system"
+  | "logs"
+  | "easy";
+
+export const HELP_INDEX: ReadonlyArray<HelpEntry> = [
+  {
+    pageId: "P001",
+    sectionId: "system",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["system overview", "System Overview", "p001", "system", "hostname", "uptime", "cpu/ram/storage", "interface summaries", "sessions", "internet evidence", "pending changes"],
+    synonyms: ["System Overview", "система", "обзор системы", "журнал", "System", "Übersicht"],
+    relatedPages: [],
+    easyHint: {
+      en: "Home health summary without invented success",
+      ru: "System Overview",
+      de: "System Overview",
+      es: "System Overview",
+    },
+  },
+  {
+    pageId: "P002",
+    sectionId: "system",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["candidate and safe apply", "Candidate and Safe Apply", "p002", "system", "candidate", "diff", "commit", "commit-confirmed", "locks", "conflicts", "canary", "blast radius", "transaction ordering"],
+    synonyms: ["Candidate and Safe Apply", "система", "обзор системы", "журнал", "System", "Übersicht"],
+    relatedPages: [],
+    easyHint: {
+      en: "Review changes with concrete effects and global timer",
+      ru: "Candidate and Safe Apply",
+      de: "Candidate and Safe Apply",
+      es: "Candidate and Safe Apply",
+    },
+  },
+  {
+    pageId: "P003",
+    sectionId: "system",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["configuration history", "Configuration History", "p003", "system", "revisions", "checkpoints", "network time machine", "compare", "rollback"],
+    synonyms: ["Configuration History", "система", "обзор системы", "журнал", "System", "Übersicht"],
+    relatedPages: [],
+    easyHint: {
+      en: "Recent changes and Restore known-good",
+      ru: "Configuration History",
+      de: "Configuration History",
+      es: "Configuration History",
+    },
+  },
+  {
+    pageId: "P004",
+    sectionId: "system",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["dependencies and ownership", "Dependencies and Ownership", "p004", "system", "dependency graph", "reverse dependencies", "provenance", "generated ownership", "detach", "aliases", "tags", "clone"],
+    synonyms: ["Dependencies and Ownership", "система", "обзор системы", "журнал", "System", "Übersicht"],
+    relatedPages: [],
+    easyHint: {
+      en: "Managed-by details on related object",
+      ru: "Dependencies and Ownership",
+      de: "Dependencies and Ownership",
+      es: "Dependencies and Ownership",
+    },
+  },
+  {
+    pageId: "P005",
+    sectionId: "system",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["templates", "Templates", "p005", "system", "wizard-generated ordinary objects", "parameter validation", "ztp one-time provisioning credentials"],
+    synonyms: ["Templates", "система", "обзор системы", "журнал", "System", "Übersicht"],
+    relatedPages: [],
+    easyHint: {
+      en: "Guided presets without hidden configuration",
+      ru: "Templates",
+      de: "Templates",
+      es: "Templates",
+    },
+  },
+  {
+    pageId: "P006",
+    sectionId: "system",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["import and migration", "Import and Migration", "p006", "system", "vyos", "openwrt uci", "mikrotik", "kerio", "generic linux import", "recognized/convertible/attention/unsupported"],
+    synonyms: ["Import and Migration", "система", "обзор системы", "журнал", "System", "Übersicht"],
+    relatedPages: [],
+    easyHint: {
+      en: "Guided import with no automatic apply",
+      ru: "Import and Migration",
+      de: "Import and Migration",
+      es: "Import and Migration",
+    },
+  },
+  {
+    pageId: "P007",
+    sectionId: "interfaces",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["interfaces", "Interfaces", "p007", "physical", "virtual", "addresses", "link", "mtu", "mac", "sfp", "interface identity"],
+    synonyms: ["Interfaces", "интерфейсы", "сетевые интерфейсы", "Schnittstellen", "interfaces"],
+    relatedPages: [],
+    easyHint: {
+      en: "Ports and role assignment with physical guidance",
+      ru: "Interfaces",
+      de: "Interfaces",
+      es: "Interfaces",
+    },
+  },
+  {
+    pageId: "P008",
+    sectionId: "interfaces",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["bridges and fdb", "Bridges and FDB", "p008", "interfaces", "bridge", "fdb", "static mac", "port membership", "vlan filtering"],
+    synonyms: ["Bridges and FDB", "интерфейсы", "сетевые интерфейсы", "Schnittstellen", "interfaces"],
+    relatedPages: [],
+    easyHint: {
+      en: "Network ports as part of LAN workflow",
+      ru: "Bridges and FDB",
+      de: "Bridges and FDB",
+      es: "Bridges and FDB",
+    },
+  },
+  {
+    pageId: "P009",
+    sectionId: "interfaces",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["bonding / lacp", "Bonding / LACP", "p009", "interfaces", "bonding", "lacp", "member failures", "hash policy"],
+    synonyms: ["Bonding / LACP", "интерфейсы", "сетевые интерфейсы", "Schnittstellen", "interfaces"],
+    relatedPages: [],
+    easyHint: {
+      en: "Link aggregation guided explanation; Full edit",
+      ru: "Bonding / LACP",
+      de: "Bonding / LACP",
+      es: "Bonding / LACP",
+    },
+  },
+  {
+    pageId: "P010",
+    sectionId: "interfaces",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["loop and storm protection", "Loop and Storm Protection", "p010", "interfaces", "stp", "rstp", "mstp", "bpdu/root/loop guards", "storm control", "mac flapping"],
+    synonyms: ["Loop and Storm Protection", "интерфейсы", "сетевые интерфейсы", "Schnittstellen", "interfaces"],
+    relatedPages: [],
+    easyHint: {
+      en: "Loop warning plus safe recommended action",
+      ru: "Loop and Storm Protection",
+      de: "Loop and Storm Protection",
+      es: "Loop and Storm Protection",
+    },
+  },
+  {
+    pageId: "P011",
+    sectionId: "interfaces",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["discovery / lldp", "Discovery / LLDP", "p011", "interfaces", "lldp", "lldp-med", "neighbors", "evidence confidence"],
+    synonyms: ["Discovery / LLDP", "интерфейсы", "сетевые интерфейсы", "Schnittstellen", "interfaces"],
+    relatedPages: [],
+    easyHint: {
+      en: "Connected equipment detail",
+      ru: "Discovery / LLDP",
+      de: "Discovery / LLDP",
+      es: "Discovery / LLDP",
+    },
+  },
+  {
+    pageId: "P012",
+    sectionId: "interfaces",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["port security and snooping", "Port Security and Snooping", "p012", "interfaces", "port security", "dhcp snooping", "option 82 trust", "dai", "ra guard", "mac limits"],
+    synonyms: ["Port Security and Snooping", "интерфейсы", "сетевые интерфейсы", "Schnittstellen", "interfaces"],
+    relatedPages: [],
+    easyHint: {
+      en: "Protect guest/network wizard",
+      ru: "Port Security and Snooping",
+      de: "Port Security and Snooping",
+      es: "Port Security and Snooping",
+    },
+  },
+  {
+    pageId: "P013",
+    sectionId: "interfaces",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["mirroring / span", "Mirroring / SPAN", "p013", "interfaces", "span", "erspan", "capture destinations"],
+    synonyms: ["Mirroring / SPAN", "интерфейсы", "сетевые интерфейсы", "Schnittstellen", "interfaces"],
+    relatedPages: [],
+    easyHint: {
+      en: "Contextual diagnostic only",
+      ru: "Mirroring / SPAN",
+      de: "Mirroring / SPAN",
+      es: "Mirroring / SPAN",
+    },
+  },
+  {
+    pageId: "P014",
+    sectionId: "interfaces",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["macsec", "MACsec", "p014", "interfaces", "secure associations", "key lifecycle", "replay protection"],
+    synonyms: ["MACsec", "интерфейсы", "сетевые интерфейсы", "Schnittstellen", "interfaces"],
+    relatedPages: [],
+    easyHint: {
+      en: "Full-only with understandable link security status",
+      ru: "MACsec",
+      de: "MACsec",
+      es: "MACsec",
+    },
+  },
+  {
+    pageId: "P015",
+    sectionId: "interfaces",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["acceleration and sr-iov", "Acceleration and SR-IOV", "p015", "interfaces", "hardware offload", "dsa", "switchdev", "devlink", "sr-iov", "xdp/ebpf", "irq/rss/rps/xps", "numa"],
+    synonyms: ["Acceleration and SR-IOV", "интерфейсы", "сетевые интерфейсы", "Schnittstellen", "interfaces"],
+    relatedPages: [],
+    easyHint: {
+      en: "Performance explanation only; advanced editing in Full",
+      ru: "Acceleration and SR-IOV",
+      de: "Acceleration and SR-IOV",
+      es: "Acceleration and SR-IOV",
+    },
+  },
+  {
+    pageId: "P016",
+    sectionId: "interfaces",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["l2 resilience / oam", "L2 Resilience / OAM", "p016", "interfaces", "mc-lag", "peer link", "cfm", "ethernet oam", "erps", "mrp"],
+    synonyms: ["L2 Resilience / OAM", "интерфейсы", "сетевые интерфейсы", "Schnittstellen", "interfaces"],
+    relatedPages: [],
+    easyHint: {
+      en: "Incident evidence only",
+      ru: "L2 Resilience / OAM",
+      de: "L2 Resilience / OAM",
+      es: "L2 Resilience / OAM",
+    },
+  },
+  {
+    pageId: "P017",
+    sectionId: "wan",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["wan connections", "WAN Connections", "p017", "wan", "dhcp", "static", "pppoe", "l2tp", "mac clone", "addressing", "provider", "cgnat", "mtu/pmtu/mss"],
+    synonyms: ["WAN Connections", "провайдер", "интернет", "wan", "uplink", "ISP"],
+    relatedPages: [],
+    easyHint: {
+      en: "Internet setup workflow",
+      ru: "WAN Connections",
+      de: "WAN Connections",
+      es: "WAN Connections",
+    },
+  },
+  {
+    pageId: "P018",
+    sectionId: "wan",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["mobile / usb wan", "Mobile / USB WAN", "p018", "wan", "modem", "sim", "apn", "signal", "data budget", "pin", "backup wan"],
+    synonyms: ["Mobile / USB WAN", "провайдер", "интернет", "wan", "uplink", "ISP"],
+    relatedPages: [],
+    easyHint: {
+      en: "Backup Internet setup when hardware present",
+      ru: "Mobile / USB WAN",
+      de: "Mobile / USB WAN",
+      es: "Mobile / USB WAN",
+    },
+  },
+  {
+    pageId: "P019",
+    sectionId: "wan",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["multi-wan / failover", "Multi-WAN / Failover", "p019", "wan", "route groups", "ecmp", "balancing", "preferred exit", "session impact", "backup activation"],
+    synonyms: ["Multi-WAN / Failover", "провайдер", "интернет", "wan", "uplink", "ISP"],
+    relatedPages: [],
+    easyHint: {
+      en: "Primary/backup wizard",
+      ru: "Multi-WAN / Failover",
+      de: "Multi-WAN / Failover",
+      es: "Multi-WAN / Failover",
+    },
+  },
+  {
+    pageId: "P020",
+    sectionId: "wan",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["path quality / sd-wan", "Path Quality / SD-WAN", "p020", "wan", "ip sla", "latency", "jitter", "loss", "path scoring", "brownout", "application class", "sd-wan"],
+    synonyms: ["Path Quality / SD-WAN", "провайдер", "интернет", "wan", "uplink", "ISP"],
+    relatedPages: [],
+    easyHint: {
+      en: "Internet quality and backup reason",
+      ru: "Path Quality / SD-WAN",
+      de: "Path Quality / SD-WAN",
+      es: "Path Quality / SD-WAN",
+    },
+  },
+  {
+    pageId: "P021",
+    sectionId: "wan",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["ddns", "DDNS", "p021", "wan", "ddns providers", "external ip changes", "cgnat constraints"],
+    synonyms: ["DDNS", "провайдер", "интернет", "wan", "uplink", "ISP"],
+    relatedPages: [],
+    easyHint: {
+      en: "Publish-service prerequisite",
+      ru: "DDNS",
+      de: "DDNS",
+      es: "DDNS",
+    },
+  },
+  {
+    pageId: "P022",
+    sectionId: "lan",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["networks / lan / vlan", "Networks / LAN / VLAN", "p022", "lan", "vlan", "qinq", "coherent dhcp/dns/ports/isolation", "segmentation"],
+    synonyms: ["Networks / LAN / VLAN", "lan", "vlan", "подсеть", "локальная сеть", "LAN"],
+    relatedPages: [],
+    easyHint: {
+      en: "Create home/guest/segmented network",
+      ru: "Networks / LAN / VLAN",
+      de: "Networks / LAN / VLAN",
+      es: "Networks / LAN / VLAN",
+    },
+  },
+  {
+    pageId: "P023",
+    sectionId: "lan",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["address plan / ipam", "Address Plan / IPAM", "p023", "lan", "vlan", "ipam", "prefixes", "pools", "overlaps", "reservations", "assignments"],
+    synonyms: ["Address Plan / IPAM", "lan", "vlan", "подсеть", "локальная сеть", "LAN"],
+    relatedPages: [],
+    easyHint: {
+      en: "Suggest safe subnet with uncertainty visible",
+      ru: "Address Plan / IPAM",
+      de: "Address Plan / IPAM",
+      es: "Address Plan / IPAM",
+    },
+  },
+  {
+    pageId: "P024",
+    sectionId: "lan",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["clients / devices", "Clients / Devices", "p024", "lan", "vlan", "device identity", "aliases", "tags", "active sessions", "quarantine", "nac", "reservations", "trust"],
+    synonyms: ["Clients / Devices", "lan", "vlan", "подсеть", "локальная сеть", "LAN"],
+    relatedPages: [],
+    easyHint: {
+      en: "Devices with clear online/last-seen distinction",
+      ru: "Clients / Devices",
+      de: "Clients / Devices",
+      es: "Clients / Devices",
+    },
+  },
+  {
+    pageId: "P025",
+    sectionId: "lan",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["wi-fi", "Wi-Fi", "p025", "lan", "vlan", "ap", "station", "ssid", "security", "hostapd", "channels", "radio capabilities"],
+    synonyms: ["Wi-Fi", "lan", "vlan", "подсеть", "локальная сеть", "LAN"],
+    relatedPages: [],
+    easyHint: {
+      en: "Wi-Fi setup/status where supported, otherwise explanatory entry",
+      ru: "Wi-Fi",
+      de: "Wi-Fi",
+      es: "Wi-Fi",
+    },
+  },
+  {
+    pageId: "P026",
+    sectionId: "lan",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["ipv6 addressing / pd", "IPv6 Addressing / PD", "p026", "lan", "vlan", "dhcpv6", "slaac", "ra", "prefix delegation", "ipv6 isolation"],
+    synonyms: ["IPv6 Addressing / PD", "lan", "vlan", "подсеть", "локальная сеть", "LAN"],
+    relatedPages: [],
+    easyHint: {
+      en: "IPv6 automatic with explicit status",
+      ru: "IPv6 Addressing / PD",
+      de: "IPv6 Addressing / PD",
+      es: "IPv6 Addressing / PD",
+    },
+  },
+  {
+    pageId: "P027",
+    sectionId: "routing",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["routes / rib / fib", "Routes / RIB / FIB", "p027", "routing", "configured routes", "active routes", "rib", "fib", "recursion", "ecmp", "route selection", "anycast vip advertisement intent"],
+    synonyms: ["Routes / RIB / FIB", "маршрутизация", "маршруты", "bgp", "ospf", "Routing", "BGP сосед"],
+    relatedPages: [],
+    easyHint: {
+      en: "Where traffic goes summary",
+      ru: "Routes / RIB / FIB",
+      de: "Routes / RIB / FIB",
+      es: "Routes / RIB / FIB",
+    },
+  },
+  {
+    pageId: "P028",
+    sectionId: "routing",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["policy routing", "Policy Routing", "p028", "routing", "ip rules", "preferred exit", "selective routing", "route groups", "fallback"],
+    synonyms: ["Policy Routing", "маршрутизация", "маршруты", "bgp", "ospf", "Routing", "BGP сосед"],
+    relatedPages: [],
+    easyHint: {
+      en: "Send device/application through selected exit",
+      ru: "Policy Routing",
+      de: "Policy Routing",
+      es: "Policy Routing",
+    },
+  },
+  {
+    pageId: "P029",
+    sectionId: "routing",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["vrf / route leaking", "VRF / Route Leaking", "p029", "routing", "vrf", "independent tables", "members", "route leaking"],
+    synonyms: ["VRF / Route Leaking", "маршрутизация", "маршруты", "bgp", "ospf", "Routing", "BGP сосед"],
+    relatedPages: [],
+    easyHint: {
+      en: "Explain tenant isolation; Full editing",
+      ru: "VRF / Route Leaking",
+      de: "VRF / Route Leaking",
+      es: "VRF / Route Leaking",
+    },
+  },
+  {
+    pageId: "P030",
+    sectionId: "routing",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["bgp", "BGP", "p030", "routing", "bgp peers", "afi/safi", "received/advertised/accepted/rejected", "attributes", "reset"],
+    synonyms: ["BGP", "маршрутизация", "маршруты", "bgp", "ospf", "Routing", "BGP сосед"],
+    relatedPages: [],
+    easyHint: {
+      en: "Full only; incident prose in Easy",
+      ru: "BGP",
+      de: "BGP",
+      es: "BGP",
+    },
+  },
+  {
+    pageId: "P031",
+    sectionId: "routing",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["ospf", "OSPF", "p031", "routing", "ospfv2", "ospfv3", "instances", "areas", "neighbors", "lsdb", "redistribution"],
+    synonyms: ["OSPF", "маршрутизация", "маршруты", "bgp", "ospf", "Routing", "BGP сосед"],
+    relatedPages: [],
+    easyHint: {
+      en: "Failure explanation only",
+      ru: "OSPF",
+      de: "OSPF",
+      es: "OSPF",
+    },
+  },
+  {
+    pageId: "P032",
+    sectionId: "routing",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["is-is / rip", "IS-IS / RIP", "p032", "routing", "is-is", "levels", "net", "rip", "ripng"],
+    synonyms: ["IS-IS / RIP", "маршрутизация", "маршруты", "bgp", "ospf", "Routing", "BGP сосед"],
+    relatedPages: [],
+    easyHint: {
+      en: "Full only",
+      ru: "IS-IS / RIP",
+      de: "IS-IS / RIP",
+      es: "IS-IS / RIP",
+    },
+  },
+  {
+    pageId: "P033",
+    sectionId: "routing",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["bfd", "BFD", "p033", "routing", "bfd sessions", "detection timers", "dependent protocols"],
+    synonyms: ["BFD", "маршрутизация", "маршруты", "bgp", "ospf", "Routing", "BGP сосед"],
+    relatedPages: [],
+    easyHint: {
+      en: "Dependent incident detail only",
+      ru: "BFD",
+      de: "BFD",
+      es: "BFD",
+    },
+  },
+  {
+    pageId: "P034",
+    sectionId: "routing",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["route filters / redistribution", "Route Filters / Redistribution", "p034", "routing", "route filters", "prefix lists", "communities", "redistribution", "accepted/rejected explanation"],
+    synonyms: ["Route Filters / Redistribution", "маршрутизация", "маршруты", "bgp", "ospf", "Routing", "BGP сосед"],
+    relatedPages: [],
+    easyHint: {
+      en: "Full only; policies explained by alias",
+      ru: "Route Filters / Redistribution",
+      de: "Route Filters / Redistribution",
+      es: "Route Filters / Redistribution",
+    },
+  },
+  {
+    pageId: "P035",
+    sectionId: "routing",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["rpki / bmp / flowspec", "RPKI / BMP / FlowSpec", "p035", "routing", "rpki validators", "roas", "origin validation", "bmp", "flowspec", "large communities"],
+    synonyms: ["RPKI / BMP / FlowSpec", "маршрутизация", "маршруты", "bgp", "ospf", "Routing", "BGP сосед"],
+    relatedPages: [],
+    easyHint: {
+      en: "Full only; security summary",
+      ru: "RPKI / BMP / FlowSpec",
+      de: "RPKI / BMP / FlowSpec",
+      es: "RPKI / BMP / FlowSpec",
+    },
+  },
+  {
+    pageId: "P036",
+    sectionId: "routing",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["mpls / segment routing", "MPLS / Segment Routing", "p036", "routing", "mpls", "ldp", "l3vpn", "l2vpn", "pseudowire", "sr-mpls", "srv6"],
+    synonyms: ["MPLS / Segment Routing", "маршрутизация", "маршруты", "bgp", "ospf", "Routing", "BGP сосед"],
+    relatedPages: [],
+    easyHint: {
+      en: "Full only",
+      ru: "MPLS / Segment Routing",
+      de: "MPLS / Segment Routing",
+      es: "MPLS / Segment Routing",
+    },
+  },
+  {
+    pageId: "P037",
+    sectionId: "routing",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["vxlan / evpn", "VXLAN / EVPN", "p037", "routing", "vxlan", "vtep", "evpn route types", "multihoming", "df election"],
+    synonyms: ["VXLAN / EVPN", "маршрутизация", "маршруты", "bgp", "ospf", "Routing", "BGP сосед"],
+    relatedPages: [],
+    easyHint: {
+      en: "Full only",
+      ru: "VXLAN / EVPN",
+      de: "VXLAN / EVPN",
+      es: "VXLAN / EVPN",
+    },
+  },
+  {
+    pageId: "P038",
+    sectionId: "routing",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["multicast / discovery forwarding", "Multicast / Discovery Forwarding", "p038", "routing", "pim", "igmp", "mld", "snooping", "multicast routes", "mdns reflector"],
+    synonyms: ["Multicast / Discovery Forwarding", "маршрутизация", "маршруты", "bgp", "ospf", "Routing", "BGP сосед"],
+    relatedPages: [],
+    easyHint: {
+      en: "Share selected discovery services between networks",
+      ru: "Multicast / Discovery Forwarding",
+      de: "Multicast / Discovery Forwarding",
+      es: "Multicast / Discovery Forwarding",
+    },
+  },
+  {
+    pageId: "P039",
+    sectionId: "routing",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["ipv6 transition / cgnat", "IPv6 Transition / CGNAT", "p039", "routing", "nat64", "dns64", "464xlat", "ds-lite", "6rd", "map-e", "map-t", "nptv6", "cgnat pools"],
+    synonyms: ["IPv6 Transition / CGNAT", "маршрутизация", "маршруты", "bgp", "ospf", "Routing", "BGP сосед"],
+    relatedPages: [],
+    easyHint: {
+      en: "Provider setup explanation; Full controls",
+      ru: "IPv6 Transition / CGNAT",
+      de: "IPv6 Transition / CGNAT",
+      es: "IPv6 Transition / CGNAT",
+    },
+  },
+  {
+    pageId: "P040",
+    sectionId: "routing",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["gateway redundancy / vrrp", "Gateway Redundancy / VRRP", "p040", "routing", "vrrp", "virtual addresses", "master/backup", "tracked health"],
+    synonyms: ["Gateway Redundancy / VRRP", "маршрутизация", "маршруты", "bgp", "ospf", "Routing", "BGP сосед"],
+    relatedPages: [],
+    easyHint: {
+      en: "Backup gateway status only",
+      ru: "Gateway Redundancy / VRRP",
+      de: "Gateway Redundancy / VRRP",
+      es: "Gateway Redundancy / VRRP",
+    },
+  },
+  {
+    pageId: "P041",
+    sectionId: "firewall",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["access policies", "Access Policies", "p041", "firewall", "human-friendly access", "staff to nas smb", "guest internet only", "tunnel isolation"],
+    synonyms: ["Access Policies", "брандмауэр", "правила", "nat", "межсетевой экран", "Firewall", "Regeln"],
+    relatedPages: [],
+    easyHint: {
+      en: "Allow/block and access presets",
+      ru: "Access Policies",
+      de: "Access Policies",
+      es: "Access Policies",
+    },
+  },
+  {
+    pageId: "P042",
+    sectionId: "firewall",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["firewall rules", "Firewall Rules", "p042", "firewall", "nftables", "filter chains/hooks", "rule order", "generated rules", "counters", "raw advanced rules"],
+    synonyms: ["Firewall Rules", "брандмауэр", "правила", "nat", "межсетевой экран", "Firewall", "Regeln"],
+    relatedPages: [],
+    easyHint: {
+      en: "Access-policy equivalent, not raw chain wizard",
+      ru: "Firewall Rules",
+      de: "Firewall Rules",
+      es: "Firewall Rules",
+    },
+  },
+  {
+    pageId: "P043",
+    sectionId: "firewall",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["nat / published services", "NAT / Published Services", "p043", "firewall", "dnat", "snat", "masquerade", "hairpin", "netmap", "publish local service"],
+    synonyms: ["NAT / Published Services", "брандмауэр", "правила", "nat", "межсетевой экран", "Firewall", "Regeln"],
+    relatedPages: [],
+    easyHint: {
+      en: "Publish guided TCP/UDP intent with exact exposure sentence",
+      ru: "NAT / Published Services",
+      de: "NAT / Published Services",
+      es: "NAT / Published Services",
+    },
+  },
+  {
+    pageId: "P044",
+    sectionId: "firewall",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["firewall objects / feeds", "Firewall Objects / Feeds", "p044", "firewall", "sets", "aliases", "fqdn", "geo/asn/threat feeds", "service groups", "address groups"],
+    synonyms: ["Firewall Objects / Feeds", "брандмауэр", "правила", "nat", "межсетевой экран", "Firewall", "Regeln"],
+    relatedPages: [],
+    easyHint: {
+      en: "Named devices/networks/services",
+      ru: "Firewall Objects / Feeds",
+      de: "Firewall Objects / Feeds",
+      es: "Firewall Objects / Feeds",
+    },
+  },
+  {
+    pageId: "P045",
+    sectionId: "firewall",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["connections / conntrack", "Connections / Conntrack", "p045", "firewall", "sessions", "conntrack", "helper/alg", "selected kill", "capacity"],
+    synonyms: ["Connections / Conntrack", "брандмауэр", "правила", "nat", "межсетевой экран", "Firewall", "Regeln"],
+    relatedPages: [],
+    easyHint: {
+      en: "Active sessions for selected client",
+      ru: "Connections / Conntrack",
+      de: "Connections / Conntrack",
+      es: "Connections / Conntrack",
+    },
+  },
+  {
+    pageId: "P046",
+    sectionId: "firewall",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["firewall analysis / protection", "Firewall Analysis / Protection", "p046", "firewall", "shadow/conflict", "firewall analyzer", "dos/flood", "urpf", "copp", "quarantine", "optional ids/ips"],
+    synonyms: ["Firewall Analysis / Protection", "брандмауэр", "правила", "nat", "межсетевой экран", "Firewall", "Regeln"],
+    relatedPages: [],
+    easyHint: {
+      en: "Security issues and recommended preview",
+      ru: "Firewall Analysis / Protection",
+      de: "Firewall Analysis / Protection",
+      es: "Firewall Analysis / Protection",
+    },
+  },
+  {
+    pageId: "P047",
+    sectionId: "tunnels",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["wireguard servers", "WireGuard Servers", "p047", "tunnels", "wireguard interfaces", "servers", "key refs", "listen", "routes", "isolation", "mtu"],
+    synonyms: ["WireGuard Servers", "туннели", "wireguard", "vpn", "vless", "WireGuard", "Tunnel"],
+    relatedPages: [],
+    easyHint: {
+      en: "Give remote access wizard",
+      ru: "WireGuard Servers",
+      de: "WireGuard Servers",
+      es: "WireGuard Servers",
+    },
+  },
+  {
+    pageId: "P048",
+    sectionId: "tunnels",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["wireguard peers / exports", "WireGuard Peers / Exports", "p048", "tunnels", "peer lifecycle", "qr", "conf", "copy", "rotate", "expire", "client profile revision"],
+    synonyms: ["WireGuard Peers / Exports", "туннели", "wireguard", "vpn", "vless", "WireGuard", "Tunnel"],
+    relatedPages: [],
+    easyHint: {
+      en: "Native mobile-scannable access card",
+      ru: "WireGuard Peers / Exports",
+      de: "WireGuard Peers / Exports",
+      es: "WireGuard Peers / Exports",
+    },
+  },
+  {
+    pageId: "P049",
+    sectionId: "tunnels",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["xray servers", "Xray Servers", "p049", "tunnels", "vless", "trojan", "reality", "tls", "transports", "inbounds", "native object management"],
+    synonyms: ["Xray Servers", "туннели", "wireguard", "vpn", "vless", "WireGuard", "Tunnel"],
+    relatedPages: [],
+    easyHint: {
+      en: "Guided private access server",
+      ru: "Xray Servers",
+      de: "Xray Servers",
+      es: "Xray Servers",
+    },
+  },
+  {
+    pageId: "P050",
+    sectionId: "tunnels",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["xray users / profiles", "Xray Users / Profiles", "p050", "tunnels", "users", "profiles", "uuid/password", "expiry", "revoke", "rotate", "clone", "tags", "vless/trojan uri"],
+    synonyms: ["Xray Users / Profiles", "туннели", "wireguard", "vpn", "vless", "WireGuard", "Tunnel"],
+    relatedPages: [],
+    easyHint: {
+      en: "Give someone access with profile choices",
+      ru: "Xray Users / Profiles",
+      de: "Xray Users / Profiles",
+      es: "Xray Users / Profiles",
+    },
+  },
+  {
+    pageId: "P051",
+    sectionId: "services",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["subscriptions", "Subscriptions", "p051", "services", "happ", "xray profile membership", "token url", "qr", "regenerate", "export", "expiry"],
+    synonyms: ["Subscriptions", "сервисы", "службы", "сертификаты", "Dienste", "Servicios"],
+    relatedPages: [],
+    easyHint: {
+      en: "Subscription access card",
+      ru: "Subscriptions",
+      de: "Subscriptions",
+      es: "Subscriptions",
+    },
+  },
+  {
+    pageId: "P052",
+    sectionId: "tunnels",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["other tunnels / netbird", "Other Tunnels / NetBird", "p052", "tunnels", "ipsec/ikev2", "gre", "gretap", "ipip", "vti", "gre over ipsec", "l2tp/ipsec", "openvpn import", "netbird"],
+    synonyms: ["Other Tunnels / NetBird", "туннели", "wireguard", "vpn", "vless", "WireGuard", "Tunnel"],
+    relatedPages: [],
+    easyHint: {
+      en: "Simple supported VPN workflows; unavailable explanation",
+      ru: "Other Tunnels / NetBird",
+      de: "Other Tunnels / NetBird",
+      es: "Other Tunnels / NetBird",
+    },
+  },
+  {
+    pageId: "P053",
+    sectionId: "dns",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["dns resolver / forwarding", "DNS Resolver / Forwarding", "p053", "dns", "dhcp", "resolver", "forwarding", "upstreams", "split dns", "dot", "doh", "dnssec", "cache"],
+    synonyms: ["DNS Resolver / Forwarding", "dns", "dhcp", "доменные имена", "разрешение имен", "DNS"],
+    relatedPages: [],
+    easyHint: {
+      en: "DNS behavior in network/Internet setup",
+      ru: "DNS Resolver / Forwarding",
+      de: "DNS Resolver / Forwarding",
+      es: "DNS Resolver / Forwarding",
+    },
+  },
+  {
+    pageId: "P054",
+    sectionId: "dns",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["dns zones / records", "DNS Zones / Records", "p054", "dns", "dhcp", "authoritative/reverse zones", "local records", "aliases", "ddns updates"],
+    synonyms: ["DNS Zones / Records", "dns", "dhcp", "доменные имена", "разрешение имен", "DNS"],
+    relatedPages: [],
+    easyHint: {
+      en: "Friendly local names",
+      ru: "DNS Zones / Records",
+      de: "DNS Zones / Records",
+      es: "DNS Zones / Records",
+    },
+  },
+  {
+    pageId: "P055",
+    sectionId: "dns",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["policy dns / rpz", "Policy DNS / RPZ", "p055", "dns", "dhcp", "rpz", "category/domain policy", "selective dns", "feeds"],
+    synonyms: ["Policy DNS / RPZ", "dns", "dhcp", "доменные имена", "разрешение имен", "DNS"],
+    relatedPages: [],
+    easyHint: {
+      en: "Family/guest DNS policy with transparent limitations",
+      ru: "Policy DNS / RPZ",
+      de: "Policy DNS / RPZ",
+      es: "Policy DNS / RPZ",
+    },
+  },
+  {
+    pageId: "P056",
+    sectionId: "dns",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["dhcp scopes / relay", "DHCP Scopes / Relay", "p056", "dns", "dhcp", "dhcpv4/v6", "scopes", "pools", "relay", "option 82", "ha", "dns options"],
+    synonyms: ["DHCP Scopes / Relay", "dns", "dhcp", "доменные имена", "разрешение имен", "DNS"],
+    relatedPages: [],
+    easyHint: {
+      en: "Combined Create network workflow",
+      ru: "DHCP Scopes / Relay",
+      de: "DHCP Scopes / Relay",
+      es: "DHCP Scopes / Relay",
+    },
+  },
+  {
+    pageId: "P057",
+    sectionId: "dns",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["leases / reservations", "Leases / Reservations", "p057", "dns", "dhcp", "leases", "static reservations", "hostnames", "ddns", "ip conflicts"],
+    synonyms: ["Leases / Reservations", "dns", "dhcp", "доменные имена", "разрешение имен", "DNS"],
+    relatedPages: [],
+    easyHint: {
+      en: "Client reservation",
+      ru: "Leases / Reservations",
+      de: "Leases / Reservations",
+      es: "Leases / Reservations",
+    },
+  },
+  {
+    pageId: "P058",
+    sectionId: "services",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["services / listeners", "Services / Listeners", "p058", "services", "runtime services", "dependency-aware start/stop/reload", "service state"],
+    synonyms: ["Services / Listeners", "сервисы", "службы", "сертификаты", "Dienste", "Servicios"],
+    relatedPages: [],
+    easyHint: {
+      en: "Services with clear exposure scope",
+      ru: "Services / Listeners",
+      de: "Services / Listeners",
+      es: "Services / Listeners",
+    },
+  },
+  {
+    pageId: "P059",
+    sectionId: "services",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["sites / reverse proxy", "Sites / Reverse Proxy", "p059", "services", "sites", "reverse proxy", "local/public services", "tls", "ddns"],
+    synonyms: ["Sites / Reverse Proxy", "сервисы", "службы", "сертификаты", "Dienste", "Servicios"],
+    relatedPages: [],
+    easyHint: {
+      en: "Publish website/service safely",
+      ru: "Sites / Reverse Proxy",
+      de: "Sites / Reverse Proxy",
+      es: "Sites / Reverse Proxy",
+    },
+  },
+  {
+    pageId: "P060",
+    sectionId: "services",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["certificates / acme", "Certificates / ACME", "p060", "services", "certificate manager", "import", "acme", "renewal", "trust chain", "tls dependencies"],
+    synonyms: ["Certificates / ACME", "сервисы", "службы", "сертификаты", "Dienste", "Servicios"],
+    relatedPages: [],
+    easyHint: {
+      en: "Fix certificate from service context",
+      ru: "Certificates / ACME",
+      de: "Certificates / ACME",
+      es: "Certificates / ACME",
+    },
+  },
+  {
+    pageId: "P061",
+    sectionId: "services",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["internal pki / ssh ca", "Internal PKI / SSH CA", "p061", "services", "ca", "issuance", "revocation", "internal trust", "ssh ca"],
+    synonyms: ["Internal PKI / SSH CA", "сервисы", "службы", "сертификаты", "Dienste", "Servicios"],
+    relatedPages: [],
+    easyHint: {
+      en: "Full only; trust instructions contextual",
+      ru: "Internal PKI / SSH CA",
+      de: "Internal PKI / SSH CA",
+      es: "Internal PKI / SSH CA",
+    },
+  },
+  {
+    pageId: "P062",
+    sectionId: "services",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["aaa / radius / 802.1x", "AAA / RADIUS / 802.1X", "p062", "services", "radius", "aaa", "802.1x", "realms", "coa", "clients", "nac"],
+    synonyms: ["AAA / RADIUS / 802.1X", "сервисы", "службы", "сертификаты", "Dienste", "Servicios"],
+    relatedPages: [],
+    easyHint: {
+      en: "Enterprise access wizard if supported",
+      ru: "AAA / RADIUS / 802.1X",
+      de: "AAA / RADIUS / 802.1X",
+      es: "AAA / RADIUS / 802.1X",
+    },
+  },
+  {
+    pageId: "P063",
+    sectionId: "services",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["time / ntp / nts / ptp", "Time / NTP / NTS / PTP", "p063", "services", "ntp client/server", "nts", "ptp", "phc", "gps source", "time_untrusted"],
+    synonyms: ["Time / NTP / NTS / PTP", "сервисы", "службы", "сертификаты", "Dienste", "Servicios"],
+    relatedPages: [],
+    easyHint: {
+      en: "Time setup with offline trust warning",
+      ru: "Time / NTP / NTS / PTP",
+      de: "Time / NTP / NTS / PTP",
+      es: "Time / NTP / NTS / PTP",
+    },
+  },
+  {
+    pageId: "P064",
+    sectionId: "services",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["telemetry / integrations", "Telemetry / Integrations", "p064", "services", "snmpv3", "remote syslog", "netflow/ipfix/sflow", "webhooks", "tr-369/usp optional"],
+    synonyms: ["Telemetry / Integrations", "сервисы", "службы", "сертификаты", "Dienste", "Servicios"],
+    relatedPages: [],
+    easyHint: {
+      en: "Notifications with explicit data disclosure",
+      ru: "Telemetry / Integrations",
+      de: "Telemetry / Integrations",
+      es: "Telemetry / Integrations",
+    },
+  },
+  {
+    pageId: "P065",
+    sectionId: "services",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["upnp / nat-pmp / pcp / wake", "UPnP / NAT-PMP / PCP / Wake", "p065", "services", "upnp", "nat-pmp", "pcp", "wake-on-lan"],
+    synonyms: ["UPnP / NAT-PMP / PCP / Wake", "сервисы", "службы", "сертификаты", "Dienste", "Servicios"],
+    relatedPages: [],
+    easyHint: {
+      en: "Device wake and requested service access where supported",
+      ru: "UPnP / NAT-PMP / PCP / Wake",
+      de: "UPnP / NAT-PMP / PCP / Wake",
+      es: "UPnP / NAT-PMP / PCP / Wake",
+    },
+  },
+  {
+    pageId: "P066",
+    sectionId: "services",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["portal", "Portal", "p066", "services", "captive portal", "identity/trust entry", "local-first portal architecture"],
+    synonyms: ["Portal", "сервисы", "службы", "сертификаты", "Dienste", "Servicios"],
+    relatedPages: [],
+    easyHint: {
+      en: "Guest access workflow only when implemented",
+      ru: "Portal",
+      de: "Portal",
+      es: "Portal",
+    },
+  },
+  {
+    pageId: "P067",
+    sectionId: "routing",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["qos / traffic scheduling", "QoS / Traffic Scheduling", "p067", "routing", "cake", "fq_codel", "htb", "hfsc", "shaping", "policing", "dscp", "hierarchy", "per-vrf/tenant"],
+    synonyms: ["QoS / Traffic Scheduling", "маршрутизация", "маршруты", "bgp", "ospf", "Routing", "BGP сосед"],
+    relatedPages: [],
+    easyHint: {
+      en: "Prioritize calls / control bandwidth",
+      ru: "QoS / Traffic Scheduling",
+      de: "QoS / Traffic Scheduling",
+      es: "QoS / Traffic Scheduling",
+    },
+  },
+  {
+    pageId: "P068",
+    sectionId: "system",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["users / roles", "Users / Roles", "p068", "system", "local owners/admin/operators/viewers", "rbac", "accounts", "password lifecycle"],
+    synonyms: ["Users / Roles", "система", "обзор системы", "журнал", "System", "Übersicht"],
+    relatedPages: [],
+    easyHint: {
+      en: "People who manage this node",
+      ru: "Users / Roles",
+      de: "Users / Roles",
+      es: "Users / Roles",
+    },
+  },
+  {
+    pageId: "P069",
+    sectionId: "system",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["sessions / temporary access", "Sessions / Temporary Access", "p069", "system", "sessions", "temporary admin", "emergency access", "revocation"],
+    synonyms: ["Sessions / Temporary Access", "система", "обзор системы", "журнал", "System", "Übersicht"],
+    relatedPages: [],
+    easyHint: {
+      en: "Revoke access clearly",
+      ru: "Sessions / Temporary Access",
+      de: "Sessions / Temporary Access",
+      es: "Sessions / Temporary Access",
+    },
+  },
+  {
+    pageId: "P070",
+    sectionId: "system",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["api tokens / service accounts / ssh keys", "API Tokens / Service Accounts / SSH Keys", "p070", "system", "api tokens", "service accounts", "ssh keys", "host key rotation", "clone protection"],
+    synonyms: ["API Tokens / Service Accounts / SSH Keys", "система", "обзор системы", "журнал", "System", "Übersicht"],
+    relatedPages: [],
+    easyHint: {
+      en: "Full only, generated access explained",
+      ru: "API Tokens / Service Accounts / SSH Keys",
+      de: "API Tokens / Service Accounts / SSH Keys",
+      es: "API Tokens / Service Accounts / SSH Keys",
+    },
+  },
+  {
+    pageId: "P071",
+    sectionId: "system",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["vault", "Vault", "p071", "system", "secret references", "key ids", "encrypted storage", "rotation/revoke", "recovery"],
+    synonyms: ["Vault", "система", "обзор системы", "журнал", "System", "Übersicht"],
+    relatedPages: [],
+    easyHint: {
+      en: "Secret required instructions contextual only",
+      ru: "Vault",
+      de: "Vault",
+      es: "Vault",
+    },
+  },
+  {
+    pageId: "P072",
+    sectionId: "system",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["updates", "Updates", "p072", "system", "stable/preview/nightly", "signed .duck", "ota", "offline package", "active/previous/candidate", "sbom"],
+    synonyms: ["Updates", "система", "обзор системы", "журнал", "System", "Übersicht"],
+    relatedPages: [],
+    easyHint: {
+      en: "Guided safe update",
+      ru: "Updates",
+      de: "Updates",
+      es: "Updates",
+    },
+  },
+  {
+    pageId: "P073",
+    sectionId: "system",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["backup / restore", "Backup / Restore", "p073", "system", "portable backup", "encrypted secrets", "selective sections", "drag/drop restore", "schema migration"],
+    synonyms: ["Backup / Restore", "система", "обзор системы", "журнал", "System", "Übersicht"],
+    relatedPages: [],
+    easyHint: {
+      en: "One-file replacement workflow",
+      ru: "Backup / Restore",
+      de: "Backup / Restore",
+      es: "Backup / Restore",
+    },
+  },
+  {
+    pageId: "P074",
+    sectionId: "system",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["hardware replacement / port mapping", "Hardware Replacement / Port Mapping", "p074", "system", "old-to-new nic role mapping", "mac/link/speed/driver", "identify physical port"],
+    synonyms: ["Hardware Replacement / Port Mapping", "система", "обзор системы", "журнал", "System", "Übersicht"],
+    relatedPages: [],
+    easyHint: {
+      en: "Guided replacement steps",
+      ru: "Hardware Replacement / Port Mapping",
+      de: "Hardware Replacement / Port Mapping",
+      es: "Hardware Replacement / Port Mapping",
+    },
+  },
+  {
+    pageId: "P075",
+    sectionId: "system",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["hardware / storage / power", "Hardware / Storage / Power", "p075", "system", "capabilities", "sfp", "poe/watchdog", "usb", "gps", "bluetooth", "crypto", "virtualization", "sensors", "smart/nvme", "raid", "ups"],
+    synonyms: ["Hardware / Storage / Power", "система", "обзор системы", "журнал", "System", "Übersicht"],
+    relatedPages: [],
+    easyHint: {
+      en: "Hardware issue and practical next step",
+      ru: "Hardware / Storage / Power",
+      de: "Hardware / Storage / Power",
+      es: "Hardware / Storage / Power",
+    },
+  },
+  {
+    pageId: "P076",
+    sectionId: "system",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["security posture / integrity", "Security Posture / Integrity", "p076", "system", "guardrails", "readiness", "tpm", "secure boot", "sbom", "kernel modules", "firmware", "override"],
+    synonyms: ["Security Posture / Integrity", "система", "обзор системы", "журнал", "System", "Übersicht"],
+    relatedPages: [],
+    easyHint: {
+      en: "Security summary in plain language",
+      ru: "Security Posture / Integrity",
+      de: "Security Posture / Integrity",
+      es: "Security Posture / Integrity",
+    },
+  },
+  {
+    pageId: "P077",
+    sectionId: "system",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["maintenance / scheduler", "Maintenance / Scheduler", "p077", "system", "maintenance window", "scheduled jobs", "bounded suppressions", "canary", "quotas"],
+    synonyms: ["Maintenance / Scheduler", "система", "обзор системы", "журнал", "System", "Übersicht"],
+    relatedPages: [],
+    easyHint: {
+      en: "Schedule update/backup with consequences",
+      ru: "Maintenance / Scheduler",
+      de: "Maintenance / Scheduler",
+      es: "Maintenance / Scheduler",
+    },
+  },
+  {
+    pageId: "P078",
+    sectionId: "system",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["recovery / reboot / reset", "Recovery / Reboot / Reset", "p078", "system", "emergency mode", "reboot", "shutdown", "factory reset", "decommission", "crash recovery"],
+    synonyms: ["Recovery / Reboot / Reset", "система", "обзор системы", "журнал", "System", "Übersicht"],
+    relatedPages: [],
+    easyHint: {
+      en: "Emergency recovery task list",
+      ru: "Recovery / Reboot / Reset",
+      de: "Recovery / Reboot / Reset",
+      es: "Recovery / Reboot / Reset",
+    },
+  },
+  {
+    pageId: "P079",
+    sectionId: "system",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["preferences / local-first", "Preferences / Local-first", "p079", "system", "en/ru/de/es", "light/dark/system", "easy/full", "density", "offline", "telemetry privacy"],
+    synonyms: ["Preferences / Local-first", "система", "обзор системы", "журнал", "System", "Übersicht"],
+    relatedPages: [],
+    easyHint: {
+      en: "Appearance/language and mode choice",
+      ru: "Preferences / Local-first",
+      de: "Preferences / Local-first",
+      es: "Preferences / Local-first",
+    },
+  },
+  {
+    pageId: "P080",
+    sectionId: "system",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["first run / local registration", "First Run / Local Registration", "p080", "system", "first owner", "language/theme", "router/server/custom", "nic safety", "mac clone", "real tests"],
+    synonyms: ["First Run / Local Registration", "система", "обзор системы", "журнал", "System", "Übersicht"],
+    relatedPages: [],
+    easyHint: {
+      en: "Primary first-run workflow",
+      ru: "First Run / Local Registration",
+      de: "First Run / Local Registration",
+      es: "First Run / Local Registration",
+    },
+  },
+  {
+    pageId: "P081",
+    sectionId: "system",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["login / locked session", "Login / Locked Session", "p081", "system", "authenticated entry", "session expired", "neutral mascot", "local-first login"],
+    synonyms: ["Login / Locked Session", "система", "обзор системы", "журнал", "System", "Übersicht"],
+    relatedPages: [],
+    easyHint: {
+      en: "Same login for both modes",
+      ru: "Login / Locked Session",
+      de: "Login / Locked Session",
+      es: "Login / Locked Session",
+    },
+  },
+  {
+    pageId: "P082",
+    sectionId: "logs",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["incidents", "Incidents", "p082", "logs", "diagnostics", "root incidents", "child events", "health correlation", "30-second triage"],
+    synonyms: ["Incidents", "журналы", "логи", "диагностика", "инциденты", "Diagnose", "Protokolle"],
+    relatedPages: [],
+    easyHint: {
+      en: "Something is wrong with factual impact",
+      ru: "Incidents",
+      de: "Incidents",
+      es: "Incidents",
+    },
+  },
+  {
+    pageId: "P083",
+    sectionId: "logs",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["logs / live tail", "Logs / Live Tail", "p083", "logs", "diagnostics", "bounded logs", "per-object levels", "live tail", "search", "filters", "drop counters", "external fallback"],
+    synonyms: ["Logs / Live Tail", "журналы", "логи", "диагностика", "инциденты", "Diagnose", "Protokolle"],
+    relatedPages: [],
+    easyHint: {
+      en: "Relevant logs from issue/client/service context",
+      ru: "Logs / Live Tail",
+      de: "Logs / Live Tail",
+      es: "Logs / Live Tail",
+    },
+  },
+  {
+    pageId: "P084",
+    sectionId: "logs",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["events / network timeline", "Events / Network Timeline", "p084", "logs", "diagnostics", "configuration/network time machine", "events", "before/after correlation"],
+    synonyms: ["Events / Network Timeline", "журналы", "логи", "диагностика", "инциденты", "Diagnose", "Protokolle"],
+    relatedPages: [],
+    easyHint: {
+      en: "Recent meaningful changes",
+      ru: "Events / Network Timeline",
+      de: "Events / Network Timeline",
+      es: "Events / Network Timeline",
+    },
+  },
+  {
+    pageId: "P085",
+    sectionId: "logs",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["audit", "Audit", "p085", "logs", "diagnostics", "actor", "before/after", "source", "reason", "result", "transaction", "rollback", "secret access metadata"],
+    synonyms: ["Audit", "журналы", "логи", "диагностика", "инциденты", "Diagnose", "Protokolle"],
+    relatedPages: [],
+    easyHint: {
+      en: "Access/change history",
+      ru: "Audit",
+      de: "Audit",
+      es: "Audit",
+    },
+  },
+  {
+    pageId: "P086",
+    sectionId: "logs",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["explain why / what-if", "Explain Why / What-if", "p086", "logs", "diagnostics", "explainability", "policy simulation", "dns/category", "access", "firewall", "route", "tunnel", "nat", "before/after"],
+    synonyms: ["Explain Why / What-if", "журналы", "логи", "диагностика", "инциденты", "Diagnose", "Protokolle"],
+    relatedPages: [],
+    easyHint: {
+      en: "Why blocked/Why WAN2 guided question",
+      ru: "Explain Why / What-if",
+      de: "Explain Why / What-if",
+      es: "Explain Why / What-if",
+    },
+  },
+  {
+    pageId: "P087",
+    sectionId: "logs",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["topology", "Topology", "p087", "logs", "diagnostics", "physical/logical topology", "confidence", "links", "bridges", "vlans", "wan/tunnels", "devices"],
+    synonyms: ["Topology", "журналы", "логи", "диагностика", "инциденты", "Diagnose", "Protokolle"],
+    relatedPages: [],
+    easyHint: {
+      en: "Small focused topology with same evidence semantics",
+      ru: "Topology",
+      de: "Topology",
+      es: "Topology",
+    },
+  },
+  {
+    pageId: "P088",
+    sectionId: "logs",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["network tools / capture", "Network Tools / Capture", "p088", "logs", "diagnostics", "ping", "traceroute", "tcp probe", "dns query", "route lookup", "pcap", "pmtu", "trace logging"],
+    synonyms: ["Network Tools / Capture", "журналы", "логи", "диагностика", "инциденты", "Diagnose", "Protokolle"],
+    relatedPages: [],
+    easyHint: {
+      en: "Guided connection test",
+      ru: "Network Tools / Capture",
+      de: "Network Tools / Capture",
+      es: "Network Tools / Capture",
+    },
+  },
+  {
+    pageId: "P089",
+    sectionId: "logs",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["monitoring / history / traffic", "Monitoring / History / Traffic", "p089", "logs", "diagnostics", "throughput", "latency/jitter/loss", "resources", "sessions", "queue drops", "flow telemetry"],
+    synonyms: ["Monitoring / History / Traffic", "журналы", "логи", "диагностика", "инциденты", "Diagnose", "Protokolle"],
+    relatedPages: [],
+    easyHint: {
+      en: "Traffic and quality summary",
+      ru: "Monitoring / History / Traffic",
+      de: "Monitoring / History / Traffic",
+      es: "Monitoring / History / Traffic",
+    },
+  },
+  {
+    pageId: "P090",
+    sectionId: "logs",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["duck speed lab", "Duck Speed Lab", "p090", "logs", "diagnostics", "latency", "throughput", "saturation", "bounded benchmark", "qos validation"],
+    synonyms: ["Duck Speed Lab", "журналы", "логи", "диагностика", "инциденты", "Diagnose", "Protokolle"],
+    relatedPages: [],
+    easyHint: {
+      en: "Why Internet is slow guided test",
+      ru: "Duck Speed Lab",
+      de: "Duck Speed Lab",
+      es: "Duck Speed Lab",
+    },
+  },
+  {
+    pageId: "P091",
+    sectionId: "logs",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["duck doctor / support", "Duck Doctor / Support", "p091", "logs", "diagnostics", "health findings", "subsystem diagnostics", "support bundle", "privacy redaction"],
+    synonyms: ["Duck Doctor / Support", "журналы", "логи", "диагностика", "инциденты", "Diagnose", "Protokolle"],
+    relatedPages: [],
+    easyHint: {
+      en: "One coherent help workflow",
+      ru: "Duck Doctor / Support",
+      de: "Duck Doctor / Support",
+      es: "Duck Doctor / Support",
+    },
+  },
+  {
+    pageId: "P092",
+    sectionId: "logs",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["retention / storage pressure", "Retention / Storage Pressure", "p092", "logs", "diagnostics", "hard-bounded logging", "external sink failure", "ram/disk quotas", "degradation order"],
+    synonyms: ["Retention / Storage Pressure", "журналы", "логи", "диагностика", "инциденты", "Diagnose", "Protokolle"],
+    relatedPages: [],
+    easyHint: {
+      en: "Storage warning with safe cleanup only",
+      ru: "Retention / Storage Pressure",
+      de: "Retention / Storage Pressure",
+      es: "Retention / Storage Pressure",
+    },
+  },
+  {
+    pageId: "P093",
+    sectionId: "system",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["lab / acceptance / fault evidence", "Lab / Acceptance / Fault Evidence", "p093", "system", "lab mode", "acceptance runner", "chaos", "canary", "performance/readiness", "crash evidence", "watchdog"],
+    synonyms: ["Lab / Acceptance / Fault Evidence", "система", "обзор системы", "журнал", "System", "Übersicht"],
+    relatedPages: [],
+    easyHint: {
+      en: "Read-only readiness explanation; no chaos actions",
+      ru: "Lab / Acceptance / Fault Evidence",
+      de: "Lab / Acceptance / Fault Evidence",
+      es: "Lab / Acceptance / Fault Evidence",
+    },
+  },
+  {
+    pageId: "P094",
+    sectionId: "easy",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["easy home", "Easy Home", "p094", "easy", "internet", "health", "active backup", "clients", "traffic", "incident", "safe apply"],
+    synonyms: ["Easy Home", "просто", "easy", "легкий", "Fácil", "Einfach"],
+    relatedPages: [],
+    easyHint: {
+      en: "Primary Easy start",
+      ru: "Easy Home",
+      de: "Easy Home",
+      es: "Easy Home",
+    },
+  },
+  {
+    pageId: "P095",
+    sectionId: "easy",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["easy internet", "Easy Internet", "p095", "easy", "wan setup", "backup", "dns", "mtu auto", "quality", "mac clone"],
+    synonyms: ["Easy Internet", "просто", "easy", "легкий", "Fácil", "Einfach"],
+    relatedPages: [],
+    easyHint: {
+      en: "Primary Internet workflow",
+      ru: "Easy Internet",
+      de: "Easy Internet",
+      es: "Easy Internet",
+    },
+  },
+  {
+    pageId: "P096",
+    sectionId: "easy",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["easy networks / wi-fi", "Easy Networks / Wi-Fi", "p096", "easy", "home/guest/segmented network", "vlan", "dhcp", "dns", "wi-fi", "isolation"],
+    synonyms: ["Easy Networks / Wi-Fi", "просто", "easy", "легкий", "Fácil", "Einfach"],
+    relatedPages: [],
+    easyHint: {
+      en: "Primary network intent workflow",
+      ru: "Easy Networks / Wi-Fi",
+      de: "Easy Networks / Wi-Fi",
+      es: "Easy Networks / Wi-Fi",
+    },
+  },
+  {
+    pageId: "P097",
+    sectionId: "easy",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["easy devices / access", "Easy Devices / Access", "p097", "easy", "devices", "access presets", "wireguard", "xray", "subscriptions", "qr lifecycle"],
+    synonyms: ["Easy Devices / Access", "просто", "easy", "легкий", "Fácil", "Einfach"],
+    relatedPages: [],
+    easyHint: {
+      en: "Primary client workflow",
+      ru: "Easy Devices / Access",
+      de: "Easy Devices / Access",
+      es: "Easy Devices / Access",
+    },
+  },
+  {
+    pageId: "P098",
+    sectionId: "easy",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["easy publish", "Easy Publish", "p098", "easy", "publish service", "public exposure", "certificate/dns dependencies"],
+    synonyms: ["Easy Publish", "просто", "easy", "легкий", "Fácil", "Einfach"],
+    relatedPages: [],
+    easyHint: {
+      en: "Primary safe publication workflow",
+      ru: "Easy Publish",
+      de: "Easy Publish",
+      es: "Easy Publish",
+    },
+  },
+  {
+    pageId: "P099",
+    sectionId: "easy",
+    languages: ["en", "ru", "de", "es"],
+    keywords: ["easy care / recovery", "Easy Care / Recovery", "p099", "easy", "updates", "backups", "incident troubleshooting", "restore", "emergency"],
+    synonyms: ["Easy Care / Recovery", "просто", "easy", "легкий", "Fácil", "Einfach"],
+    relatedPages: [],
+    easyHint: {
+      en: "Primary maintenance workflow",
+      ru: "Easy Care / Recovery",
+      de: "Easy Care / Recovery",
+      es: "Easy Care / Recovery",
+    },
+  },
+];
+
+/**
+ * Result of a search. Pages only — no destructive actions.
+ * Easy mode surfaces one tile per match; Full mode shows a compact list.
+ */
+export interface HelpHit {
+  pageId: string;
+  sectionId: SectionId;
+  score: number;
+  matched: string;
+}
+
+/**
+ * Normalize text for matching: lowercase, strip diacritics, collapse
+ * whitespace, split into tokens. Stems lightly (length 3 prefix) so that
+ * "интерфейсы" / "interfaces" share a stem.
+ */
+function normalize(input: string): string[] {
+  return input
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[^\p{L}\p{N}\s/.-]/gu, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function stemsOf(input: string): string[] {
+  const tokens = normalize(input);
+  const stems = new Set<string>();
+  for (const t of tokens) {
+    stems.add(t);
+    if (t.length > 4) stems.add(t.slice(0, t.length - 1));
+    if (t.length > 5) stems.add(t.slice(0, t.length - 2));
+  }
+  return [...stems];
+}
+
+/**
+ * Score one entry against one query. Higher is better.
+ *   +3 — exact token match in keywords
+ *   +2 — exact token match in synonyms
+ *   +1 — prefix / stem match
+ *   +1 — every locale-free word of the page id matches (e.g. "P022")
+ */
+export function scoreEntry(entry: HelpEntry, stems: string[]): {
+  score: number;
+  matched: string;
+} | null {
+  if (stems.length === 0) return null;
+  let score = 0;
+  const matchedWords: string[] = [];
+  const kwTokens = entry.keywords.flatMap((k) => normalize(k));
+  const synTokens = entry.synonyms.flatMap((k) => normalize(k));
+  for (const stem of stems) {
+    if (entry.pageId.toLowerCase() === stem) {
+      score += 5;
+      matchedWords.push(stem);
+      continue;
+    }
+    if (kwTokens.some((k) => k === stem)) {
+      score += 3;
+      matchedWords.push(stem);
+      continue;
+    }
+    if (synTokens.some((k) => k === stem)) {
+      score += 2;
+      matchedWords.push(stem);
+      continue;
+    }
+    if (kwTokens.some((k) => k.startsWith(stem) || stem.startsWith(k))) {
+      score += 1;
+      matchedWords.push(stem);
+      continue;
+    }
+    if (synTokens.some((k) => k.startsWith(stem) || stem.startsWith(k))) {
+      score += 1;
+      matchedWords.push(stem);
+    }
+  }
+  if (score === 0) return null;
+  return { score, matched: matchedWords.join(", ") };
+}
+
+export function searchHelp(query: string, limit = 12): HelpHit[] {
+  const stems = stemsOf(query);
+  if (stems.length === 0) return [];
+  const hits: HelpHit[] = [];
+  for (const entry of HELP_INDEX) {
+    const r = scoreEntry(entry, stems);
+    if (r && r.score > 0) {
+      hits.push({
+        pageId: entry.pageId,
+        sectionId: entry.sectionId,
+        score: r.score,
+        matched: r.matched,
+      });
+    }
+  }
+  hits.sort((a, b) => b.score - a.score || a.pageId.localeCompare(b.pageId));
+  return hits.slice(0, limit);
+}
+
+export function lookupEntry(pageId: string): HelpEntry | undefined {
+  return HELP_INDEX.find((e) => e.pageId === pageId);
+}

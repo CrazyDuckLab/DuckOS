@@ -1,0 +1,45 @@
+[Unit]
+Description=DuckOS pre-network configuration recovery
+DefaultDependencies=no
+After=local-fs.target
+Before=network-pre.target systemd-networkd.service duck-agent.service
+RequiresMountsFor=/var/lib/duckos-agent /etc/systemd/network
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/opt/duckos/current/bin/duck-agent --recover-network-artifacts
+RemainAfterExit=yes
+TimeoutStartSec=30
+UMask=0077
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/duckos-agent/network /etc/systemd/network
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateNetwork=no
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+IPAddressDeny=any
+LimitCORE=0
+MemoryMax=128M
+TasksMax=32
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=duck-network-recover
+
+[Install]
+RequiredBy=systemd-networkd.service

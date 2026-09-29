@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="DuckOS">
+  <title>DuckOS</title>
+  <defs>
+    <radialGradient id="duckos-body" cx="40%" cy="35%" r="80%">
+      <stop offset="0%" stop-color="#FFE15A"/>
+      <stop offset="55%" stop-color="#F5C533"/>
+      <stop offset="100%" stop-color="#C99428"/>
+    </radialGradient>
+    <linearGradient id="duckos-beak" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FF9244"/>
+      <stop offset="100%" stop-color="#D7601B"/>
+    </linearGradient>
+    <radialGradient id="duckos-shadow" cx="50%" cy="55%" r="55%">
+      <stop offset="0%" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.15"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Tail bump (back-left) -->
+  <path fill="url(#duckos-body)" d="M 6 24 Q 4 20 6 16 Q 10 18 12 22 L 12 30 Q 8 30 6 24 Z"/>
+
+  <!-- Body + head silhouette — one continuous closed path -->
+  <path fill="url(#duckos-body)" d="
+    M 14 18
+    Q 16 10 26 8
+    Q 38 7 44 14
+    Q 46 14 48 14
+    L 56 13
+    Q 60 13 60 16
+    Q 60 19 56 20
+    L 48 21
+    Q 49 28 49 34
+    Q 47 46 32 52
+    Q 18 56 8 50
+    Q 2 46 2 38
+    Q 2 30 6 26
+    Q 10 22 14 22
+    Q 14 19 14 18
+    Z"/>
+
+  <!-- Subtle underbody shadow for dimensionality -->
+  <ellipse cx="28" cy="50" rx="20" ry="5" fill="url(#duckos-shadow)"/>
+
+  <!-- Wing detail (curved teardrop on the body) -->
+  <path fill="#D89F2C" opacity="0.42" d="
+    M 22 32
+    Q 28 30 36 32
+    Q 40 38 36 42
+    Q 26 44 22 38
+    Q 20 34 22 32
+    Z"/>
+
+  <!-- Highlight sheen across the top of the head and back -->
+  <ellipse cx="28" cy="14" rx="16" ry="4" fill="#FFFFFF" opacity="0.22"/>
+
+  <!-- Beak — warm orange, flat horizontal wedge -->
+  <path fill="url(#duckos-beak)" d="
+    M 48 17
+    L 60 16
+    Q 62 16 62 18
+    Q 62 20 60 21
+    L 54 22
+    L 48 21
+    Z"/>
+
+  <!-- Beak shadow (mouth line) -->
+  <path fill="#8C3F0E" opacity="0.45" d="M 49 19 L 60 18.7"/>
+
+  <!-- Eye -->
+  <circle cx="34" cy="14" r="2.2" fill="#1A1A1A"/>
+  <circle cx="34.7" cy="13.3" r="0.7" fill="#FFFFFF"/>
+</svg>

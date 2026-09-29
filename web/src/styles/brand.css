@@ -1,0 +1,147 @@
+/**
+ * DuckOS V1 — design tokens.
+ *
+ * Calm neutral foundation + a single DuckOS accent (teal).
+ * Status semantics:
+ *   good    = sage  (calm, never neon)
+ *   warn    = amber (warm, not alarming)
+ *   bad     = red   (only for failure, never for emphasis)
+ *   unknown = neutral
+ * Color is never the only signal — every status pill carries an
+ * icon and a text label as well.
+ */
+
+:root {
+  /* — Brand mark (rubber-duck) — */
+  --duckos-mark-body: #F4BB3D;        /* warm yellow */
+  --duckos-mark-bill: #E5802A;        /* warm orange */
+  --duckos-mark-bill-shadow: #B05E15;
+  --duckos-mark-eye: #1F2937;          /* dark slate — works on both themes */
+  --duckos-mark-eye-glint: #FFFFFF;    /* tiny sheen inside the eye */
+
+  /* — Type scale — */
+  --v1-font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI",
+    Roboto, "Helvetica Neue", Inter, system-ui, sans-serif;
+  --v1-font-mono:
+    "SF Mono", "JetBrains Mono", Menlo, Consolas, ui-monospace, monospace;
+
+  --v1-fs-xs: 11px;
+  --v1-fs-sm: 13px;
+  --v1-fs-md: 14px;
+  --v1-fs-base: 15px;
+  --v1-fs-lg: 17px;
+  --v1-fs-xl: 22px;
+  --v1-fs-2xl: 28px;
+  --v1-fs-3xl: 36px;
+
+  /* — Spacing — */
+  --v1-s1: 4px;
+  --v1-s2: 8px;
+  --v1-s3: 12px;
+  --v1-s4: 16px;
+  --v1-s5: 20px;
+  --v1-s6: 28px;
+  --v1-s7: 40px;
+  --v1-s8: 56px;
+
+  /* — Radii — */
+  --v1-r1: 4px;
+  --v1-r2: 6px;
+  --v1-r3: 10px;
+  --v1-r4: 14px;
+  --v1-r-pill: 999px;
+
+  /* — Shell metrics — */
+  --v1-topbar-h: 56px;
+  --v1-actionbar-h: 56px;
+  --v1-rail-w: 232px;
+  --v1-rail-w-collapsed: 56px;
+
+  /* — Surfaces — */
+  --v1-bg: #f7f8fa;
+  --v1-bg-elevated: #ffffff;
+  --v1-bg-panel: #f1f3f6;
+  --v1-bg-row: #ffffff;
+  --v1-bg-row-alt: #f9fafc;
+  --v1-bg-inset: #f1f3f6;
+
+  --v1-text: #1a1f2b;
+  --v1-text-muted: #5a6473;
+  --v1-text-subtle: #8a93a3;
+  --v1-text-on-accent: #ffffff;
+
+  --v1-line: #e6e9ee;
+  --v1-line-soft: #eef0f4;
+  --v1-line-strong: #c8cdd6;
+
+  --v1-accent: #1f8b8b;
+  --v1-accent-strong: #176f6f;
+  --v1-accent-soft: #e3f1f0;
+  --v1-accent-very-soft: #f1f8f7;
+
+  /* — Status — */
+  --v1-good: #2f9e7e;
+  --v1-good-soft: #e1f3ec;
+  --v1-warn: #c98b2a;
+  --v1-warn-soft: #f8ecd6;
+  --v1-bad: #c44848;
+  --v1-bad-soft: #f5dcdc;
+  --v1-unknown: #8a93a3;
+  --v1-unknown-soft: #eef0f4;
+
+  /* — Shadows (used sparingly) — */
+  --v1-shadow-1: 0 1px 0 rgba(20, 24, 32, 0.04);
+  --v1-shadow-2:
+    0 1px 2px rgba(20, 24, 32, 0.04), 0 4px 16px rgba(20, 24, 32, 0.06);
+  --v1-shadow-3:
+    0 1px 4px rgba(20, 24, 32, 0.06), 0 16px 48px rgba(20, 24, 32, 0.08);
+
+  /* — Focus ring — */
+  --v1-focus-ring: 0 0 0 2px var(--v1-accent-soft), 0 0 0 4px var(--v1-accent);
+}
+
+html[data-theme="dark"] {
+  /* rubber-duck mark — slightly warmer / deeper in dark mode */
+  --duckos-mark-body: #E8A82E;
+  --duckos-mark-bill: #C76A1E;
+  --duckos-mark-bill-shadow: #8C4514;
+  --duckos-mark-eye: #0B1018;
+  --duckos-mark-eye-glint: #F8F8F8;
+
+  --v1-bg: #0f1218;
+  --v1-bg-elevated: #161a22;
+  --v1-bg-panel: #1c212b;
+  --v1-bg-row: #161a22;
+  --v1-bg-row-alt: #1c212b;
+  --v1-bg-inset: #1c212b;
+
+  --v1-text: #e6e9ee;
+  --v1-text-muted: #aab1bd;
+  --v1-text-subtle: #6e7686;
+  --v1-text-on-accent: #ffffff;
+
+  --v1-line: #232a36;
+  --v1-line-soft: #1c212b;
+  --v1-line-strong: #2e3543;
+
+  --v1-accent: #2c9d9d;
+  --v1-accent-strong: #43b1b1;
+  --v1-accent-soft: #1e3a3a;
+  --v1-accent-very-soft: #162626;
+
+  --v1-good: #4cb69b;
+  --v1-good-soft: #1c3a32;
+  --v1-warn: #d8a051;
+  --v1-warn-soft: #3a2f1c;
+  --v1-bad: #d77070;
+  --v1-bad-soft: #3a2424;
+  --v1-unknown: #6e7686;
+  --v1-unknown-soft: #1c212b;
+
+  --v1-shadow-1: 0 1px 0 rgba(0, 0, 0, 0.4);
+  --v1-shadow-2:
+    0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.4);
+  --v1-shadow-3:
+    0 1px 4px rgba(0, 0, 0, 0.5), 0 16px 48px rgba(0, 0, 0, 0.6);
+}

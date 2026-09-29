@@ -1,0 +1,26 @@
+# DuckOS
+
+> Linux network operating platform in development for routers, gateways and
+> VPS/edge nodes. Not a supported production release. Open-source publication
+> and license selection remain pending.
+
+## Overview
+
+- [Project](PROJECT.md): goals, principles, targets and architecture.
+- [README](README.md): current capabilities and limitations.
+- [Requirements](docs/requirements/product.md): complete product intent, not availability claims.
+
+## Guides
+
+- [Installation](docs/install.md): fresh Debian TEST installer and artifact verification.
+- [Architecture](docs/architecture.md): API, Engine, privileged Agent and Linux boundaries.
+- [Networking](docs/use-cases/home-gateway.md): home and small-business gateway requirements.
+- [Routing](docs/use-cases/routing.md): selective routing and multi-WAN qualification.
+- [Edge nodes](docs/use-cases/edge-node.md): single-NIC management and VPN design.
+- [WireGuard, Xray and subscriptions](docs/use-cases/client-provisioning.md): planned client provisioning and secret exports.
+- [API](shared/api/README.md): documented contracts.
+- [Security](docs/security-model.md): trust, management, identity and secrets.
+- [Troubleshooting](docs/troubleshooting.md): current diagnostics and safe reporting.
+- [Updates](docs/update-system.md): signed packages and Active/Previous requirements.
+- [Releases](docs/launch/release-notes.md): release record contract; none published.
+- [Hardware](docs/hardware-compatibility.md): evidence and compatibility report statuses.

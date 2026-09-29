@@ -1,0 +1,76 @@
+# macOS and editors
+.DS_Store
+._*
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.bak
+*.orig
+*.rej
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+secrets/
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Build and test output
+build/
+dist/
+web/dist/
+coverage/
+node_modules/
+web/node_modules
+*.out
+*.test
+
+# Local scratch data
+.cache/
+tmp/
+.tools/
+web/playwright-report/
+web/test-results/
+
+# Built binaries
+/duck
+/duck-agent
+/duck-api
+
+# E2E qualification
+e2e/.token
+e2e/artifacts/
+e2e/node_modules/
+e2e/test-results/
+e2e/playwright-report/
+
+# Generated assets / logs / dumps
+*.log
+*.pid
+*.core
+*.dump
+*.tmp
+*.old
+*.save
+*.prof
+*.wasm
+*.deb
+*.rpm
+*.iso
+*.tar.gz
+*.tar.xz
+*.zip
+
+# One-shot lab fixtures / screenshots / logs
+/icon-shots/
+/health-shots/
+/icon-paths.json
+/qa-frtest/
+/qa-ospfv3/
+/duckos-evidence/
+/duckos-control.log

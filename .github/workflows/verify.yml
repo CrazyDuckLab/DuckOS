@@ -1,0 +1,37 @@
+name: Verify executable foundation
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  linux-checks-and-cross-builds:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Checksum-pinned local toolchains
+        run: make bootstrap
+      - name: Locked frontend dependencies
+        run: make deps
+      - name: Unit, contract, UI, installer and real Linux read-boundary checks
+        run: make check
+      - name: Firewall recovery, DNS syntax and policy isolation in a Linux network namespace
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nftables dnsmasq-base
+          source scripts/env.sh
+          go test -c -o .cache/network-native.test ./internal/network
+          sudo unshare --net -- env DUCKOS_ISOLATED_NETNS_TEST=1 "$PWD/.cache/network-native.test" -test.run '^Test(NFTNativeAtomicApplyAndRestore|NFTNativeManagementPolicySyntax|DNSMasqNativeGeneratedSyntax|PolicyNativeMissingTableCannotFallThrough|PolicyRuleNativeApplyRestore|PrivateRouteNativeApplyRestore|RoutedKernelNativeApplyRecover)$' -test.v
+      - name: Production assets and Linux cross-builds (not target runtime qualification)
+        run: make build-all
+      - name: Recovery and storage test compilation for Linux amd64, arm64 and ARMv7
+        run: make check-cross
+      - name: Verify amd64 payload integrity
+        run: bash dist/duckos-linux-amd64/install.sh --artifact "$PWD/dist/duckos-linux-amd64" --verify-artifact

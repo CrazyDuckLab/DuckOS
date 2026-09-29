@@ -1,0 +1,56 @@
+[Unit]
+Description=DuckOS privileged read-only system Agent (internal TEST build)
+Documentation=file:/opt/duckos/current/BUILD-INFO.json
+After=local-fs.target
+Before=duck-api.service
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=root
+Group=duckos
+ExecStart=/opt/duckos/current/bin/duck-agent --socket /run/duckos-agent/agent.sock --allowed-uid @DUCKOS_UID@ --environment test
+RuntimeDirectory=duckos-agent
+RuntimeDirectory=frr
+RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=no
+UMask=0007
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=20
+TimeoutStopSec=10
+NoNewPrivileges=yes
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/run/duckos-agent /run/frr /var/lib/frr /var/lib/duckos-agent /var/lib/duckos-agent/network /var/lib/duckos-agent/ztp /var/lib/duckos-agent/wireguard /var/lib/duckos-agent/xray /var/lib/duckos-agent/frr /var/lib/duckos-agent/qos /var/lib/duckos-agent/vault /var/lib/duckos-agent/vault/records /etc/systemd/network
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateNetwork=no
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+IPAddressDeny=any
+LimitCORE=0
+LimitNOFILE=512
+MemoryHigh=128M
+MemoryMax=256M
+TasksMax=64
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=duck-agent
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=100
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  DuckOS mark — version 3.0.
+  A clean geometric duck head silhouette with a triangular beak
+  pointing right (suggesting route direction / "next hop") and an
+  eye dot that doubles as a network node.
+
+  Designed to read at 16 px (favicon), 24 px (sidebar), 64 px
+  (login), and 128 px (app icon). Single path on a 64-grid.
+  Use `currentColor` for stroke so the same SVG works in light
+  and dark themes.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="DuckOS">
+  <title>DuckOS</title>
+  <!-- Head: rounded body that suggests a duck silhouette -->
+  <path
+    d="M14 22
+       C 14 11 22 8 28 8
+       L 40 8
+       C 50 8 54 16 54 22
+       L 54 32
+       C 54 38 50 46 42 46
+       L 28 46
+       C 18 46 14 38 14 32
+       Z"
+    fill="currentColor" />
+  <!-- Beak: short triangle pointing right (route direction) -->
+  <path
+    d="M54 26
+       L 60 30
+       L 54 34
+       Z"
+    fill="currentColor" />
+  <!-- Eye: small negative-space dot -->
+  <circle cx="24" cy="22" r="3.2" fill="#ffffff" />
+</svg>

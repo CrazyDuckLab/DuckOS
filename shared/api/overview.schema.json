@@ -1,0 +1,384 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://duckos.local/schemas/overview-v1",
+  "title": "Overview",
+  "description": "Real read-only Linux observations. A field with unavailable evidence must have a matching component issue. Empty/zero fallbacks are not health evidence.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "observedAt",
+    "environment",
+    "system",
+    "cpu",
+    "memory",
+    "storage",
+    "interfaces",
+    "routes",
+    "dns",
+    "services",
+    "nftables",
+    "issues"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1",
+      "type": "string"
+    },
+    "observedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "environment": {
+      "type": "string",
+      "enum": [
+        "dev",
+        "test",
+        "production"
+      ]
+    },
+    "system": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "hostname",
+        "kernel",
+        "os",
+        "architecture",
+        "uptimeSeconds"
+      ],
+      "properties": {
+        "hostname": {
+          "type": "string"
+        },
+        "kernel": {
+          "type": "string"
+        },
+        "os": {
+          "type": "string"
+        },
+        "architecture": {
+          "type": "string"
+        },
+        "uptimeSeconds": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "cpu": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "logicalCores",
+        "usagePercent",
+        "loadAverage"
+      ],
+      "properties": {
+        "logicalCores": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "usagePercent": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 100
+        },
+        "loadAverage": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": 0
+          },
+          "maxItems": 3
+        }
+      }
+    },
+    "memory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "totalBytes",
+        "availableBytes",
+        "usedBytes"
+      ],
+      "properties": {
+        "totalBytes": {
+          "type": "number",
+          "minimum": 0
+        },
+        "availableBytes": {
+          "type": "number",
+          "minimum": 0
+        },
+        "usedBytes": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "storage": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mountpoint",
+          "filesystem",
+          "totalBytes",
+          "availableBytes",
+          "usedBytes"
+        ],
+        "properties": {
+          "mountpoint": {
+            "type": "string"
+          },
+          "filesystem": {
+            "type": "string"
+          },
+          "totalBytes": {
+            "type": "number",
+            "minimum": 0
+          },
+          "availableBytes": {
+            "type": "number",
+            "minimum": 0
+          },
+          "usedBytes": {
+            "type": "number",
+            "minimum": 0
+          }
+        }
+      },
+      "maxItems": 256
+    },
+    "interfaces": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "index",
+          "mtu",
+          "mac",
+          "state",
+          "addresses"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "mtu": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "mac": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "addresses": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "address",
+                "family",
+                "prefixLength"
+              ],
+              "properties": {
+                "address": {
+                  "type": "string"
+                },
+                "family": {
+                  "type": "string",
+                  "enum": [
+                    "ipv4",
+                    "ipv6"
+                  ]
+                },
+                "prefixLength": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 128
+                }
+              }
+            },
+            "maxItems": 1024
+          }
+        }
+      },
+      "maxItems": 256
+    },
+    "routes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "family",
+          "destination",
+          "gateway",
+          "device",
+          "protocol",
+          "scope",
+          "table",
+          "metric"
+        ],
+        "properties": {
+          "family": {
+            "type": "string",
+            "enum": [
+              "ipv4",
+              "ipv6"
+            ]
+          },
+          "destination": {
+            "type": "string"
+          },
+          "gateway": {
+            "type": "string"
+          },
+          "device": {
+            "type": "string"
+          },
+          "protocol": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "table": {
+            "type": "string"
+          },
+          "metric": {
+            "type": "number",
+            "minimum": 0
+          }
+        }
+      },
+      "maxItems": 8192
+    },
+    "dns": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nameservers",
+        "searchDomains",
+        "source"
+      ],
+      "properties": {
+        "nameservers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64
+        },
+        "searchDomains": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64
+        },
+        "source": {
+          "type": "string"
+        }
+      }
+    },
+    "services": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "loadState",
+          "activeState",
+          "subState"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "loadState": {
+            "type": "string"
+          },
+          "activeState": {
+            "type": "string"
+          },
+          "subState": {
+            "type": "string"
+          }
+        }
+      },
+      "maxItems": 64
+    },
+    "nftables": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "tables",
+        "chains",
+        "rules"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "available",
+            "unavailable"
+          ]
+        },
+        "tables": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "chains": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rules": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "component",
+          "code",
+          "message"
+        ],
+        "properties": {
+          "component": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "maxItems": 128
+    }
+  }
+}

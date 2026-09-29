@@ -1,0 +1,50 @@
+[Unit]
+Description=DuckOS independent signed-release updater supervisor
+After=local-fs.target
+Before=duck-agent.service
+ConditionPathExists=/etc/duckos/update-keys
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/libexec/duckos/duck-updater
+RuntimeDirectory=duckos-updater
+RuntimeDirectoryMode=0700
+StateDirectory=duckos-updater
+StateDirectoryMode=0700
+UMask=0077
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=190
+NoNewPrivileges=yes
+CapabilityBoundingSet=CAP_DAC_READ_SEARCH CAP_SYS_PTRACE
+ProtectSystem=strict
+ReadWritePaths=/opt/duckos /var/lib/duckos-updater /run/duckos-updater
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+IPAddressDeny=any
+IPAddressAllow=localhost
+LimitCORE=0
+LimitNOFILE=128
+MemoryMax=512M
+TasksMax=32
+StandardOutput=journal
+StandardError=journal
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=30
+
+[Install]
+WantedBy=multi-user.target

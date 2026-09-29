@@ -1,0 +1,210 @@
+/* DuckOS V1 — V4 design tokens.
+ *
+ * Goal: an editorial, calm, 2026 network product. Replaces the v3
+ * token set with a coordinated palette, an 8-px spacing scale, a
+ * system-font type ramp, and a single accent hue used for selection,
+ * focus, primary action, and primary status only. The semantic
+ * roles (success / warn / bad / info) share one accent palette.
+ *
+ * Light and dark themes both reuse the same hue tokens — only
+ * luminance tokens (surface, text, line, divider) flip.
+ *
+ * One value should change design across the whole app: change a token.
+ */
+
+:root,
+[data-theme="light"] {
+  /* hue (constant across themes) */
+  --hue-teal: 168;
+  --hue-amber: 36;
+  --hue-bad: 4;
+  --hue-info: 218;
+
+  /* accents — selected text colour, accent background tint, accent stripe */
+  --accent: hsl(var(--hue-teal) 60% 32%);
+  --accent-strong: hsl(var(--hue-teal) 70% 24%);
+  --accent-soft: hsl(var(--hue-teal) 60% 92%);
+  --accent-softer: hsl(var(--hue-teal) 50% 96%);
+  --accent-on: hsl(var(--hue-teal) 70% 12%);
+  --accent-ink: hsl(var(--hue-teal) 50% 22%);
+
+  /* semantic — derived from one hue each */
+  --good: hsl(var(--hue-teal) 50% 36%);
+  --good-soft: hsl(var(--hue-teal) 50% 92%);
+  --good-on: hsl(var(--hue-teal) 60% 16%);
+  --warn: hsl(var(--hue-amber) 90% 38%);
+  --warn-soft: hsl(var(--hue-amber) 90% 93%);
+  --warn-on: hsl(var(--hue-amber) 80% 18%);
+  --bad: hsl(var(--hue-bad) 70% 44%);
+  --bad-soft: hsl(var(--hue-bad) 80% 94%);
+  --bad-on: hsl(var(--hue-bad) 60% 22%);
+  --info: hsl(var(--hue-info) 60% 44%);
+  --info-soft: hsl(var(--hue-info) 60% 94%);
+
+  /* surfaces — light */
+  --surface-app: #f6f8fa;
+  --surface-panel: #ffffff;
+  --surface-card: #ffffff;
+  --surface-row: #ffffff;
+  --surface-row-alt: #fbfcfd;
+  --surface-row-hover: #f3f8f6;
+  --surface-row-selected: #e7f6f1;
+  --surface-elevated: #ffffff;
+  --surface-input: #ffffff;
+  --surface-rail: #fbfcfd;
+
+  /* text — light */
+  --text: #0e1620;
+  --text-strong: #0a1218;
+  --text-muted: #4d5a6a;
+  --text-subtle: #6e7a8a;
+  --text-faint: #97a3b1;
+  --text-on-accent: #ffffff;
+
+  /* borders */
+  --line: #e4e9ee;
+  --line-soft: #eef1f4;
+  --line-strong: #d4dbe2;
+  --line-selected: hsl(var(--hue-teal) 50% 70%);
+
+  /* shadow */
+  --shadow-sm: 0 1px 2px rgba(15, 30, 45, 0.04);
+  --shadow-md: 0 4px 18px rgba(15, 30, 45, 0.08);
+  --shadow-lg: 0 18px 50px rgba(15, 30, 45, 0.12);
+  --shadow-overlay: 0 28px 80px rgba(15, 30, 45, 0.18);
+
+  /* spacing scale (8 px base) */
+  --space-3xs: 2px;
+  --space-2xs: 4px;
+  --space-xs: 6px;
+  --space-s: 8px;
+  --space-m: 12px;
+  --space-l: 16px;
+  --space-xl: 24px;
+  --space-2xl: 32px;
+  --space-3xl: 48px;
+  --space-4xl: 64px;
+
+  /* radius */
+  --radius-xs: 4px;
+  --radius-s: 6px;
+  --radius-m: 10px;
+  --radius-l: 14px;
+  --radius-xl: 20px;
+  --radius-pill: 999px;
+
+  /* type ramp */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter",
+    "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+  --font-mono: "SF Mono", Menlo, "Cascadia Mono", Consolas,
+    "Liberation Mono", monospace;
+  --fs-3xs: 11px;
+  --fs-2xs: 12px;
+  --fs-xs: 13px;
+  --fs-s: 14px;
+  --fs-m: 15px;
+  --fs-l: 16px;
+  --fs-xl: 18px;
+  --fs-2xl: 20px;
+  --fs-3xl: 24px;
+  --fs-4xl: 30px;
+  --fs-5xl: 38px;
+  --lh-tight: 1.2;
+  --lh-snug: 1.32;
+  --lh-normal: 1.5;
+  --lh-loose: 1.65;
+
+  /* trackings */
+  --track-flat: 0em;
+  --track-tight: -0.01em;
+  --track-caps: 0.04em;
+
+  /* weights */
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  /* duration */
+  --motion-fast: 90ms;
+  --motion-base: 150ms;
+  --motion-slow: 220ms;
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+[data-theme="dark"] {
+  --accent: hsl(var(--hue-teal) 60% 60%);
+  --accent-strong: hsl(var(--hue-teal) 75% 70%);
+  --accent-soft: hsl(var(--hue-teal) 50% 16%);
+  --accent-softer: hsl(var(--hue-teal) 40% 10%);
+  --accent-on: hsl(var(--hue-teal) 60% 88%);
+  --accent-ink: hsl(var(--hue-teal) 60% 70%);
+
+  --good: hsl(var(--hue-teal) 60% 56%);
+  --good-soft: hsl(var(--hue-teal) 40% 14%);
+  --good-on: hsl(var(--hue-teal) 60% 80%);
+  --warn: hsl(var(--hue-amber) 90% 58%);
+  --warn-soft: hsl(var(--hue-amber) 60% 16%);
+  --warn-on: hsl(var(--hue-amber) 90% 80%);
+  --bad: hsl(var(--hue-bad) 80% 60%);
+  --bad-soft: hsl(var(--hue-bad) 50% 18%);
+  --bad-on: hsl(var(--hue-bad) 80% 86%);
+  --info: hsl(var(--hue-info) 70% 64%);
+  --info-soft: hsl(var(--hue-info) 50% 18%);
+
+  --surface-app: #06090d;
+  --surface-panel: #0d151c;
+  --surface-card: #131e29;
+  --surface-row: #0f1822;
+  --surface-row-alt: #131e29;
+  --surface-row-hover: #162230;
+  --surface-row-selected: #143024;
+  --surface-elevated: #131e29;
+  --surface-input: #0f1822;
+  --surface-rail: #0a1219;
+
+  --text: #e3eaf2;
+  --text-strong: #f2f6fa;
+  --text-muted: #99a6b6;
+  --text-subtle: #7a8898;
+  --text-faint: #5a6878;
+  --text-on-accent: #03100c;
+
+  --line: #1d2a37;
+  --line-soft: #162230;
+  --line-strong: #28384b;
+  --line-selected: hsl(var(--hue-teal) 60% 40%);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 18px 50px rgba(0, 0, 0, 0.55);
+  --shadow-overlay: 0 28px 80px rgba(0, 0, 0, 0.65);
+
+  color-scheme: dark;
+}
+
+html {
+  background: var(--surface-app);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-s);
+  line-height: var(--lh-normal);
+  font-feature-settings: "ss01", "cv11";
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--surface-app);
+  color: var(--text);
+}

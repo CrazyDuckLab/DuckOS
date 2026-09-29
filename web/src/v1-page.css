@@ -1,0 +1,558 @@
+/* DuckOS V1 — page content.
+ *
+ * Dense tables, calm cards, state markers. Tables use system fonts and a
+ * 28px row height (compact). State markers are dots — never colour
+ * blocks — to keep the visual quiet.
+ */
+
+/* — Page-level empty/loading/error/degraded/perms/contract-missing — */
+.v1-state {
+  border: 1px solid var(--v1-line);
+  border-radius: var(--v1-r2);
+  background: var(--v1-bg-elevated);
+  padding: var(--v1-s5);
+  display: grid;
+  gap: var(--v1-s3);
+}
+.v1-state[data-state="error"] {
+  border-color: var(--v1-bad);
+  background: var(--v1-bad-soft);
+}
+.v1-state[data-state="degraded"] {
+  border-color: var(--v1-warn);
+  background: var(--v1-warn-soft);
+}
+.v1-state .state-head {
+  display: flex;
+  align-items: center;
+  gap: var(--v1-s3);
+}
+.v1-state .state-head h3 {
+  font-size: var(--v1-fs-lg);
+  font-weight: 600;
+  margin: 0;
+}
+.v1-state .state-head .icon {
+  display: inline-flex;
+}
+.v1-state .state-body {
+  color: var(--v1-text-muted);
+}
+.v1-state .state-actions {
+  display: flex;
+  gap: var(--v1-s2);
+}
+
+/* — Section card (no SaaS soup — single border, single radius) — */
+.v1-card {
+  background: var(--v1-bg-elevated);
+  border: 1px solid var(--v1-line);
+  border-radius: var(--v1-r2);
+  padding: var(--v1-s4);
+  display: grid;
+  gap: var(--v1-s3);
+}
+.v1-card[data-tight="true"] {
+  padding: var(--v1-s3);
+}
+.v1-card .card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--v1-s3);
+}
+.v1-card .card-head h3 {
+  font-size: var(--v1-fs-md);
+  font-weight: 600;
+  margin: 0;
+}
+.v1-card .card-head .meta {
+  color: var(--v1-text-subtle);
+  font-size: var(--v1-fs-xs);
+}
+.v1-card .card-body {
+  display: grid;
+  gap: var(--v1-s2);
+}
+.v1-card .card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--v1-s3);
+}
+.v1-card .stat {
+  display: grid;
+  gap: 2px;
+}
+.v1-card .stat .label {
+  font-size: var(--v1-fs-xs);
+  color: var(--v1-text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.v1-card .stat .value {
+  font-size: var(--v1-fs-lg);
+  font-weight: 600;
+  color: var(--v1-text);
+}
+.v1-card .stat .value.mono {
+  font-family: var(--v1-font-mono);
+  font-weight: 500;
+}
+.v1-card .stat[data-state="unknown"] .value {
+  color: var(--v1-text-subtle);
+}
+
+/* — Dense table — */
+.v1-table-wrap {
+  background: var(--v1-bg-elevated);
+  border: 1px solid var(--v1-line);
+  border-radius: var(--v1-r2);
+  overflow: hidden;
+}
+.v1-table-wrap .table-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--v1-s3);
+  padding: var(--v1-s2) var(--v1-s3);
+  border-bottom: 1px solid var(--v1-line-soft);
+  font-size: var(--v1-fs-xs);
+  color: var(--v1-text-subtle);
+}
+.v1-table-wrap .table-toolbar .toolbar-tools {
+  margin-left: auto;
+  display: flex;
+  gap: var(--v1-s2);
+}
+.v1-table-scroll {
+  overflow: auto;
+  max-height: 60vh;
+}
+.v1-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--v1-fs-md);
+}
+.v1-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--v1-bg-panel);
+  text-align: left;
+  font-weight: 600;
+  font-size: var(--v1-fs-xs);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--v1-text-subtle);
+  padding: 6px var(--v1-s3);
+  border-bottom: 1px solid var(--v1-line);
+  white-space: nowrap;
+}
+.v1-table tbody td {
+  padding: 6px var(--v1-s3);
+  border-bottom: 1px solid var(--v1-line-soft);
+  vertical-align: middle;
+  color: var(--v1-text);
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.v1-table tbody tr:nth-child(odd) td {
+  background: var(--v1-bg-row);
+}
+.v1-table tbody tr:nth-child(even) td {
+  background: var(--v1-bg-row-alt);
+}
+.v1-table tbody tr:hover td {
+  background: var(--v1-bg-panel);
+}
+/* Selected row — driven by DataTable's selectedRowKey prop. Matches the
+   Inspector object panel selection. */
+.v1-table tbody tr.v1-selected td {
+  background: var(--v1-teal-very-soft);
+  box-shadow: inset 3px 0 0 0 var(--v1-teal);
+}
+.v1-table tbody tr[role="button"] {
+  cursor: pointer;
+}
+.v1-table tbody tr[role="button"]:focus-visible td {
+  outline: 2px solid var(--v1-teal);
+  outline-offset: -2px;
+}
+.v1-table .mono {
+  font-family: var(--v1-font-mono);
+  font-size: var(--v1-fs-sm);
+}
+.v1-table .table-empty {
+  padding: var(--v1-s5);
+  text-align: center;
+  color: var(--v1-text-subtle);
+  font-style: italic;
+}
+
+/* — State marker dot — */
+.v1-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--v1-unknown);
+}
+.v1-dot[data-state="good"] {
+  background: var(--v1-good);
+}
+.v1-dot[data-state="warn"] {
+  background: var(--v1-warn);
+}
+.v1-dot[data-state="bad"] {
+  background: var(--v1-bad);
+}
+
+/* — State pill (compact, replaces SaaS-style chips) — */
+.v1-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--v1-s2);
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: var(--v1-fs-xs);
+  background: var(--v1-bg-panel);
+  border: 1px solid var(--v1-line);
+  color: var(--v1-text-muted);
+  white-space: nowrap;
+}
+.v1-pill[data-state="good"] {
+  color: var(--v1-good);
+  border-color: var(--v1-good-soft);
+  background: var(--v1-good-soft);
+}
+.v1-pill[data-state="warn"] {
+  color: var(--v1-warn);
+  border-color: var(--v1-warn-soft);
+  background: var(--v1-warn-soft);
+}
+.v1-pill[data-state="bad"] {
+  color: var(--v1-bad);
+  border-color: var(--v1-bad-soft);
+  background: var(--v1-bad-soft);
+}
+.v1-pill[data-state="unknown"] {
+  color: var(--v1-text-subtle);
+}
+
+/* — Risk pill (R/C/I) — */
+.v1-risk {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--v1-bg-panel);
+  border: 1px solid var(--v1-line);
+  color: var(--v1-text-muted);
+  letter-spacing: 0.04em;
+}
+.v1-risk[data-risk="R"] {
+  color: var(--v1-text-muted);
+}
+.v1-risk[data-risk="C"] {
+  color: var(--v1-amber);
+  border-color: var(--v1-amber-soft);
+  background: var(--v1-amber-soft);
+}
+.v1-risk[data-risk="I"] {
+  color: var(--v1-bad);
+  border-color: var(--v1-bad-soft);
+  background: var(--v1-bad-soft);
+}
+
+/* — Easy tile grid — */
+.v1-easy-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--v1-s4);
+}
+.v1-easy-tile {
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  gap: var(--v1-s2);
+  padding: var(--v1-s5);
+  background: var(--v1-bg-elevated);
+  border: 1px solid var(--v1-line);
+  border-radius: var(--v1-r3);
+  text-align: left;
+  appearance: none;
+  cursor: pointer;
+  transition:
+    border-color var(--v1-dur-2) var(--v1-ease),
+    background var(--v1-dur-2) var(--v1-ease);
+  color: var(--v1-text);
+}
+.v1-easy-tile:hover {
+  border-color: var(--v1-teal);
+  background: var(--v1-teal-very-soft);
+}
+.v1-easy-tile .v1-easy-tile-id {
+  font-family: var(--v1-font-mono);
+  font-size: var(--v1-fs-xs);
+  color: var(--v1-text-subtle);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.v1-easy-tile h3 {
+  font-size: var(--v1-fs-xl);
+  font-weight: 600;
+  line-height: 1.15;
+  margin: 0;
+  /* Allow long German / Russian words to wrap inside the tile so the
+     tile never overflows its grid cell. */
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+.v1-easy-tile p {
+  color: var(--v1-text-muted);
+  font-size: var(--v1-fs-md);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.v1-easy-tile .tile-foot {
+  color: var(--v1-text-subtle);
+  font-size: var(--v1-fs-xs);
+}
+
+/* Easy mode tonal card — used by the Easy Home status banner and similar
+   short, narrative cards in the Easy workflow. */
+.v1-card[data-tone="easy"] {
+  border-left: 3px solid var(--v1-teal);
+}
+
+/* — Definition list — */
+.v1-dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--v1-s2) var(--v1-s4);
+}
+.v1-dl dt {
+  color: var(--v1-text-subtle);
+  font-size: var(--v1-fs-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.v1-dl dd {
+  color: var(--v1-text);
+  font-size: var(--v1-fs-md);
+  margin: 0;
+}
+
+/* — Key-value strips used by inspector — */
+.v1-kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--v1-s1) var(--v1-s3);
+  min-width: 0;
+}
+.v1-kv dt {
+  color: var(--v1-text-subtle);
+  font-size: var(--v1-fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.v1-kv dd {
+  margin: 0;
+  font-size: var(--v1-fs-md);
+  color: var(--v1-text);
+  /* Long IPv6 / public-key digests must wrap, never overflow the
+     Inspector column. anywhere is more aggressive than break-word. */
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+/* — Filter chips (segmented buttons) — */
+.v1-seg {
+  display: inline-flex;
+  border: 1px solid var(--v1-line);
+  border-radius: var(--v1-r2);
+  background: var(--v1-bg-panel);
+  overflow: hidden;
+}
+.v1-seg button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--v1-text-muted);
+  padding: 4px 10px;
+  font-size: var(--v1-fs-sm);
+  cursor: pointer;
+}
+.v1-seg button[aria-pressed="true"] {
+  background: var(--v1-bg-elevated);
+  color: var(--v1-text);
+}
+.v1-seg button + button {
+  border-left: 1px solid var(--v1-line);
+}
+
+/* — Form elements — */
+.v1-input,
+.v1-select,
+.v1-textarea {
+  display: block;
+  width: 100%;
+  background: var(--v1-bg-panel);
+  border: 1px solid var(--v1-line);
+  border-radius: var(--v1-r2);
+  padding: 6px 10px;
+  color: var(--v1-text);
+  font-size: var(--v1-fs-md);
+  font-family: inherit;
+}
+.v1-input:focus-visible,
+.v1-select:focus-visible,
+.v1-textarea:focus-visible {
+  outline: 2px solid var(--v1-teal);
+  outline-offset: 1px;
+  border-color: var(--v1-teal);
+}
+.v1-textarea {
+  font-family: var(--v1-font-mono);
+  font-size: var(--v1-fs-sm);
+  min-height: 120px;
+  resize: vertical;
+}
+.v1-form-grid {
+  display: grid;
+  gap: var(--v1-s3);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+.v1-form-field {
+  display: grid;
+  gap: var(--v1-s1);
+}
+.v1-form-field label {
+  font-size: var(--v1-fs-xs);
+  color: var(--v1-text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.v1-form-field .help {
+  font-size: var(--v1-fs-xs);
+  color: var(--v1-text-subtle);
+}
+
+/* — Field row for inspector — */
+.v1-field-row {
+  display: grid;
+  gap: var(--v1-s2);
+  border-top: 1px solid var(--v1-line-soft);
+  padding-top: var(--v1-s3);
+}
+.v1-field-row + .v1-field-row {
+  margin-top: var(--v1-s3);
+}
+
+/* — Utility — */
+.v1-stack > * + * {
+  margin-top: var(--v1-s3);
+}
+.v1-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--v1-s3);
+}
+.v1-mute {
+  color: var(--v1-text-muted);
+}
+.v1-subtle {
+  color: var(--v1-text-subtle);
+}
+.v1-fs-xs {
+  font-size: var(--v1-fs-xs);
+}
+.v1-fs-sm {
+  font-size: var(--v1-fs-sm);
+}
+.v1-mono {
+  font-family: var(--v1-font-mono);
+  font-size: var(--v1-fs-sm);
+}
+/* Plain (vertical) list used by UnsupportedFeature and similar
+   intentional placeholders. Tighter spacing than the default <ul>
+   to fit dense network-admin layouts. */
+.v1-list-plain {
+  list-style: none;
+  padding: 0;
+  margin: var(--v1-s3) 0 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--v1-s2);
+}
+.v1-list-plain > li {
+  padding-left: var(--v1-s3);
+  border-left: 2px solid var(--v1-line-soft);
+  color: var(--v1-text);
+}
+.v1-list-plain > li > code {
+  background: transparent;
+}
+.v1-strong {
+  font-weight: 600;
+}
+.v1-divider {
+  height: 1px;
+  background: var(--v1-line-soft);
+  margin: var(--v1-s3) 0;
+}
+
+/* — Page title + crumbs area for spec compliance — */
+.v1-page-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--v1-s2);
+}
+.v1-page-meta .meta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--v1-s1);
+  font-size: var(--v1-fs-xs);
+  color: var(--v1-text-subtle);
+}
+.v1-page-meta .meta-pill[data-state="good"] {
+  color: var(--v1-good);
+}
+.v1-page-meta .meta-pill[data-state="warn"] {
+  color: var(--v1-warn);
+}
+.v1-page-meta .meta-pill[data-state="bad"] {
+  color: var(--v1-bad);
+}
+
+/* — Inspector copy block — */
+.v1-code {
+  font-family: var(--v1-font-mono);
+  font-size: var(--v1-fs-sm);
+  background: var(--v1-bg);
+  border: 1px solid var(--v1-line-soft);
+  border-radius: var(--v1-r2);
+  padding: var(--v1-s3);
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--v1-text);
+  position: relative;
+}
+
+/* — Visually hidden — */
+.v1-sr {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

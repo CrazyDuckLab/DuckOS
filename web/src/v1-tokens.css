@@ -1,0 +1,167 @@
+/* DuckOS V1 — design tokens.
+ *
+ * Per spec: calm teal/amber, no SaaS card soup, dense professional tables,
+ * no external font/CDN dependency. Every color, radius, motion and density
+ * value lives here so the rest of the V1 CSS only references tokens.
+ *
+ * Two themes are supported (light/dark) plus a system-driven default.
+ * Both themes share the same hue tokens; only luminance and surface
+ * tokens change.
+ */
+
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Surfaces — calm, low-contrast, never blue-glow */
+  --v1-bg: #0a111a;
+  --v1-bg-elevated: #111d29;
+  --v1-bg-panel: #142231;
+  --v1-bg-row: #182b3b;
+  --v1-bg-row-alt: #142231;
+
+  /* Borders — hairline */
+  --v1-line: #1f3145;
+  --v1-line-soft: #1a2a3b;
+  --v1-line-strong: #2a4060;
+
+  /* Text — readable but quiet */
+  --v1-text: #e9eff5;
+  --v1-text-muted: #9aaeba;
+  --v1-text-subtle: #7a8b9c;
+  --v1-text-faint: #5a6b7c;
+
+  /* Hue tokens — calm teal primary, amber for change and time-trust issues.
+   * These are the *only* chromatic tokens. */
+  --v1-teal: #87e5ce;
+  --v1-teal-strong: #67dcbf;
+  --v1-teal-soft: rgba(135, 229, 206, 0.16);
+  --v1-teal-very-soft: rgba(135, 229, 206, 0.08);
+
+  --v1-amber: #edbe79;
+  --v1-amber-strong: #e6a955;
+  --v1-amber-soft: rgba(237, 190, 121, 0.18);
+
+  /* States — neutral, never red-glow */
+  --v1-good: #87e5ce;
+  --v1-good-soft: rgba(135, 229, 206, 0.18);
+  --v1-warn: #edbe79;
+  --v1-warn-soft: rgba(237, 190, 121, 0.2);
+  --v1-bad: #d68a8a;
+  --v1-bad-soft: rgba(214, 138, 138, 0.18);
+  --v1-unknown: #8aa2bb;
+  --v1-unknown-soft: rgba(138, 162, 187, 0.15);
+
+  /* Accents — section colours. Calm, low-saturation. */
+  --v1-section-interfaces: #87e5ce;
+  --v1-section-wan: #9ad9c8;
+  --v1-section-lan: #b6d7c8;
+  --v1-section-routing: #8eb5d6;
+  --v1-section-firewall: #d6a98e;
+  --v1-section-tunnels: #bba1d6;
+  --v1-section-dns: #8ed6c1;
+  --v1-section-services: #d6c08e;
+  --v1-section-system: #aab8c6;
+  --v1-section-logs: #c8a4b3;
+  --v1-section-easy: #87e5ce;
+
+  /* Spacing scale — half-step. Tight, dense. */
+  --v1-s0: 2px;
+  --v1-s1: 4px;
+  --v1-s2: 6px;
+  --v1-s3: 8px;
+  --v1-s4: 12px;
+  --v1-s5: 16px;
+  --v1-s6: 20px;
+  --v1-s7: 28px;
+  --v1-s8: 40px;
+
+  /* Radii — small. Never large SaaS radii. */
+  --v1-r0: 2px;
+  --v1-r1: 4px;
+  --v1-r2: 6px;
+  --v1-r3: 8px;
+
+  /* Type — system font, no remote font dependency */
+  --v1-font:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue",
+    "Liberation Sans", "Noto Sans", sans-serif;
+  --v1-font-mono:
+    "SF Mono", "JetBrains Mono", "Cascadia Mono", "Liberation Mono",
+    "DejaVu Sans Mono", "Menlo", "Consolas", monospace;
+
+  --v1-fs-xs: 11px;
+  --v1-fs-sm: 12px;
+  --v1-fs-md: 13px;
+  --v1-fs-base: 14px;
+  --v1-fs-lg: 16px;
+  --v1-fs-xl: 19px;
+  --v1-fs-2xl: 24px;
+
+  /* Layout */
+  --v1-rail-w: 220px;
+  --v1-rail-w-collapsed: 56px;
+  --v1-search-h: 44px;
+  --v1-bottom-dock-h: 56px;
+  --v1-inspector-w: 360px;
+  --v1-topbar-h: 48px;
+
+  /* Motion — short, calm, never bouncy */
+  --v1-ease: cubic-bezier(0.2, 0.6, 0.2, 1);
+  --v1-dur-1: 80ms;
+  --v1-dur-2: 160ms;
+  --v1-dur-3: 240ms;
+
+  /* Shadows — almost invisible. No SaaS glow. */
+  --v1-shadow-1: 0 1px 0 rgba(0, 0, 0, 0.4);
+  --v1-shadow-2: 0 6px 24px -16px rgba(0, 0, 0, 0.6);
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --v1-bg: #f4f7fa;
+  --v1-bg-elevated: #ffffff;
+  --v1-bg-panel: #f8fafc;
+  --v1-bg-row: #ffffff;
+  --v1-bg-row-alt: #f4f7fa;
+
+  --v1-line: #dde6ee;
+  --v1-line-soft: #e6edf4;
+  --v1-line-strong: #c0d0df;
+
+  --v1-text: #142231;
+  --v1-text-muted: #4a5b6e;
+  --v1-text-subtle: #6b7c8f;
+  --v1-text-faint: #94a4b5;
+
+  --v1-teal: #2a7a64;
+  --v1-teal-strong: #1f6752;
+  --v1-teal-soft: rgba(42, 122, 100, 0.1);
+  --v1-teal-very-soft: rgba(42, 122, 100, 0.05);
+
+  --v1-amber: #b07d2f;
+  --v1-amber-strong: #8e631e;
+  --v1-amber-soft: rgba(176, 125, 47, 0.12);
+
+  --v1-good: #2a7a64;
+  --v1-good-soft: rgba(42, 122, 100, 0.12);
+  --v1-warn: #b07d2f;
+  --v1-warn-soft: rgba(176, 125, 47, 0.14);
+  --v1-bad: #9b4444;
+  --v1-bad-soft: rgba(155, 68, 68, 0.14);
+  --v1-unknown: #6b7c8f;
+  --v1-unknown-soft: rgba(107, 124, 143, 0.12);
+
+  --v1-shadow-1: 0 1px 0 rgba(20, 34, 49, 0.06);
+  --v1-shadow-2: 0 6px 24px -16px rgba(20, 34, 49, 0.18);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root,
+  [data-theme="dark"],
+  [data-theme="light"] {
+    --v1-dur-1: 0ms;
+    --v1-dur-2: 0ms;
+    --v1-dur-3: 0ms;
+  }
+}

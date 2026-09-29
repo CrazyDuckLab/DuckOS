@@ -1,0 +1,278 @@
+/**
+ * DuckOS V1 — Easy mode pages.
+ *
+ * Designed for non-expert operators. Every screen answers a single
+ * plain-language question first and progressively discloses the
+ * detail on demand. Color is always combined with icon + text.
+ */
+
+.easy-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--v1-s6);
+}
+
+.easy-hero h1 {
+  font-size: var(--v1-fs-3xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin: 0;
+}
+.easy-hero p {
+  color: var(--v1-text-muted);
+  font-size: var(--v1-fs-base);
+  margin: var(--v1-s2) 0 0 0;
+  max-width: 56ch;
+}
+
+/* — Status banner — */
+.easy-status-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--v1-s4);
+  padding: var(--v1-s4) var(--v1-s5);
+  border-radius: var(--v1-r3);
+  background: var(--v1-bg-elevated);
+  border: 1px solid var(--v1-line);
+  border-left: 4px solid var(--v1-unknown);
+  box-shadow: var(--v1-shadow-1);
+}
+.easy-status-banner strong {
+  font-size: var(--v1-fs-lg);
+  display: block;
+  color: var(--v1-text);
+}
+.easy-status-banner p {
+  margin: var(--v1-s1) 0 0 0;
+  color: var(--v1-text-muted);
+  font-size: var(--v1-fs-sm);
+}
+.easy-status-banner .dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.easy-status-good {
+  border-left-color: var(--v1-good);
+  color: var(--v1-good);
+}
+.easy-status-warn {
+  border-left-color: var(--v1-warn);
+  color: var(--v1-warn);
+}
+.easy-status-bad {
+  border-left-color: var(--v1-bad);
+  color: var(--v1-bad);
+}
+.easy-status-unknown {
+  border-left-color: var(--v1-unknown);
+  color: var(--v1-unknown);
+}
+
+/* — Easy tiles — */
+.easy-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--v1-s4);
+}
+
+.easy-tile {
+  background: var(--v1-bg-elevated);
+  border: 1px solid var(--v1-line);
+  border-radius: var(--v1-r3);
+  padding: var(--v1-s5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--v1-s4);
+  transition:
+    border-color var(--v1-dur-2) var(--v1-ease),
+    transform var(--v1-dur-2) var(--v1-ease);
+}
+.easy-tile:hover {
+  border-color: var(--v1-line-strong);
+}
+
+.easy-tile header {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--v1-s4);
+  align-items: start;
+}
+.easy-tile-icon {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--v1-r2);
+  background: var(--v1-bg-inset);
+  color: var(--v1-text-muted);
+  flex-shrink: 0;
+}
+.easy-tile-icon-good {
+  background: var(--v1-good-soft);
+  color: var(--v1-good);
+}
+.easy-tile-icon-warn {
+  background: var(--v1-warn-soft);
+  color: var(--v1-warn);
+}
+.easy-tile-icon-bad {
+  background: var(--v1-bad-soft);
+  color: var(--v1-bad);
+}
+.easy-tile-icon-unknown {
+  background: var(--v1-unknown-soft);
+  color: var(--v1-unknown);
+}
+
+.easy-tile h2 {
+  margin: 0;
+  font-size: var(--v1-fs-lg);
+  font-weight: 600;
+  line-height: 1.2;
+}
+.easy-tile header p {
+  margin: var(--v1-s1) 0 0 0;
+  color: var(--v1-text-muted);
+  font-size: var(--v1-fs-sm);
+}
+
+.easy-tile-detail {
+  margin: 0;
+  padding: var(--v1-s3) 0 0 0;
+  border-top: 1px solid var(--v1-line-soft);
+}
+.easy-tile-detail dd {
+  margin: 0;
+  font-size: var(--v1-fs-md);
+  color: var(--v1-text);
+}
+
+.easy-tile footer {
+  display: flex;
+  align-items: center;
+  gap: var(--v1-s2);
+  margin-top: auto;
+}
+
+/* — Cards — */
+.easy-card {
+  background: var(--v1-bg-elevated);
+  border: 1px solid var(--v1-line);
+  border-radius: var(--v1-r3);
+  padding: var(--v1-s5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--v1-s4);
+}
+.easy-card h2 {
+  margin: 0;
+  font-size: var(--v1-fs-lg);
+  font-weight: 600;
+}
+.easy-card p {
+  margin: 0;
+  color: var(--v1-text-muted);
+}
+.easy-card dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(140px, max-content) 1fr;
+  gap: var(--v1-s2) var(--v1-s4);
+}
+.easy-card dt {
+  color: var(--v1-text-subtle);
+  font-size: var(--v1-fs-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.easy-card dd {
+  margin: 0;
+  font-size: var(--v1-fs-md);
+  color: var(--v1-text);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+/* — Lists — */
+.easy-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--v1-s2);
+}
+.easy-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--v1-s3);
+  padding: var(--v1-s2) 0;
+  border-bottom: 1px solid var(--v1-line-soft);
+}
+.easy-list li:last-child {
+  border-bottom: 0;
+}
+
+.easy-strong {
+  color: var(--v1-text);
+  font-weight: 600;
+}
+.easy-mute {
+  color: var(--v1-text-muted);
+  font-size: var(--v1-fs-sm);
+}
+.easy-mono {
+  font-family: var(--v1-font-mono);
+  font-size: var(--v1-fs-sm);
+}
+.easy-fs-xs {
+  font-size: var(--v1-fs-xs);
+}
+
+.easy-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.easy-dot-good {
+  background: var(--v1-good);
+}
+.easy-dot-warn {
+  background: var(--v1-warn);
+}
+.easy-dot-bad {
+  background: var(--v1-bad);
+}
+.easy-dot-unknown {
+  background: var(--v1-unknown);
+}
+
+/* — Steps list — */
+.easy-steps {
+  margin: 0;
+  padding: 0 0 0 var(--v1-s5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--v1-s3);
+}
+.easy-steps li {
+  display: flex;
+  flex-direction: column;
+  gap: var(--v1-s1);
+}
+.easy-steps strong {
+  color: var(--v1-text);
+}
+
+/* — Grids — */
+.easy-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--v1-s4);
+}

@@ -1,0 +1,57 @@
+[Unit]
+Description=DuckOS managed DNS and DHCP
+After=network.target duck-agent.service
+ConditionPathExists=/etc/duckos-dnsmasq/dnsmasq.conf
+ConditionPathExists=/run/duckos-agent/network-ready
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=duck-dnsmasq
+Group=duck-dnsmasq
+ExecStart=/usr/sbin/dnsmasq --keep-in-foreground --conf-file=/etc/duckos-dnsmasq/dnsmasq.conf --user=duck-dnsmasq --group=duck-dnsmasq --pid-file=/run/duckos-dnsmasq/dnsmasq.pid --log-facility=-
+Environment=LANG=C LC_ALL=C
+WorkingDirectory=/var/lib/duckos-dnsmasq
+RuntimeDirectory=duckos-dnsmasq
+RuntimeDirectoryMode=0700
+StateDirectory=duckos-dnsmasq
+StateDirectoryMode=0700
+UMask=0077
+Restart=on-failure
+RestartSec=3
+TimeoutStartSec=20
+TimeoutStopSec=10
+NoNewPrivileges=yes
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE CAP_NET_RAW CAP_NET_ADMIN
+AmbientCapabilities=CAP_NET_BIND_SERVICE CAP_NET_RAW CAP_NET_ADMIN
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK AF_PACKET
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+LimitCORE=0
+LimitNOFILE=1024
+MemoryHigh=64M
+MemoryMax=128M
+TasksMax=32
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=duck-dnsmasq
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=100
+
+[Install]
+WantedBy=multi-user.target

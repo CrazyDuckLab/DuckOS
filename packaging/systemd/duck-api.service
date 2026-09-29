@@ -1,0 +1,53 @@
+[Unit]
+Description=DuckOS unprivileged API and Engine (internal TEST build)
+Documentation=file:/opt/duckos/current/BUILD-INFO.json
+Requires=duck-agent.service
+After=duck-agent.service
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=duckos
+Group=duckos
+ExecStart=/opt/duckos/current/bin/duck-api --listen 127.0.0.1:8080 --agent-socket /run/duckos-agent/agent.sock --token-file /etc/duckos/api-token --identity-dir /var/lib/duckos/identity --web-dir /opt/duckos/current/web --environment test --updater-health-public-key /etc/duckos/updater-health.pub
+WorkingDirectory=/var/lib/duckos
+UMask=0077
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=20
+TimeoutStopSec=10
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ReadWritePaths=/var/lib/duckos/identity /var/lib/duckos/config /var/lib/duckos/state /var/lib/duckos/policy /var/lib/duckos/wireguard /var/lib/duckos/xray /var/lib/duckos/backups /var/lib/duckos/restore-live
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+IPAddressDeny=any
+IPAddressAllow=localhost
+LimitCORE=0
+LimitNOFILE=512
+MemoryHigh=128M
+MemoryMax=256M
+TasksMax=64
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=duck-api
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=100
+
+[Install]
+WantedBy=multi-user.target

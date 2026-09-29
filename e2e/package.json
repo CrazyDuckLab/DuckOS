@@ -1,0 +1,10 @@
+{
+  "name": "@duckos/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "commonjs",
+  "devDependencies": {
+    "@playwright/test": "1.49.1",
+    "typescript": "7.0.2"
+  }
+}

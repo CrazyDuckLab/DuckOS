@@ -1,0 +1,348 @@
+/* DuckOS V1 — shared form / dialog / table component styles. */
+
+/* — Form field — */
+.v1-form-field-error input,
+.v1-form-field-error .v1-input,
+.v1-form-field-error .v1-select,
+.v1-form-field-error .v1-textarea {
+  border-color: var(--v1-bad);
+}
+.v1-form-field-error label {
+  color: var(--v1-bad);
+}
+.v1-form-error {
+  font-size: var(--v1-fs-xs);
+  color: var(--v1-bad);
+}
+.v1-required {
+  color: var(--v1-bad);
+  margin-left: 2px;
+}
+
+/* — Checkbox — */
+.v1-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--v1-s2);
+  cursor: pointer;
+}
+.v1-checkbox input[type="checkbox"] {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: var(--v1-bg-panel);
+  border: 1px solid var(--v1-line-strong);
+  border-radius: var(--v1-r1);
+  cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+}
+.v1-checkbox input[type="checkbox"]:checked {
+  background: var(--v1-teal);
+  border-color: var(--v1-teal);
+}
+.v1-checkbox input[type="checkbox"]:checked::after {
+  content: "✓";
+  color: var(--v1-bg);
+  font-size: 11px;
+  font-weight: 700;
+}
+.v1-checkbox input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--v1-teal);
+  outline-offset: 2px;
+}
+
+/* — Multi-select — */
+.v1-multi-select {
+  display: grid;
+  gap: var(--v1-s1);
+}
+.v1-multi-select-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--v1-s2);
+  padding: var(--v1-s2);
+  border: 1px solid var(--v1-line);
+  border-radius: var(--v1-r2);
+  background: var(--v1-bg-panel);
+  cursor: pointer;
+}
+.v1-multi-select-row:hover {
+  border-color: var(--v1-line-strong);
+}
+
+/* — List editor — */
+.v1-list-editor {
+  display: grid;
+  gap: var(--v1-s2);
+}
+.v1-list-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--v1-s2);
+  padding: var(--v1-s2);
+  background: var(--v1-bg-panel);
+  border: 1px solid var(--v1-line);
+  border-radius: var(--v1-r2);
+  align-items: center;
+}
+.v1-list-row-error {
+  border-color: var(--v1-bad);
+}
+.v1-list-row-body {
+  display: grid;
+  gap: var(--v1-s2);
+}
+
+/* — Stepper — */
+.v1-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--v1-s2);
+}
+.v1-stepper-value {
+  min-width: 2ch;
+  text-align: center;
+}
+
+/* — Dialog — */
+.v1-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: grid;
+  place-items: center;
+  z-index: 50;
+  padding: var(--v1-s5);
+}
+.v1-dialog {
+  background: var(--v1-bg-elevated);
+  border: 1px solid var(--v1-line-strong);
+  border-radius: var(--v1-r3);
+  padding: var(--v1-s5);
+  width: min(560px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+  display: grid;
+  gap: var(--v1-s3);
+}
+.v1-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.v1-dialog-head h2 {
+  font-size: var(--v1-fs-xl);
+  font-weight: 600;
+}
+.v1-dialog-body {
+  color: var(--v1-text-muted);
+  font-size: var(--v1-fs-md);
+}
+.v1-dialog-content {
+  display: grid;
+  gap: var(--v1-s3);
+}
+.v1-dialog-actions {
+  display: flex;
+  gap: var(--v1-s2);
+  justify-content: flex-end;
+  border-top: 1px solid var(--v1-line-soft);
+  padding-top: var(--v1-s3);
+  margin-top: var(--v1-s2);
+}
+
+/* — DataTable extras — */
+.v1-table th[aria-sort]:not([aria-sort="none"]) {
+  color: var(--v1-text);
+}
+.v1-table th:focus-visible {
+  outline: 2px solid var(--v1-teal);
+  outline-offset: -2px;
+}
+.v1-table .v1-num {
+  text-align: right;
+}
+.v1-table-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--v1-s2);
+  padding: var(--v1-s2) var(--v1-s3);
+  border-top: 1px solid var(--v1-line-soft);
+  background: var(--v1-bg-elevated);
+}
+
+/* — State panel details — */
+.v1-state .state-detail {
+  font-family: var(--v1-font-mono);
+  font-size: var(--v1-fs-sm);
+  color: var(--v1-text-subtle);
+  background: var(--v1-bg-panel);
+  padding: var(--v1-s3);
+  border-radius: var(--v1-r2);
+  border: 1px solid var(--v1-line-soft);
+}
+
+/* — Validation summary — */
+.v1-validation {
+  border: 1px solid var(--v1-warn);
+  background: var(--v1-warn-soft);
+  border-radius: var(--v1-r2);
+  padding: var(--v1-s3);
+  display: grid;
+  gap: var(--v1-s2);
+}
+.v1-validation h4 {
+  font-size: var(--v1-fs-md);
+  font-weight: 600;
+  color: var(--v1-warn-strong);
+  display: flex;
+  align-items: center;
+  gap: var(--v1-s2);
+}
+.v1-validation ul {
+  list-style: disc;
+  padding-left: 1.2em;
+  color: var(--v1-text);
+  font-size: var(--v1-fs-sm);
+  display: grid;
+  gap: var(--v1-s1);
+}
+.v1-validation ul li {
+  padding-left: 4px;
+}
+
+/* — Runtime evidence — */
+.v1-evidence {
+  display: grid;
+  gap: var(--v1-s1);
+  padding: var(--v1-s3);
+  background: var(--v1-bg-panel);
+  border-radius: var(--v1-r2);
+  border: 1px solid var(--v1-line-soft);
+  font-size: var(--v1-fs-sm);
+}
+.v1-evidence .ev-row {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--v1-s3);
+}
+.v1-evidence .ev-key {
+  color: var(--v1-text-subtle);
+  text-transform: uppercase;
+  font-size: var(--v1-fs-xs);
+  letter-spacing: 0.04em;
+}
+.v1-evidence .ev-val {
+  color: var(--v1-text);
+}
+
+/* — Explain Why — */
+.v1-explain-why {
+  display: grid;
+  gap: var(--v1-s2);
+  padding: var(--v1-s3);
+  background: var(--v1-teal-very-soft);
+  border-left: 3px solid var(--v1-teal);
+  border-radius: var(--v1-r2);
+}
+.v1-explain-why h4 {
+  font-size: var(--v1-fs-sm);
+  font-weight: 600;
+  color: var(--v1-teal-strong);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* — Show CLI/API blocks — */
+.v1-show {
+  display: grid;
+  gap: var(--v1-s2);
+  padding: var(--v1-s3);
+  background: var(--v1-bg);
+  border: 1px solid var(--v1-line-soft);
+  border-radius: var(--v1-r2);
+}
+.v1-show pre {
+  font-family: var(--v1-font-mono);
+  font-size: var(--v1-fs-sm);
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0;
+  color: var(--v1-text);
+}
+.v1-show .actions {
+  display: flex;
+  gap: var(--v1-s2);
+  margin-top: var(--v1-s1);
+}
+
+/* — Easy link / guided steps — */
+.v1-easy-link {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+.v1-easy-link:hover .v1-easy-tile {
+  border-color: var(--v1-teal);
+  background: var(--v1-teal-very-soft);
+}
+.v1-easy-steps {
+  display: grid;
+  gap: var(--v1-s3);
+}
+.v1-easy-steps h2 {
+  font-size: var(--v1-fs-xl);
+  font-weight: 600;
+}
+.v1-easy-steps ol {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  counter-reset: easy-step;
+}
+.v1-step-num {
+  color: var(--v1-teal);
+  margin-right: var(--v1-s2);
+}
+
+/* — Risk panel — */
+.v1-risk-panel {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--v1-s3);
+  align-items: center;
+  padding: var(--v1-s3);
+  background: var(--v1-bg-panel);
+  border: 1px solid var(--v1-line);
+  border-radius: var(--v1-r2);
+}
+.v1-risk-panel .big-risk {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+}
+.v1-risk-panel .big-risk[data-risk="C"] {
+  background: var(--v1-amber-soft);
+  color: var(--v1-amber-strong);
+}
+.v1-risk-panel .big-risk[data-risk="I"] {
+  background: var(--v1-bad-soft);
+  color: var(--v1-bad);
+}
+.v1-risk-panel .big-risk[data-risk="R"] {
+  background: var(--v1-bg-row);
+  color: var(--v1-text-muted);
+}
+.v1-risk-panel p {
+  color: var(--v1-text-muted);
+  font-size: var(--v1-fs-sm);
+}
