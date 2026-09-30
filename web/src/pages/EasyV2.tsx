@@ -104,8 +104,14 @@ export function EasyHomePage({
   });
 
   const interfaces = ov?.interfaces ?? [];
-  const upCount = interfaces.filter((i) => i.state === "up").length;
-  const totalCount = interfaces.length;
+  // Easy Mode hides the loopback interface. Full Mode still
+  // exposes it (and the user can switch modes without losing
+  // any actual device). The exclusion is local to Easy Mode
+  // because the loopback is not a real "device" the operator
+  // needs to act on.
+  const realInterfaces = interfaces.filter((i) => i.name !== "lo");
+  const upCount = realInterfaces.filter((i) => i.state === "up").length;
+  const totalCount = realInterfaces.length;
   const dnsCount = ov?.dns?.nameservers?.length ?? 0;
 
   // Headline tone mirrors the centralized derived overall.
@@ -213,7 +219,7 @@ export function EasyHomePage({
           icon="devices"
           title={v4t(locale, "easyHome.devicesCard")}
           body={v4t(locale, "easyHome.devicesSub")}
-          meta={`${interfaces.length} interfaces · ${interfaces.filter((i) => i.addresses.length > 0).length} with addresses`}
+          meta={`${realInterfaces.length} interfaces · ${realInterfaces.filter((i) => i.addresses.length > 0).length} with addresses`}
           state="muted"
           stateLabel={v4t(locale, "easyHome.details")}
           primaryLabel={v4t(locale, "easyHome.devicesOpen")}
@@ -467,21 +473,25 @@ export function EasyDevicesPage({ client }: { page: PageMeta; bundle: Messages; 
   const locale = useLocale();
   const overview = useOverview(client);
   const ov = overview?.ok ? overview.data : null;
+  // Easy Mode hides the loopback interface. Full Mode still
+  // exposes it. The exclusion is local because loopback is
+  // not a real device the operator needs to act on.
   const interfaces = ov?.interfaces ?? [];
+  const realInterfaces = interfaces.filter((i) => i.name !== "lo");
   return (
     <div className="v4-page">
       <h1 className="v4-page-title">{v4t(locale, "easyHome.devicesCard")}</h1>
       <p className="v4-page-subtitle">{v4t(locale, "easyHome.devicesSub")}</p>
       <div className="v4-page-meta">
-        <span className="v4-pill" data-kind="muted">{interfaces.length} interfaces</span>
-        <span>{interfaces.filter((i) => i.addresses.length > 0).length} with addresses</span>
+        <span className="v4-pill" data-kind="muted">{realInterfaces.length} interfaces</span>
+        <span>{realInterfaces.filter((i) => i.addresses.length > 0).length} with addresses</span>
       </div>
       <table className="v4-table">
         <thead>
           <tr><th>Interface</th><th>Address</th><th>State</th></tr>
         </thead>
         <tbody>
-          {interfaces.map((i) => (
+          {realInterfaces.map((i) => (
             <tr key={i.name}>
               <td style={{ fontWeight: 500 }}>{i.name}</td>
               <td className="v4-mono">{i.addresses[0]?.address ?? "—"}</td>

@@ -104,6 +104,7 @@ type Action =
   | { type: "setLocale"; locale: Locale }
   | { type: "setTheme"; theme: "light" | "dark" }
   | { type: "openInspector"; pageId: string }
+  | { type: "toggleInspector"; pageId: string }
   | { type: "closeInspector" }
   | { type: "selectObject"; obj: InspectorObject | null }
   | { type: "openSearch" }
@@ -133,6 +134,13 @@ function reducer(state: AppState, action: Action): AppState {
         inspection: true,
         inspectorTab: "what",
       };
+    case "toggleInspector":
+      // Toggle: open if closed or for a different page, close
+      // if it is already showing.
+      if (state.inspection) {
+        return { ...state, inspection: false, selection: null };
+      }
+      return { ...state, inspection: true, inspectorTab: "what" };
     case "closeInspector":
       return { ...state, inspection: false, selection: null };
     case "selectObject":
@@ -261,6 +269,17 @@ export function AppShell(props: AppShellProps) {
 
   const route = routeProp ?? innerRoute;
   const page = pageProp ?? PAGES_BY_ROUTE.get(route) ?? PAGES_BY_ID.get("P001")!;
+  // Navigation clears any Inspector selection: keeping a stale
+  // reference would render the wrong object on the next page.
+  // The Inspector itself stays open across pages (operator may
+  // want to keep it pinned), but the row selection is dropped.
+  const lastPageIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (lastPageIdRef.current && lastPageIdRef.current !== page.id) {
+      dispatch({ type: "selectObject", obj: null });
+    }
+    lastPageIdRef.current = page.id;
+  }, [page.id]);
 
   const [state, dispatch] = useReducer(reducer, initial);
 
@@ -388,14 +407,21 @@ export function AppShell(props: AppShellProps) {
         e.preventDefault();
         dispatch({ type: "openSearch" });
       } else if (e.key === "Escape") {
-        dispatch({ type: "closeSearch" });
+        // Priority: Inspector first (if open), then search.
+        if (state.inspection) {
+          dispatch({ type: "closeInspector" });
+        } else {
+          dispatch({ type: "closeSearch" });
+        }
       } else if (e.key === "?" && !inField) {
-        dispatch({ type: "openInspector", pageId: page.id });
+        // Toggle: closing the Inspector via `?` matches the
+        // same key the operator used to open it.
+        dispatch({ type: "toggleInspector", pageId: page.id });
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [page.id]);
+  }, [page.id, state.inspection]);
 
   const changeLocale = useCallback((next: Locale) => {
     dispatch({ type: "setLocale", locale: next });

@@ -68,16 +68,19 @@ export function UnsupportedFeature({
       <PageState
         kind="contract-missing"
         bundle={bundle}
-        title={`${page.name} — design ready, contract not implemented`}
+        title={`${page.name} — not available in this build`}
         body={
           blocker ??
-          "This page is registered in the V1 catalog but the typed API it needs is not exposed yet. The UI stays empty on purpose — no fake data, no fake success. Once the contract lands, the table renders the columns below."
+          "This feature is not available in this DuckOS version yet. The UI stays empty on purpose — no fake data, no fake success. Once the underlying API lands, the table renders the columns below."
         }
         actions={
           contract ? (
-            <code className="v1-mono v1-fs-xs" aria-label="expected endpoint">
-              {contract}
-            </code>
+            <details className="unsupported-expert">
+              <summary>Expert details</summary>
+              <code className="v1-mono v1-fs-xs" aria-label="expected endpoint">
+                {contract}
+              </code>
+            </details>
           ) : null
         }
       />

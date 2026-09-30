@@ -1,5 +1,117 @@
 import { useState, type FormEvent } from "react";
 import { DuckMark, Icon } from "./icons";
+import { LOCALES, type Locale } from "./i18n/messages";
+
+// PreAuthSettings: a small language + theme selector that
+// lives on the login / enrollment screen. It is gated only by
+// the OS-level localStorage boundary, NOT by Owner session:
+// the operator can pick a language or theme before any Owner
+// exists. The selection takes effect on
+// document.documentElement so the AppShell sees it on the very
+// next render after the session connects.
+type Theme = "system" | "light" | "dark";
+
+function readLocale(): Locale {
+  if (typeof localStorage !== "undefined") {
+    const v = localStorage.getItem("duckos.locale");
+    if (v === "en" || v === "ru" || v === "de" || v === "es") return v;
+  }
+  return "en";
+}
+
+function readTheme(): Theme {
+  if (typeof localStorage !== "undefined") {
+    const v = localStorage.getItem("duckos.theme");
+    if (v === "system" || v === "light" || v === "dark") return v;
+  }
+  return "system";
+}
+
+function applyTheme(theme: Theme) {
+  if (typeof document === "undefined") return;
+  const root = document.documentElement;
+  let resolved: "light" | "dark";
+  if (theme === "system") {
+    const prefersDark =
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches;
+    resolved = prefersDark ? "dark" : "light";
+  } else {
+    resolved = theme;
+  }
+  root.setAttribute("data-theme", resolved);
+  root.setAttribute("data-theme-pref", theme);
+}
+
+function applyLocale(locale: Locale) {
+  if (typeof document === "undefined") return;
+  document.documentElement.setAttribute("data-locale", locale);
+}
+
+function PreAuthSettings() {
+  const [locale, setLocaleState] = useState<Locale>(readLocale);
+  const [theme, setThemeState] = useState<Theme>(readTheme);
+  // Apply immediately on mount and on every change. The
+  // effect runs synchronously before paint so the login
+  // screen itself respects the operator's pick.
+  applyLocale(locale);
+  applyTheme(theme);
+  function setLocale(next: Locale) {
+    setLocaleState(next);
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("duckos.locale", next);
+    }
+    applyLocale(next);
+  }
+  function setTheme(next: Theme) {
+    setThemeState(next);
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("duckos.theme", next);
+    }
+    applyTheme(next);
+  }
+  // Follow System changes at runtime via matchMedia.
+  if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = () => {
+      if (readTheme() === "system") applyTheme("system");
+    };
+    if (typeof mq.addEventListener === "function") {
+      mq.addEventListener("change", onChange);
+    }
+  }
+  return (
+    <div className="pre-auth-settings" aria-label="Display preferences">
+      <label className="pre-auth-row">
+        <span aria-hidden="true">Language</span>
+        <select
+          aria-label="Language"
+          value={locale}
+          onChange={(e) => setLocale(e.target.value as Locale)}
+        >
+          {LOCALES.map((l) => (
+            <option key={l.id} value={l.id}>
+              {l.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="pre-auth-row">
+        <span aria-hidden="true">Theme</span>
+        <select
+          aria-label="Theme"
+          value={theme}
+          onChange={(e) => setTheme(e.target.value as Theme)}
+        >
+          <option value="system">System</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </label>
+    </div>
+  );
+}
 
 export async function identityRequest(path: string, body: unknown, token = "") {
   const response = await fetch(`/api/v1/auth/${path}`, {
@@ -93,7 +205,7 @@ export function IdentityLogin({
             DuckOS<small>YOUR NETWORK. CLEARLY.</small>
           </span>
         </div>
-        <span className="eyebrow">LOCAL IDENTITY · NO CLOUD</span>
+        <PreAuthSettings />
       </div>
       <main className="login-content">
         <div className="login-story">

@@ -22,6 +22,14 @@
   border-color: var(--v1-warn);
   background: var(--v1-warn-soft);
 }
+.v1-state[data-state="contract-missing"] {
+  /* Calm "not available" — same neutral elevated surface as
+     the default; no warning border, no red wash. The card is
+     visually quieter than an error so the operator does not
+     read a feature gap as a runtime failure. */
+  border-color: var(--v1-line);
+  background: var(--v1-bg-elevated);
+}
 .v1-state .state-head {
   display: flex;
   align-items: center;

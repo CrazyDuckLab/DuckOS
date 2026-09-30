@@ -105,6 +105,46 @@
   color: var(--muted);
 }
 
+.pre-auth-settings {
+  display: inline-flex;
+  gap: 12px;
+  align-items: center;
+}
+.pre-auth-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.pre-auth-row > span {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+.pre-auth-row select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--surface-1, transparent);
+  color: var(--ink, inherit);
+  border: 1px solid var(--border, rgba(127, 127, 127, 0.35));
+  border-radius: 8px;
+  padding: 6px 28px 6px 10px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 14px) 50%, calc(100% - 8px) 50%;
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+}
+.pre-auth-row select:focus-visible {
+  outline: 2px solid var(--accent, #4c8bf5);
+  outline-offset: 2px;
+}
+
 .login-content {
   display: grid;
   grid-template-columns: 1fr 440px;
