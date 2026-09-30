@@ -93,7 +93,30 @@ Confirm:
    reduces lockout risk, but the second path is your safety net.
 3. The network on which the device will run is **isolated** from any
    production gateway during the beta.
-4. You have read [`../user/recovery.md`](../user/recovery.md),
-   [`../user/troubleshooting.md`](../user/troubleshooting.md), and
-   [`../user/safe-apply.md`](../user/safe-apply.md) before making any
+4. You have read [`user/recovery.md`](user/recovery.md),
+   [`user/troubleshooting.md`](user/troubleshooting.md), and
+   [`user/safe-apply.md`](user/safe-apply.md) before making any
    non-trivial change.
+
+## Reserved host identity
+
+For `v0.1.0-beta.1`, the host service identity names `duckos` and
+`duck-dnsmasq` are reserved. The supported installer refuses to
+install on a Debian host where an unrelated interactive account or
+group already uses either of these names.
+
+Before installing DuckOS:
+
+- Confirm no local administrator or interactive account on the
+  Debian host is named `duckos` or `duck-dnsmasq`
+  (`getent passwd duckos`, `getent group duckos`,
+  `getent passwd duck-dnsmasq`, `getent group duck-dnsmasq`).
+- If a name collision exists, choose a different Debian
+  administrator username (or rename the conflicting local account
+  via the platform's normal user-management tools) **before**
+  running the installer.
+
+DuckOS does **not** reuse or impersonate a pre-existing human
+account. The installer does **not** automatically delete or rename
+host accounts. Reusing a human `duckos` account for the service is
+unsafe and is not supported.

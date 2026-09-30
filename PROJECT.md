@@ -65,12 +65,12 @@ business model. There is no arbitrary root command interface.
 
 ## Product Scope
 
-The [requirements catalog](docs/requirements/product.md) covers WAN/LAN, VLAN,
+The [requirements catalog](docs/product-spec-1.0.md) covers WAN/LAN, VLAN,
 DHCP/DNS, routing and multi-WAN, firewall/NAT, management policy, VPN transports,
 client subscriptions and secret QR exports, devices, monitoring, diagnostics,
 identity, backup, signed updates, hardware capabilities, sites and portal services.
 The [scope matrix](docs/product-spec-1.0.md) records acceptance and qualification.
-The [frozen V1 scope](docs/handoff/V1_SCOPE.md) supplies the current A/B/C delivery
+The [frozen V1 scope](docs/product-spec-1.0.md) supplies the current A/B/C delivery
 classification; deferral is not permission to drop a requirement. All major
 subsystems use intent-driven, visible, explainable and reversible management,
 with shared GUI/CLI semantics and contextual actions.

@@ -81,6 +81,12 @@ The V1 beta install path is described in
    sha256sum -c SHA256SUMS
    ```
 
+   Expected line for v0.1.0-beta.1:
+
+   ```
+   ae5d21aa19e3b39efaee1ba070158781df4aae5605adae096b8563f241dcdc7d  duckos-v0.1.0-beta.1-linux-amd64.tar.gz
+   ```
+
 2. Install on an isolated test network — never on a production
    gateway:
 
@@ -139,12 +145,12 @@ primitives.
 ## Build identity
 
 This release corresponds to internal qualified build
-**`1.0.0-dev.4d9b5e661408`** from commit
-**`4d9b5e661408fe7257dd039b7f5fe2fe1661ec75`**.
+**`1.0.0-dev.f698de16b4a9`** from public source commit
+**`f698de16b4a90c52d7bd5b50f287ad01f36da5f3`**.
 
 The `v0.1.0-beta.1` identifier is the public release name (the Git
 tag and the downloadable filename). The runtime reports the qualified
-internal identifier `1.0.0-dev.4d9b5e661408` exactly as it did
+internal identifier `1.0.0-dev.f698de16b4a9` exactly as it did
 throughout qualification. This is intentional and **not** an error:
 
 - The supported build script (`scripts/build.sh`) hardcodes the
@@ -155,10 +161,12 @@ throughout qualification. This is intentional and **not** an error:
   release.
 
 The four control binaries — `duck-updater`, `duck-api`, `duck-agent`,
-`duck-restore` — match the authoritative hashes recorded during
-qualification. The bundled `SHA256SUMS` (inside the artifact) verifies
-every file in the `duckos-v0.1.0-beta.1/` directory against the
-manifest that the installer checks at install time.
+`duck-restore` — match the authoritative hashes for the
+`f698de16b4a90c52d7bd5b50f287ad01f36da5f3` qualified build recorded
+in [`RELEASE_MANIFEST.txt`](https://github.com/DuckOS/DuckOS/releases/download/v0.1.0-beta.1/RELEASE_MANIFEST.txt).
+The bundled `SHA256SUMS` (inside the artifact) verifies every file in
+the `duckos-v0.1.0-beta.1/` directory against the manifest that the
+installer checks at install time.
 
 ## What this release is NOT
 

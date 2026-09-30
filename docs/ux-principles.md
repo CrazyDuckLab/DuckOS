@@ -70,7 +70,7 @@ feature is not UX-complete even if backend tests pass.
 
 ## Consolidated V1 management contract
 
-The [frozen V1 scope](handoff/V1_SCOPE.md) extends this UX contract across every
+The frozen V1 scope in [`docs/product-spec-1.0.md`](product-spec-1.0.md) extends this UX contract across every
 major subsystem: stable fixed Full areas, dense lists, one Easy/Full model,
 intent-driven cross-subsystem automation, visible owned objects/dependencies,
 contextual actions and GUI/CLI parity. Full exposes complexity, not chores;

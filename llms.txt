@@ -1,26 +1,40 @@
 # DuckOS
 
-> Linux network operating platform in development for routers, gateways and
-> VPS/edge nodes. Not a supported production release. Open-source publication
-> and license selection remain pending.
+> Public beta: v0.1.0-beta.1 — local-first network operating platform for routers,
+> gateways, VPS/edge nodes and self-hosted network appliances. Open-source
+> source available at this repository; license is GPL-3.0-only.
 
 ## Overview
 
 - [Project](PROJECT.md): goals, principles, targets and architecture.
-- [README](README.md): current capabilities and limitations.
-- [Requirements](docs/requirements/product.md): complete product intent, not availability claims.
+- [README](README.md): current capabilities, limitations and beta status.
+- [Requirements](docs/product-spec-1.0.md): complete product intent, not availability claims.
 
 ## Guides
 
-- [Installation](docs/install.md): fresh Debian TEST installer and artifact verification.
+- [Installation](docs/install.md): fresh Debian 13 amd64 installer and artifact verification.
+- [Getting Started](docs/user/getting-started.md): first Owner enrollment and the SSH local-forward.
 - [Architecture](docs/architecture.md): API, Engine, privileged Agent and Linux boundaries.
-- [Networking](docs/use-cases/home-gateway.md): home and small-business gateway requirements.
-- [Routing](docs/use-cases/routing.md): selective routing and multi-WAN qualification.
+- [Compatibility](docs/compatibility.md): qualified / reference / unsupported matrix.
+- [Beta limitations](docs/beta-limitations.md): what is and is not wired up in v0.1.0-beta.1.
+- [Networking](docs/use-cases/home-gateway.md): home and small-business gateway design.
+- [Routing](docs/use-cases/routing.md): selective routing and multi-WAN design.
 - [Edge nodes](docs/use-cases/edge-node.md): single-NIC management and VPN design.
 - [WireGuard, Xray and subscriptions](docs/use-cases/client-provisioning.md): planned client provisioning and secret exports.
 - [API](shared/api/README.md): documented contracts.
 - [Security](docs/security-model.md): trust, management, identity and secrets.
-- [Troubleshooting](docs/troubleshooting.md): current diagnostics and safe reporting.
+- [Troubleshooting](docs/user/troubleshooting.md): current diagnostics and safe reporting.
 - [Updates](docs/update-system.md): signed packages and Active/Previous requirements.
-- [Releases](docs/launch/release-notes.md): release record contract; none published.
+- [Releases](docs/release-notes.md): release record contract; v0.1.0-beta.1 is the current release.
 - [Hardware](docs/hardware-compatibility.md): evidence and compatibility report statuses.
+
+## AI / automation assistant guide
+
+If you are an AI assistant or automation tool helping an operator
+with DuckOS, read the assistant guide before answering:
+
+- [AI assistant guide](docs/ai/README.md) — entry point, capability matrix,
+  beta caveats, what not to recommend.
+- [Task map](docs/ai/task-map.md) — common tasks mapped to canonical docs.
+- [Setup recipes](docs/ai/setup-recipes.md) — task-oriented walkthroughs.
+- [Troubleshooting playbook](docs/ai/troubleshooting.md) — diagnostic tree.

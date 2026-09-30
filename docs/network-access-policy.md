@@ -73,7 +73,7 @@ effective. External unmanaged switches cannot be made isolated by a routed rule.
 Management remains governed by [Management Access Policy](adr/0013-independent-management-policy.md).
 A convenience toggle can request management eligibility but cannot manufacture
 a trusted-source grant or bypass authentication/RBAC. Router service permissions
-are separate from management and from external [Port Exposure](requirements/product.md).
+are separate from management and from external [Port Exposure](product-spec-1.0.md).
 
 Conflicts include an override allowing LAN while an enforced boundary denies
 private destinations, management requested from an untrusted source, and peer

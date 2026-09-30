@@ -9,7 +9,7 @@ feature works safely. This document defines how claims become supportable.
 
 It is a policy for test infrastructure and release qualification. Current
 commands are `make check` and `make build-all`; recorded results and missing
-Linux/hardware evidence are in [executable foundation](evidence/executable-foundation.md).
+Linux/hardware evidence collection follows the framework described in this document.
 Virtual labs and physical qualification are not implied. The words **MUST**,
 **MUST NOT**, **SHOULD**, and **MAY** are normative.
 

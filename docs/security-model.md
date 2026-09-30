@@ -2,7 +2,7 @@
 
 Status: living threat model; partial identity/observation implementation
 Related decision: [ADR-0002](adr/0002-agent-privilege-boundary.md)
-Requirements source: [`requirements/product.md`](requirements/product.md)
+Requirements source: [`product-spec-1.0.md`](product-spec-1.0.md)
 
 DuckOS is a privileged network control product that will run on the boundary of
 real home, office, hotel, and branch networks. Its default posture is to reduce
@@ -12,7 +12,7 @@ administrator or silently weakening policy.
 This document records required trust boundaries, threats, and controls. It does
 not claim a completed security review, hardened image, Vault, authentication
 stack, or tested firewall. ADR-0008 and
-[`evidence/local-identity.md`](evidence/local-identity.md) describe the implemented
+the implemented
 local identity subset and its explicit remaining gates. Requirements below are
 not automatically evidence that every control exists.
 

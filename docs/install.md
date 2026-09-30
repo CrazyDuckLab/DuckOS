@@ -5,7 +5,7 @@ booted **Debian 13 amd64** system with systemd. It is a read-only System
 Overview foundation for DuckOS 1.0 development, not a public release or a
 qualified production router. The optimized frontend and Go binaries are real;
 native Debian installation and sandbox behavior still need designated lab
-evidence. Nothing in this procedure has been run on `duck-dev-01` by the agent.
+evidence. The SSH tunnel example below uses `<duckos-ip>` as a placeholder.
 
 ## Build and identify the exact artifact on the Mac
 
@@ -46,7 +46,7 @@ The following commands are for an administrator to run when a target test is
 authorized. The target receives source **from GitHub**, at the exact commit in
 the deployment record; local uncommitted Mac state is never transferred to it. Source
 editing remains in the Mac checkout. The Linux checkout is only a pinned
-build/test input. `YOUR_LINUX_USER` in later tunnel instructions is the existing
+build/test input. `<user>` in the tunnel instructions below is the existing
 Debian login.
 
 On the clean Debian test host, an administrator first prepares the explicit
@@ -85,7 +85,7 @@ Bootstrap installs checksum-pinned Go and Node only inside this checkout's
 `.tools` directory. The build uses the lockfile and produces optimized static
 Go executables plus the compiled frontend. The clean target build must name
 the same GitHub commit as the Mac build evidence. Running these commands is a
-later designated test activity; the agent has not run them on `duck-dev-01`.
+later designated test activity; this procedure has not been qualified by the agent on any host; the SSH tunnel example below uses `<duckos-ip>` as a placeholder.
 
 Stage the verified artifact in a **new** root-owned directory. The following
 chain stops if staging already exists; it never merges or overwrites an earlier
@@ -142,7 +142,7 @@ firewall policy correctness, reboot recovery, or production readiness.
 The service binds only `127.0.0.1:8080`. From the Mac, an administrator may run:
 
 ```bash
-ssh -N -L 127.0.0.1:8080:127.0.0.1:8080 YOUR_LINUX_USER@duck-dev-01
+ssh -N -L 8080:127.0.0.1:8080 <user>@<duckos-ip>
 ```
 
 Open `http://127.0.0.1:8080` in the Mac browser. Use local port 8080 as shown;
@@ -249,6 +249,31 @@ does not claim to roll back Debian accounts, files, systemd state, kernel state,
 or a power interruption. `install-status` is a diagnostic marker, not a durable
 transaction journal. Automatic repair, uninstall, upgrade, release signatures,
 crash-safe activation, rollback and Previous rotation are not implemented.
+
+## Reserved host identity before install
+
+The supported installer reserves the host service identity names
+`duckos` and `duck-dnsmasq`. The installer refuses to install on a
+Debian host where an unrelated interactive account or group already
+uses either of these names.
+
+Before running `install.sh`, confirm none of the following exist:
+
+```bash
+getent passwd duckos
+getent passwd duck-dnsmasq
+getent group duckos
+getent group duck-dnsmasq
+```
+
+If a collision exists, choose a different Debian administrator
+username (or rename the conflicting local account via the platform's
+normal user-management tools) before running the installer.
+DuckOS does not reuse or impersonate a pre-existing human account,
+and the installer does not automatically delete or rename host
+accounts.
+
+## Recovery
 
 For an interrupted/failed installation, keep the exact artifact and commit,
 inspect status and bounded logs, then decide recovery in an explicit operator

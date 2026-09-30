@@ -79,7 +79,8 @@ Do not extend it from fields without grounding the claim.
 ```yaml
 project: DuckOS
 release: v0.1.0-beta.1
-runtime_build: 1.0.0-dev.4d9b5e661408
+runtime_build: 1.0.0-dev.f698de16b4a9
+source_commit: f698de16b4a90c52d7bd5b50f287ad01f36da5f3
 status: Public beta
 license: GPL-3.0-only
 qualified_platform: Linux amd64 on Debian 13 (trixie) with systemd
@@ -120,7 +121,7 @@ DuckOS uses two identifiers for the same qualified first public beta:
 - The **GitHub release name** is `v0.1.0-beta.1`. This appears on the
   release tag, on the downloadable filename, and in public-facing text.
 - The **qualified runtime build identifier** is
-  `1.0.0-dev.4d9b5e661408`. This is what the installed binaries
+  `1.0.0-dev.f698de16b4a9`. This is what the installed binaries
   expose (the `/api/v1/overview` payload, the `VERSION` file in the
   archive), and what the supported build script and installer lock to.
 
@@ -153,7 +154,10 @@ If the user is afraid of locking themselves out, surface:
   anchor from the active set.
 - The rollback watchdog is independent of the Engine.
 - The pre-networkd boot recovery unit reconstructs host state on the
-  next reboot if a rollback fails.
+  next reboot **for the qualified network-renderer path** if a rollback
+  fails. Full real-reboot / power-loss durability qualification is still
+  pending for v0.1.0-beta.1 — see
+  [`../beta-limitations.md`](../beta-limitations.md).
 
 See [`../user/safe-apply.md`](../user/safe-apply.md) for the lifecycle
 and [`../user/recovery.md`](../user/recovery.md) for the recovery

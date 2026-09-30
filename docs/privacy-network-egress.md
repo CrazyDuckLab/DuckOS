@@ -202,9 +202,9 @@ You can independently reproduce the claims above:
 
 ## Related documentation
 
-- [`../beta-limitations.md`](../beta-limitations.md) — what V1 beta is
+- [`beta-limitations.md`](./beta-limitations.md) — what V1 beta is
   and is not.
-- [`../update-system.md`](../update-system.md) — update model and
+- [`update-system.md`](./update-system.md) — update model and
   signature verification.
-- [`../security-model.md`](../security-model.md) — local identity,
+- [`security-model.md`](./security-model.md) — local identity,
   management binding, privileged Agent isolation.

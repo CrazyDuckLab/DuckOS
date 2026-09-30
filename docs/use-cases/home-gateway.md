@@ -15,5 +15,5 @@ gateway and console recovery available; do not connect trial DHCP to a live LAN.
 Acceptance requires a real client to acquire/renew an address, resolve local and
 external DNS, traverse the intended firewall/NAT path, respect isolation, and
 recover after reboot and lost Safe Apply confirmation. API success is insufficient.
-See [requirements](../requirements/product.md), [testing](../testing.md),
+See [requirements](../product-spec-1.0.md), [testing](../testing.md),
 [routing](routing.md) and [installation](../install.md).

@@ -8,7 +8,7 @@ no mock UI, no static fake JSON.
 
 | File | Page shown | Real installed backend | Sanitized demo data | Build / release |
 |---|---|---|---|---|
-| [`10-first-run-enroll.png`](10-first-run-enroll.png) | First-run Owner enrollment (pre-Owner state, no users in identity store) | YES | YES | `1.0.0-dev.4d9b5e661408` from commit `4d9b5e661408fe7257dd039b7f5fe2fe1661ec75` (public release `v0.1.0-beta.1`). |
+| [`10-first-run-enroll.png`](10-first-run-enroll.png) | First-run Owner enrollment (pre-Owner state, no users in identity store) | YES | YES | `1.0.0-dev.f698de16b4a9` from commit `f698de16b4a90c52d7bd5b50f287ad01f36da5f3` (public release `v0.1.0-beta.1`). |
 | [`01-easy-home.png`](01-easy-home.png) | Easy Mode home dashboard | YES | YES | same |
 | [`02-system-overview.png`](02-system-overview.png) | Full Mode System Overview | YES | YES | same |
 | [`03-interfaces.png`](03-interfaces.png) | Full Mode Network → Interfaces | YES | YES | same |
@@ -29,7 +29,7 @@ public-facing page label.
 Each capture used a temporary headless Chromium for Testing
 (Playwright-managed) running on the qualification host, connected to
 the real installed public RC on `duck-beta-01` over
-`ssh -L 8080:127.0.0.1:8080 duck-beta-01`. The Owner was created on the
+`ssh -L 8080:127.0.0.1:8080 <duckos-ip>` (the public release docs use this placeholder; the actual capture target was the labeled lab host `duck-beta-01`). The Owner was created on the
 real backend via `POST /api/v1/auth/enroll` with the bootstrap token
 taken from the installer's `/etc/duckos/api-token` and the session
 established via `POST /api/v1/auth/login`. No browser tooling was

@@ -68,7 +68,7 @@ the bash installer `install.sh` in the extracted archive.
   units active.
 - `curl --fail http://127.0.0.1:8080/api/v1/health` returns HTTP 200.
 - Authenticated `/api/v1/ready` returns HTTP 200 with a build commit
-  matching `4d9b5e661408…`.
+  matching `f698de16b4a9…`.
 
 ### Safety
 
@@ -119,8 +119,12 @@ First browser open of `http://127.0.0.1:8080` over the SSH tunnel.
 ### Verify
 
 - Easy Mode lands at `/easy/home` and surfaces the headline.
-- The browser holds a `sessionStorage` token that is invalidated when
-  the browser closes.
+- The browser holds the session credential in `sessionStorage`. Closing
+  the browser (or that tab) clears that locally stored credential. The
+  V1 beta does not implement guaranteed server-side revocation on
+  browser close; idle sessions expire server-side after 30 minutes and
+  can be revoked explicitly via `/api/v1/auth/logout` or
+  `/api/v1/auth/revoke`.
 
 ### Safety
 
@@ -605,7 +609,10 @@ subsystem page (for example, **Interfaces** or **Routing**).
 6. **Click Confirm** to finalize. Auto-confirm does not exist.
 7. If anything looks wrong, **click Rollback** in the UI. If rollback
    fails, the pre-networkd boot recovery unit reconstructs host state
-   on the next reboot.
+   on the next reboot **for the qualified network-renderer path**.
+   Full real-reboot / power-loss durability qualification is still
+   pending for v0.1.0-beta.1 — see
+   [`../beta-limitations.md`](../beta-limitations.md).
 
 ### Verify
 
@@ -621,7 +628,9 @@ subsystem page (for example, **Interfaces** or **Routing**).
   override.
 - The rollback watchdog is independent of the Engine. If the Engine
   dies mid-Apply, the Agent reports the outcome to the journal; on
-  the next boot the boot recovery unit reconstructs host state.
+  the next boot the boot recovery unit reconstructs host state **for
+  the qualified network-renderer path**. Full real-reboot / power-loss
+  durability qualification is still pending for v0.1.0-beta.1.
 
 ### Related documentation
 
@@ -660,7 +669,10 @@ console, second management interface, or VM console.
    History**.
 4. If rollback itself fails, reboot — the
    `duck-network-recover.service` one-shot unit reconstructs host
-   state from the durable journal before networkd comes up.
+   state from the durable journal before networkd comes up **for the
+   qualified network-renderer path**. Full real-reboot / power-loss
+   durability qualification is still pending for v0.1.0-beta.1 — see
+   [`../beta-limitations.md`](../beta-limitations.md).
 
 ### Verify
 

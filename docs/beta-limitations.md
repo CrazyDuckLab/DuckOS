@@ -91,6 +91,18 @@ is qualified on one architecture but not another, this page says so.
   services at install time; the administrator must provision
   them through Safe Apply.
 
+## Reserved host identity
+
+The host service identity names `duckos` and `duck-dnsmasq` are
+reserved by the supported installer. Installation on a Debian host
+where an unrelated interactive account or group already uses either
+name is not supported for this beta. See
+[`compatibility.md`](compatibility.md#reserved-host-identity) for the
+recovery procedure (choose a different administrator username, or
+rename the colliding local account, before installing). Reusing a
+human `duckos` account for the service is unsafe and is not
+supported.
+
 ## What's NOT a beta limitation
 
 These are not limitations — they are intentional choices:

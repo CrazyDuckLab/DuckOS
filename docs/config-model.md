@@ -2,7 +2,7 @@
 
 Status: foundation constraints, storage/schema design pending
 Decision: [ADR-0003](adr/0003-config-source-of-truth.md)
-Requirements source: [`requirements/product.md`](requirements/product.md)
+Requirements source: [`product-spec-1.0.md`](product-spec-1.0.md)
 
 This document defines what DuckOS configuration means and the safety properties
 of its lifecycle. It intentionally does not choose a serialization format,

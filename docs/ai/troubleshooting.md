@@ -258,7 +258,7 @@ If the canonical documentation does not resolve the symptom, escalate
 through the channel in [`../../SECURITY.md`](../../SECURITY.md). Include:
 
 - The exact DuckOS commit hash (the runtime build identifier, e.g.
-  `1.0.0-dev.4d9b5e661408`).
+  `1.0.0-dev.f698de16b4a9`).
 - The architecture (`amd64`, `arm64`, or `armv7`).
 - The Debian / kernel version on the device.
 - The Doctor findings, if any.

@@ -17,4 +17,4 @@ Observe actual client packets in both families before accepting a policy.
 Current [preview API](../../shared/api/network-preview.md) generates bounded
 private-table rules with unreachable guards. It does not install them or select
 healthy providers. See [policy decision](../adr/0012-fail-closed-ip-policy-routing.md),
-[requirements](../requirements/product.md) and [testing](../testing.md).
+[requirements](../product-spec-1.0.md) and [testing](../testing.md).

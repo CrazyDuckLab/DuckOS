@@ -5,7 +5,7 @@ scope, safety invariants, development, and test evidence.
 
 ## Start here
 
-- [`requirements/product.md`](requirements/product.md)
+- [`product-spec-1.0.md`](product-spec-1.0.md)
   defines the product requirements.
 - [`product-spec-1.0.md`](product-spec-1.0.md) is the living DuckOS 1.0 scope and
   readiness matrix.
@@ -49,9 +49,8 @@ scope, safety invariants, development, and test evidence.
 
 - [`roadmap.md`](roadmap.md) — V1 beta, LATER, FUTURE.
 - [`beta-limitations.md`](beta-limitations.md) — what V1 is **not**.
-- [`release-notes-draft.md`](release-notes-draft.md) — v0.1.0-beta.1
+- [`release-notes.md`](release-notes.md) — v0.1.0-beta.1
   release-note draft (not yet released).
-- [`launch/`](launch/) — private launch preparation.
 
 ## Licensing
 
@@ -80,11 +79,9 @@ scope, safety invariants, development, and test evidence.
 ## Engineering evidence
 
 - [`testing.md`](testing.md)
-- [`evidence/executable-foundation.md`](evidence/executable-foundation.md)
-- [`evidence/qa/`](evidence/qa/) — qualification evidence for each
+
   finding.
-- [`audits/`](audits/) — date-stamped backend audit handoffs.
-- [`requirements/product.md`](requirements/product.md) — the product
+- [`product-spec-1.0.md`](product-spec-1.0.md) — the product
   requirements.
 - [`product-spec-1.0.md`](product-spec-1.0.md) — the V1 scope and
   readiness matrix.
@@ -95,8 +92,9 @@ Documentation is versioned with implementation. A behavior/specification
 disagreement is a defect unless an intentional change is recorded in the
 product specification or an ADR.
 
-## Development continuation
+## Project references
 
-[Checkpoint entry point](../CONTEXT.md) · [Project state](handoff/PROJECT_STATE.md) ·
-[Frozen V1 scope](handoff/V1_SCOPE.md) · [Current roadmap](handoff/CURRENT_ROADMAP.md) ·
-[Current architecture](handoff/ARCHITECTURE.md) · [Engineering rules](handoff/AGENT_RULES.md)
+[`../PROJECT.md`](../PROJECT.md) — frozen V1 scope and product goals.
+[`product-spec-1.0.md`](product-spec-1.0.md) — frozen V1 specification matrix.
+[`adr/`](adr/) — consequential architectural decisions.
+[`release-notes.md`](release-notes.md) — current and past release notes.

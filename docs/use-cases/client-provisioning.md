@@ -21,4 +21,4 @@ Do not paste configuration, private keys or subscription URLs into issue reports
 Provisioning does not prove a listener is reachable. Review service Port Exposure,
 upstream firewall and actual external tests separately. See
 [edge nodes](edge-node.md), [security](../security-model.md) and
-[complete requirements](../requirements/product.md).
+[complete requirements](../product-spec-1.0.md).

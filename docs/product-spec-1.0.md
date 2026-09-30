@@ -3,11 +3,11 @@
 Status: **FROZEN V1 REQUIREMENTS — 2026-09-10**
 Product implementation status: **OBSERVATION RUNTIME + TRANSACTION/NETWORK CORE IN DEVELOPMENT**
 Target external release: **DuckOS 1.0.0**
-Requirements source: [`requirements/product.md`](requirements/product.md)
+Requirements source: [`.`](.)
 
-This specification's V1 scope is frozen at the 2026-09-10 handoff baseline.
+This specification's V1 scope is frozen at the 2026-09-10 baseline.
 The authoritative deduplicated requirements and delivery classification are
-[the frozen V1 scope](handoff/V1_SCOPE.md). They include stable Easy/Full UX,
+the frozen V1 scope. They include stable Easy/Full UX,
 first-class CLI, portable/hardware-remapped restore, explicit client isolation,
 client artifact lifecycle, native Xray VLESS/Trojan/supported REALITY, product-wide
 intent-driven management and strictly bounded logging/diagnostics.
@@ -18,7 +18,7 @@ A (V1 Alpha blocker), B (architecture-now/implementation-later), C (post-Alpha)
 classification. B/C V1 requirements are deferred within development, not deleted.
 Explicit existing post-V1 reservations remain reserved. Internal Alpha does not
 authorize a public intermediate release. Current implementation/evidence is
-recorded in [PROJECT_STATE](handoff/PROJECT_STATE.md), not inferred from this matrix.
+recorded in [`PROJECT.md`](../PROJECT.md), not inferred from this matrix.
 
 ## Product outcome
 
@@ -49,7 +49,7 @@ Safe Apply adapter and pre-networkd recovery gate exist but installed network
 mutation, full WAN/LAN recovery and native qualification remain incomplete.
 Vault, SQLite client metadata and reusable QR exports are implemented components,
 not yet a live client provisioning product. See the exact code checkpoint and
-test status in [PROJECT_STATE](handoff/PROJECT_STATE.md).
+test status in [`PROJECT.md`](../PROJECT.md).
 
 ## Historical scope vocabulary (traceability only)
 

@@ -22,7 +22,7 @@ A high-quality report starts with:
 - The exact DuckOS release you are running (`v0.1.0-beta.1` or a
   branch / commit hash).
 - The runtime build identifier (Easy Mode footer or
-  `/api/v1/overview` payload, e.g. `1.0.0-dev.4d9b5e661408`).
+  `/api/v1/overview` payload, e.g. `1.0.0-dev.f698de16b4a9`).
 - The architecture (`amd64`, `arm64`, or `armv7`).
 - The Debian release on the device (this beta: Debian 13).
 - The install method (`install.sh --artifact`, source build, etc.).

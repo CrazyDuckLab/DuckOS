@@ -43,7 +43,7 @@ other product identity. See [`TRADEMARKS.md`](TRADEMARKS.md).
 1. Read [`PROJECT.md`](PROJECT.md).
 2. Read the relevant living specification and accepted ADRs under [`docs/`](docs/).
 3. Consult the product requirements in
-   [`docs/requirements/product.md`](docs/requirements/product.md)
+   [`docs/product-spec-1.0.md`](docs/product-spec-1.0.md)
    when traceability or intent is unclear.
 4. Identify the owning subsystem, canonical state, privilege boundary,
    rollback/reboot behavior, storage growth, IPv6 impact, and ARMv7 impact.
