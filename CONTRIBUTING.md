@@ -119,7 +119,7 @@ Run `make check` for formatting, static analysis, Go race/unit/contract tests,
 TypeScript and browser component tests, and installer preflight tests. Run
 `make build-all` for the production frontend and Linux architecture builds.
 Applicable integration/security checks remain mandatory; do not turn a skipped
-native Linux check into a pass. See `docs/evidence/executable-foundation.md`.
+native Linux check into a pass.
 
 ## Pull request checklist
 

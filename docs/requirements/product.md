@@ -7,8 +7,8 @@ documents. Changes to scope require an explicit recorded decision.
 
 ## Consolidated V1 baseline
 
-The [frozen V1 scope](../handoff/V1_SCOPE.md) is the 2026-09-10 deduplicated
-continuation of this catalog. It retains all requirements below and specifies
+The frozen V1 scope is the deduplicated continuation of this catalog.
+It retains all requirements below and specifies
 Alpha blockers, architecture-now/later work and post-Alpha timing without
 silently removing capabilities. It is normative for the consolidated additions:
 stable dense Full navigation, one Easy/Full model, product-wide declarative
@@ -221,7 +221,6 @@ hardware reports, screenshots, metadata and future site routing remain factual.
 Canonical domain, license, release version and publication/indexing require
 explicit launch decisions. Private preparation must not change repository
 visibility, publish releases, announce the project or enable staging indexing.
-See [launch readiness](../launch/README.md).
 
 Reproducible builds and signed provenance identify exact revisions, dependencies
 and targets. Debian installation validates environment, ownership, space and

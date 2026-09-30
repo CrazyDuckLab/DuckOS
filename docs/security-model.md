@@ -11,10 +11,9 @@ administrator or silently weakening policy.
 
 This document records required trust boundaries, threats, and controls. It does
 not claim a completed security review, hardened image, Vault, authentication
-stack, or tested firewall. ADR-0008 and
-[`evidence/local-identity.md`](evidence/local-identity.md) describe the implemented
-local identity subset and its explicit remaining gates. Requirements below are
-not automatically evidence that every control exists.
+stack, or tested firewall. [ADR-0008](adr/0008-local-identity.md) describes
+the implemented local identity subset and its explicit remaining gates.
+Requirements below are not automatically evidence that every control exists.
 
 ## Security objectives
 

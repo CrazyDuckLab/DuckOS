@@ -1,26 +1,121 @@
 # DuckOS
 
-> Linux network operating platform in development for routers, gateways and
-> VPS/edge nodes. Not a supported production release. Open-source publication
-> and license selection remain pending.
+> Local-first, open-source network operating platform built on Debian. The
+> first public beta (`v0.1.0-beta.1`) is qualified for **Linux amd64 on
+> Debian 13** and is **not** a production router or a mature enterprise
+> appliance. License: GPL-3.0-only.
 
-## Overview
+## Essential facts
+
+- **Project**: DuckOS — local-first Linux network operating platform for
+  routers, gateways, VPS / edge nodes and self-hosted network appliances.
+- **Current public status**: V1 Beta (`v0.1.0-beta.1`), first public beta.
+- **License**: GPL-3.0-only. See [`LICENSE`](LICENSE).
+- **Qualified platform**: Linux **amd64** on **Debian 13 (trixie)** with
+  systemd. ARM64 / ARMv7 cross-build but are not yet natively qualified.
+- **Public release name**: `v0.1.0-beta.1`.
+- **Qualified runtime build identifier**: `1.0.0-dev.4d9b5e661408`.
+  The supported build script and installer lock to that pattern; the
+  GitHub tag and the downloadable filename carry the public name.
+- **Administration modes**: **Easy Mode** (one-page dashboard) and
+  **Full Mode** (dense, by-domain catalog). They are two readers for
+  the same configuration model.
+- **Safety primitive**: **Safe Apply** — durable journal, independent
+  confirmation watchdog, automatic rollback. The only path from a
+  candidate configuration to the active network state.
+- **Management access**: SSH local forwarding to `127.0.0.1:8080`
+  (`ssh -L 8080:127.0.0.1:8080 <user>@<duckos-ip>`). The management
+  UI/API bind only loopback and are **not** exposed to the LAN
+  automatically.
+- **Current beta does NOT provide**: direct LAN HTTPS / mDNS
+  onboarding, an auto-update channel, a public update server, LAN
+  device discovery, browser-trusted self-signed onboarding, or ACME.
+- **Public languages**: English, Russian, German, Spanish.
+
+## Quick links
+
+### Overview
 
 - [Project](PROJECT.md): goals, principles, targets and architecture.
-- [README](README.md): current capabilities and limitations.
-- [Requirements](docs/requirements/product.md): complete product intent, not availability claims.
+- [README](README.md): public landing page.
+- [Release notes](docs/release-notes.md): what's in `v0.1.0-beta.1`.
+- [Beta limitations](docs/beta-limitations.md): what V1 beta is and is not.
+- [Roadmap](docs/roadmap.md): V1 beta, LATER, FUTURE.
 
-## Guides
+### Getting started
 
-- [Installation](docs/install.md): fresh Debian TEST installer and artifact verification.
-- [Architecture](docs/architecture.md): API, Engine, privileged Agent and Linux boundaries.
-- [Networking](docs/use-cases/home-gateway.md): home and small-business gateway requirements.
-- [Routing](docs/use-cases/routing.md): selective routing and multi-WAN qualification.
-- [Edge nodes](docs/use-cases/edge-node.md): single-NIC management and VPN design.
-- [WireGuard, Xray and subscriptions](docs/use-cases/client-provisioning.md): planned client provisioning and secret exports.
-- [API](shared/api/README.md): documented contracts.
-- [Security](docs/security-model.md): trust, management, identity and secrets.
-- [Troubleshooting](docs/troubleshooting.md): current diagnostics and safe reporting.
-- [Updates](docs/update-system.md): signed packages and Active/Previous requirements.
-- [Releases](docs/launch/release-notes.md): release record contract; none published.
-- [Hardware](docs/hardware-compatibility.md): evidence and compatibility report statuses.
+- [Getting started](docs/user/getting-started.md): fresh install → first
+  Owner login (15 steps).
+- [Install procedure](docs/install.md): qualified installer flow.
+- [Recovery basics](docs/user/recovery.md): pre-networkd boot recovery,
+  Safe Apply rollback, Owner reset.
+- [Troubleshooting](docs/user/troubleshooting.md): triage guide.
+
+### Administration modes
+
+- [Easy Mode](docs/user/easy-mode.md): the single-page dashboard.
+- [Full Mode](docs/user/full-mode.md): the dense, by-domain catalog.
+- [Page-by-page specification](docs/ux-v1/PAGES.md): canonical page
+  catalog with routes and section locations.
+- [Information architecture](docs/ux-v1/INFORMATION_ARCHITECTURE.md):
+  stable main navigation routes in Full Mode.
+
+### Networking
+
+- [Interfaces](docs/user/interfaces.md)
+- [WAN](docs/user/wan.md)
+- [LAN and VLAN](docs/user/lan-vlan.md)
+- [Routing](docs/user/routing.md)
+- [Firewall](docs/user/firewall.md)
+- [DNS and DHCP](docs/user/dns-dhcp.md)
+
+### VPN / Tunnels
+
+- [WireGuard](docs/user/wireguard.md)
+- [Xray](docs/user/xray.md)
+
+### Safety, search, diagnostics
+
+- [Safe Apply](docs/user/safe-apply.md): every change that touches the
+  network goes through this.
+- [Global search and Inspector](docs/user/search-and-inspector.md):
+  one `⌘K` / `Ctrl+K` palette and one `?` Inspector.
+- [System Overview](docs/user/system.md): the canonical landing page.
+- [Doctor and diagnostics](docs/user/doctor-and-diagnostics.md):
+  deterministic health findings, not a generative remediation assistant.
+- [Updates and rollback](docs/user/updates-and-rollback.md): signed
+  `.duck` payloads, Active + Previous invariant.
+- [Recovery basics](docs/user/recovery.md): pre-networkd boot recovery,
+  rollback, Owner reset.
+
+### Architecture and security
+
+- [Architecture](docs/architecture.md): API, Engine, privileged Agent,
+  Linux adapters.
+- [Security model](docs/security-model.md): trust, identity, secrets,
+  management boundaries.
+- [TLS](docs/tls.md): TLS / mTLS / ACME posture in V1 beta.
+- [Configuration model](docs/config-model.md): declarative desired state.
+- [Update system](docs/update-system.md): signed `.duck` packages,
+  Active + Previous, signed `/api/v1/ready` health probe.
+- [Updater supervisor](docs/updater-supervisor.md): supervisor semantics.
+
+### Engineering / contributing
+
+- [AGENTS.md](AGENTS.md): canonical engineering policy for coding agents
+  (read this first).
+- [CONTRIBUTING.md](CONTRIBUTING.md): practical rules, tests, templates.
+- [CLA.md](CLA.md): draft contributor license agreement.
+- [SECURITY.md](SECURITY.md): vulnerability disclosure.
+- [License](LICENSE): canonical GPL-3.0-only text.
+
+### AI assistants / automation
+
+- [AI assistant guide](docs/ai/README.md): how to help users without
+  guessing UI paths.
+- [Task map](docs/ai/task-map.md): user intent → exact DuckOS area →
+  canonical doc → safety note.
+- [Setup recipes](docs/ai/setup-recipes.md): task-oriented recipes for
+  first installation, Owner enrollment, SSH tunnel access, etc.
+- [Troubleshooting guide for assistants](docs/ai/troubleshooting.md):
+  decision-oriented triage.

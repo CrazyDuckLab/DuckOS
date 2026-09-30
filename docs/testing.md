@@ -8,10 +8,9 @@ build, or a process reported as `active` is never sufficient evidence that a
 feature works safely. This document defines how claims become supportable.
 
 It is a policy for test infrastructure and release qualification. Current
-commands are `make check` and `make build-all`; recorded results and missing
-Linux/hardware evidence are in [executable foundation](evidence/executable-foundation.md).
-Virtual labs and physical qualification are not implied. The words **MUST**,
-**MUST NOT**, **SHOULD**, and **MAY** are normative.
+commands are `make check` and `make build-all`. Virtual labs and physical
+qualification are not implied. The words **MUST**, **MUST NOT**, **SHOULD**,
+and **MAY** are normative.
 
 ## Principles
 

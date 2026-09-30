@@ -12,8 +12,8 @@ Doctor or anywhere else.
 ## What Doctor checks
 
 Doctor checks a fixed set of subsystems. The exact list and the
-exhaustiveness of each check is part of the qualification evidence;
-see [`docs/audits/2026-09-24-qualified-networkd-runtime.md`](../audits/2026-09-24-qualified-networkd-runtime.md).
+exhaustiveness of each check is part of the qualification evidence
+shipped with each release.
 
 Common finding categories include:
 
