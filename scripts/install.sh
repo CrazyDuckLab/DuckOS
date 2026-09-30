@@ -37,6 +37,150 @@ bootstrap_vault_master_key() {
   fi
   [[ -f "$master_path" ]] || { printf 'Protected vault master key is missing at %s.\n' "$master_path" >&2; return 1; }
 }
+
+# install_xray_backend installs the integrity-pinned xray-core
+# binary into /usr/local/bin/xray so the runtime_linux.go
+# gate (os.Stat(XrayPath)) is satisfied on a fresh install.
+#
+# Source-of-truth:
+#   artifact/xray-core/xray-linux-<arch>      binary
+#   artifact/xray-core/XRAY_CORE_SHA256SUMS   pinned digests
+#   artifact/xray-core/XRAY_CORE_VERSION      upstream release tag
+#   artifact/xray-core/XRAY_CORE_LICENSE      upstream license file
+#
+# The pinned (version, sha256) tuples are also embedded here so
+# a corrupt or absent artifact manifest does not silently let an
+# installer proceed: the installer verifies the artifact's own
+# digest against THIS list before installing anything.
+#
+# Why per-architecture tuples and not a single "latest" ref:
+#   Xray-core upstream does NOT ship a binary for every Linux
+#   architecture DuckOS supports. The mapping below is the
+#   explicit truth at build time. Faking support for an
+#   architecture upstream does not provide would silently
+#   install a broken binary; instead the installer fails
+#   closed with a clear message.
+#
+# As of Xray-core 26.3.27 (build-pinned):
+#   amd64  -> Xray-linux-64.zip            (upstream supports)
+#   armv7  -> Xray-linux-arm32-v6.zip      (ARMv7-A is backwards-
+#                                            compatible with ARMv6
+#                                            user space; binary runs
+#                                            on armhf systems. Caveat
+#                                            is documented in the
+#                                            runtime Linux kernel
+#                                            check below.)
+#   arm64  -> NOT supported upstream       (no Xray-linux-arm64* in
+#                                            the 26.3.27 release). The
+#                                            installer refuses arm64
+#                                            rather than fabricating
+#                                            support.)
+XRAY_CORE_VERSION='26.3.27'
+
+install_xray_backend() {
+  local release_dir=$1
+  # Per-arch sha256 of the binary INSIDE the upstream zip (the
+  # "xray" ELF, not the zip itself). The list is owned by the
+  # helper so unit tests that extract just this function still
+  # see the trust anchor.
+  local XRAY_CORE_VERSIONS=(
+    'amd64:Xray-linux-64:23cd9af937744d97776ee35ecad4972cf4b2109d1e0fe6be9930467608f7c8ae'
+    'armv7:Xray-linux-arm32-v6:33bc2686a77f6fe438616982b347f852eb7f9572dbe97adc1459f8fb639aea13'
+  )
+  [[ -n "$release_dir" ]] || { printf 'xray backend install requires the release directory\n' >&2; return 1; }
+
+  # Resolve the host architecture.
+  local dpkg_arch
+  dpkg_arch=$(dpkg --print-architecture 2>/dev/null || true)
+  [[ -n "$dpkg_arch" ]] || { printf 'dpkg is required to determine the host architecture.\n' >&2; return 1; }
+  case "$dpkg_arch" in
+    amd64) target_arch=amd64 ;;
+    armhf) target_arch=armv7 ;;
+    arm64)
+      printf 'xray-core upstream does not ship an arm64 Linux binary in %s; refusing.\n' "$XRAY_CORE_VERSION" >&2
+      printf 'DuckOS on arm64 will not expose the Xray service until upstream provides a binary.\n' >&2
+      return 1
+      ;;
+    *)
+      printf 'xray backend install: unsupported architecture %s.\n' "$dpkg_arch" >&2
+      return 1
+      ;;
+  esac
+
+  # Find the matching pinned tuple.
+  local binary_basename expected_sha
+  local tuple tuple_arch tuple_rest
+  for tuple in "${XRAY_CORE_VERSIONS[@]}"; do
+    tuple_arch=${tuple%%:*}
+    tuple_rest=${tuple#*:}
+    if [[ "$tuple_arch" == "$target_arch" ]]; then
+      # tuple_rest is "<binary-name>:<sha256>"; split on the first
+      # colon so the sha256 stays a single field even if it ever
+      # collides with the binary name.
+      binary_basename=${tuple_rest%%:*}
+      expected_sha=${tuple_rest#*:}
+      break
+    fi
+  done
+  if [[ -z "${binary_basename:-}" || -z "${expected_sha:-}" ]]; then
+    printf 'xray backend install: no pinned binary for arch %s.\n' "$target_arch" >&2
+    return 1
+  fi
+
+  # The vendored binary lives at <release_dir>/xray-core/<binary_basename>.
+  local src=$release_dir/xray-core/$binary_basename
+  [[ -f "$src" ]] || { printf 'vendored xray binary missing at %s\n' "$src" >&2; return 1; }
+  local manifest=$release_dir/xray-core/XRAY_CORE_SHA256SUMS
+  [[ -f "$manifest" ]] || { printf 'xray backend install: SHA256SUMS manifest missing.\n' >&2; return 1; }
+
+  # Verify the binary against both the embedded pinned list and
+  # the artifact's own SHA256SUMS. Two checks so a single corrupt
+  # manifest cannot let an installer proceed.
+  local actual_sha
+  actual_sha=$(sha256sum < "$src" | awk '{print $1}')
+  if [[ "$actual_sha" != "$expected_sha" ]]; then
+    printf 'xray backend install: SHA256 mismatch for %s.\n  expected (pinned): %s\n  actual:             %s\n' \
+      "$binary_basename" "$expected_sha" "$actual_sha" >&2
+    return 1
+  fi
+  if ! grep -E "^${expected_sha}[[:space:]]+(\\*?)${binary_basename}\$" "$manifest" >/dev/null; then
+    printf 'xray backend install: artifact SHA256SUMS does not list %s.\n' "$binary_basename" >&2
+    return 1
+  fi
+
+  # Install the binary root-owned, mode 0755. The runtime reads
+  # /usr/local/bin/xray via os.Stat in NewRuntime().
+  install -d -o root -g root -m 0755 /usr/local/bin
+  install -o root -g root -m 0755 "$src" /usr/local/bin/xray
+  printf 'Installed xray %s (%s) -> /usr/local/bin/xray\n' "$XRAY_CORE_VERSION" "$target_arch"
+
+  # Smoke test: refuse to leave a half-installed backend. The
+  # runtime expects the binary to honour `xray version`.
+  if ! command -v /usr/local/bin/xray >/dev/null 2>&1; then
+    printf 'xray backend install: /usr/local/bin/xray not on PATH after install.\n' >&2
+    return 1
+  fi
+  local version_report
+  if ! version_report=$(/usr/local/bin/xray version 2>&1); then
+    printf 'xray backend install: smoke test failed.\n  output: %s\n' "$version_report" >&2
+    return 1
+  fi
+  if ! grep -q "Xray $XRAY_CORE_VERSION" <<<"$version_report"; then
+    printf 'xray backend install: smoke test did not report version %s.\n  output: %s\n' \
+      "$XRAY_CORE_VERSION" "$version_report" >&2
+    return 1
+  fi
+
+  # The license file is required by upstream MPL-2.0. Ship a
+  # copy next to the binary so a `dpkg -L` audit can find it.
+  if [[ -f "$release_dir/xray-core/XRAY_CORE_LICENSE" ]]; then
+    install -d -o root -g root -m 0755 /usr/local/share/doc/xray
+    install -o root -g root -m 0644 \
+      "$release_dir/xray-core/XRAY_CORE_LICENSE" \
+      /usr/local/share/doc/xray/LICENSE
+  fi
+}
+
 usage() {
   printf '%s\n' 'Usage: bash install.sh --artifact /absolute/canonical/artifact-directory [--check | --verify-artifact]' \
     '  --check            Read-only artifact and Debian host preflight (root).' \
@@ -435,6 +579,16 @@ done
 verify_artifact "$staging"
 mv -- "$staging" "$release"
 ln -s "releases/$version" /opt/duckos/current
+
+# Provision the integrity-pinned xray-core backend into
+# /usr/local/bin/xray. This is the only step that satisfies
+# internal/xray/runtime_linux.go's NewRuntime os.Stat gate
+# on a fresh install. The helper refuses arm64 loudly because
+# upstream does not currently ship an arm64 Linux binary.
+install_xray_backend "$release" || {
+  printf 'DuckOS installer: Xray backend install failed.\n' >&2
+  printf 'The Agent will run without the Xray service until the operator re-runs install.sh with a binary that satisfies the architecture.\n' >&2
+}
 
 # The running supervisor is intentionally outside the replaceable release.
 # Ordinary update operations never write this executable or its service unit.
