@@ -111,23 +111,31 @@ verify_artifact() {
   "version": "(1\.0\.0-dev\.[0-9a-f]{12}(\.dirty)?)",
   "commit": "([0-9a-f]{40})",
   "dirty": (true|false),
-  "target": "linux/amd64",
+  "target": "(linux/(amd64|arm64|armv7))",
   "goVersion": "go[0-9]+\.[0-9]+\.[0-9]+",
   "nodeVersion": "v[0-9]+\.[0-9]+\.[0-9]+",
   "sourceDateEpoch": [0-9]+,
   "kind": "internal-development"
 \}$'
-  [[ "$metadata" =~ $metadata_pattern ]] || fail 'BUILD-INFO.json must match the canonical amd64 internal-build metadata format.'
+  [[ "$metadata" =~ $metadata_pattern ]] || fail 'BUILD-INFO.json must match the canonical internal-build metadata format.'
   [[ "${BASH_REMATCH[1]}" == "$version" && "${BASH_REMATCH[3]:0:12}" == "${version:10:12}" ]] || fail 'Build metadata version or commit disagrees with VERSION.'
   if [[ "$version" == *.dirty ]]; then
     [[ "${BASH_REMATCH[4]}" == true ]] || fail 'Build metadata dirty marker disagrees with VERSION.'
   else
     [[ "${BASH_REMATCH[4]}" == false ]] || fail 'Build metadata dirty marker disagrees with VERSION.'
   fi
+  metadata_target="${BASH_REMATCH[5]}"
+  metadata_arch="${BASH_REMATCH[6]}"
+  case "$metadata_target" in
+    linux/amd64) expected_elf_class='02'; expected_elf_machine='3e00'; arch_label='amd64 (ELF64 EM_X86_64)' ;;
+    linux/arm64) expected_elf_class='02'; expected_elf_machine='b700'; arch_label='arm64 (ELF64 EM_AARCH64)' ;;
+    linux/armv7) expected_elf_class='01'; expected_elf_machine='2800'; arch_label='armv7 (ELF32 EM_ARM)' ;;
+    *) fail "BUILD-INFO.json declares unsupported build target: $metadata_target" ;;
+  esac
   for binary in duck-api duck-agent duck-updater duck-restore; do
     magic=$(od -An -tx1 -N5 "$root/bin/$binary" | tr -d ' \n')
     machine=$(od -An -tx1 -j18 -N2 "$root/bin/$binary" | tr -d ' \n')
-    [[ "$magic" == 7f454c4602 && "$machine" == 3e00 ]] || fail "$binary must be a Linux amd64 ELF64 binary."
+    [[ "$magic" == "7f454c46$expected_elf_class" && "$machine" == "$expected_elf_machine" ]] || fail "$binary must be a Linux $arch_label binary; got ELF magic ${magic:0:14} e_machine ${machine:-??}."
   done
 }
 
@@ -140,15 +148,22 @@ fi
 
 [[ $EUID -eq 0 ]] || fail 'Host preflight and installation require root.'
 [[ "$version" != *.dirty ]] || fail 'Target installation requires a clean GitHub commit; dirty working-tree artifacts are not accepted.'
-[[ $(uname -s) == Linux ]] || fail 'Only a clean Debian 13 amd64 Linux host is supported.'
+[[ $(uname -s) == Linux ]] || fail 'Only a clean Debian 13 Linux host is supported.'
 [[ -r /etc/os-release ]] || fail 'Missing /etc/os-release.'
 os_id=$(sed -n 's/^ID=//p' /etc/os-release | tr -d '"')
 os_version=$(sed -n 's/^VERSION_ID=//p' /etc/os-release | tr -d '"')
 [[ "$os_id" == debian && "$os_version" == 13 ]] || fail 'This installer requires Debian 13.'
-for dependency in dpkg systemctl getent groupadd useradd install stat sha256sum find sort sed awk cut df du od tr curl ip nft ss; do
-  command -v "$dependency" >/dev/null 2>&1 || fail "Missing prerequisite: $dependency. Install prerequisites explicitly: apt-get install iproute2 nftables curl ca-certificates passwd coreutils findutils"
+for dependency in dpkg systemctl getent groupadd useradd install stat sha256sum find sort sed awk cut df du od tr curl ip nft ss python3; do
+  command -v "$dependency" >/dev/null 2>&1 || fail "Missing prerequisite: $dependency. Install prerequisites explicitly: apt-get install iproute2 nftables curl ca-certificates passwd coreutils findutils python3"
 done
-[[ $(dpkg --print-architecture) == amd64 ]] || fail 'Debian architecture must be amd64.'
+host_arch=$(dpkg --print-architecture) || fail 'Cannot determine Debian dpkg architecture.'
+case "$host_arch" in
+  amd64) expected_host_target='linux/amd64' ;;
+  arm64) expected_host_target='linux/arm64' ;;
+  armhf) expected_host_target='linux/armv7' ;;
+  *) fail "Debian architecture $host_arch is not supported by this installer. Supported: amd64, arm64, armhf." ;;
+esac
+[[ "$metadata_target" == "$expected_host_target" ]] || fail "Artifact target ($metadata_target) does not match Debian host architecture ($host_arch → $expected_host_target)."
 [[ -d /run/systemd/system && $(< /proc/1/comm) == systemd ]] || fail 'A booted systemd host is required.'
 [[ -x /usr/sbin/nologin ]] || fail 'Missing /usr/sbin/nologin.'
 
@@ -188,7 +203,7 @@ for entry in /opt /var/lib; do
   [[ "$available_kib" =~ ^[0-9]+$ && "$available_kib" -ge "$required_kib" ]] || fail "Insufficient free space on $entry (payload copies plus 256 MiB reserve required)."
 done
 if [[ "$mode" == check ]]; then
-  printf 'Read-only preflight passed: %s; Debian 13 amd64; clean host.\n' "$version"
+  printf 'Read-only preflight passed: %s; Debian 13 %s (%s); clean host.\n' "$version" "$host_arch" "$expected_host_target"
   exit 0
 fi
 

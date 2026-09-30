@@ -144,7 +144,7 @@ test('wrong binary architecture is rejected even with matching checksums', async
   binary[18] = 0xb7; // AArch64, not amd64.
   await fs.writeFile(path.join(f.artifact, 'bin/duck-agent'), binary);
   await f.manifest();
-  rejected(verify(f.artifact), /duck-agent must be a Linux amd64 ELF64 binary/);
+  rejected(verify(f.artifact), /duck-agent must be a Linux amd64 \(ELF64 EM_X86_64\) binary/);
 });
 
 test('build metadata rejects malformed JSON, mismatched revisions and dirty state', async (t) => {
@@ -153,7 +153,7 @@ test('build metadata rejects malformed JSON, mismatched revisions and dirty stat
   const original = JSON.parse(await fs.readFile(metadataPath, 'utf8'));
   await fs.writeFile(metadataPath, '{ "version": invalid }\n');
   await f.manifest();
-  rejected(verify(f.artifact), /canonical amd64 internal-build metadata format/);
+  rejected(verify(f.artifact), /canonical internal-build metadata format/);
   await fs.writeFile(metadataPath, JSON.stringify({ ...original, commit: 'f'.repeat(40) }, null, 2) + '\n');
   await f.manifest();
   rejected(verify(f.artifact), /version or commit disagrees/);

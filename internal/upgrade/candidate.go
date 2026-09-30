@@ -153,10 +153,23 @@ func readBuild(dir string, pkg *Package) (BuildIdentity, error) {
 	if err != nil || len(raw) > 65536 {
 		return b, errors.New("upgrade: invalid build identity")
 	}
-	if json.Unmarshal(raw, &b) != nil || b.Version != pkg.Manifest.TargetVersion || b.Target != "linux/"+pkg.Manifest.Architecture || !regexp.MustCompile(`^[a-f0-9]{40}$`).MatchString(b.Commit) {
+	if json.Unmarshal(raw, &b) != nil || b.Version != pkg.Manifest.TargetVersion || b.Target != "linux/"+archForTarget(pkg.Manifest.Architecture) || !regexp.MustCompile(`^[a-f0-9]{40}$`).MatchString(b.Commit) {
 		return b, errors.New("upgrade: signed build identity mismatch")
 	}
 	return b, nil
+}
+
+// archForTarget maps a runtime.GOARCH value to the canonical DuckOS
+// BUILD-INFO "target" arch suffix. Only GOARCH values that disagree
+// with the public target naming need an entry. Add new mappings here
+// when supporting a new CPU architecture with a divergent GOARCH.
+func archForTarget(goarch string) string {
+	switch goarch {
+	case "arm":
+		return "armv7"
+	default:
+		return goarch
+	}
 }
 
 type boundedOutput struct{ bytes.Buffer }
