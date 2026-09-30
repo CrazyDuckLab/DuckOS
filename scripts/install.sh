@@ -7,6 +7,36 @@ export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 umask 077
 
 fail() { printf 'DuckOS installer: %s\n' "$*" >&2; exit 1; }
+# bootstrap_vault_master_key installs the protected vault master key the Agent
+# reads at startup. We generate a 32-byte master from /dev/urandom on a fresh
+# install and never overwrite an existing one (preserves the vault across
+# re-installs). Mode 0600 root-only; never logged. If records/ is non-empty
+# but the master key is missing, refuse the install with a precise error
+# instead of fabricating a new key (that would orphan every previously stored
+# secret). Uses portable chmod + umask rather than `install -o -g -m` so the
+# helper is testable on systems whose install(1) does not support -o/-g.
+bootstrap_vault_master_key() {
+  local master_path=$1 records_dir=$2
+  [[ -n "$master_path" && -n "$records_dir" ]] || { printf 'vault bootstrap requires master path and records dir\n' >&2; return 1; }
+  if [[ ! -e "$master_path" ]]; then
+    if [[ -n "$(ls -A "$records_dir" 2>/dev/null)" ]]; then
+      printf 'Vault records exist at %s but the master key is missing at %s. Refusing to fabricate a new key.\n' "$records_dir" "$master_path" >&2
+      return 1
+    fi
+    local key_bytes
+    key_bytes=$(od -An -v -N32 -tx1 /dev/urandom | tr -d ' \n')
+    [[ ${#key_bytes} -eq 64 ]] || { printf 'Could not obtain a 32-byte cryptographic master key.\n' >&2; return 1; }
+    local old_umask
+    old_umask=$(umask)
+    umask 077
+    : > "$master_path" || { umask "$old_umask"; printf 'Could not create the protected vault master key file.\n' >&2; return 1; }
+    printf '%s' "$key_bytes" > "$master_path" || { umask "$old_umask"; printf 'Could not write the protected vault master key.\n' >&2; return 1; }
+    umask "$old_umask"
+    unset key_bytes
+    chmod 0600 "$master_path" || { printf 'Could not set the protected vault master key mode.\n' >&2; return 1; }
+  fi
+  [[ -f "$master_path" ]] || { printf 'Protected vault master key is missing at %s.\n' "$master_path" >&2; return 1; }
+}
 usage() {
   printf '%s\n' 'Usage: bash install.sh --artifact /absolute/canonical/artifact-directory [--check | --verify-artifact]' \
     '  --check            Read-only artifact and Debian host preflight (root).' \
@@ -242,6 +272,7 @@ install -d -o root -g duckos -m 0750 /etc/duckos /var/lib/duckos
 install -d -o duckos -g duckos -m 0700 /var/lib/duckos/config /var/lib/duckos/state /var/lib/duckos/identity /var/lib/duckos/policy /var/lib/duckos/wireguard /var/lib/duckos/xray /var/lib/duckos/backups
 install -d -o root -g root -m 0700 /var/lib/duckos-agent /var/lib/duckos-agent/network
 install -d -o root -g root -m 0700 /var/lib/duckos-agent/ztp /var/lib/duckos-agent/wireguard /var/lib/duckos-agent/xray /var/lib/duckos-agent/frr /var/lib/duckos-agent/qos /var/lib/duckos-agent/vault /var/lib/duckos-agent/vault/records
+bootstrap_vault_master_key /var/lib/duckos-agent/vault/master.key /var/lib/duckos-agent/vault/records
 install -d -o root -g duck-dnsmasq -m 0750 /etc/duckos-dnsmasq
 install -d -o duck-dnsmasq -g duck-dnsmasq -m 0700 /var/lib/duckos-dnsmasq
 # FRR is the V1 routing protocol supervisor. The Agent owns FRR's pathspace
