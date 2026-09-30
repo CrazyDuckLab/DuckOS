@@ -35,8 +35,8 @@ DIST=${1:-}
 [[ -d "$DIST" ]] || { printf 'stage_xray: %s is not a directory\n' "$DIST" >&2; exit 2; }
 case "$DIST" in
   *duckos-linux-amd64) ARCH=amd64;  BINNAME=Xray-linux-64 ;;
-  *duckos-linux-arm64)  ARCH=arm64;  BINNAME=UNSUPPORTED ;;
-  *duckos-linux-armv7)  ARCH=armv7;  BINNAME=Xray-linux-arm32-v6 ;;
+  *duckos-linux-arm64)  ARCH=arm64;  BINNAME=Xray-linux-arm64-v8a ;;
+  *duckos-linux-armv7)  ARCH=armv7;  BINNAME=Xray-linux-arm32-v7a ;;
   *) printf 'stage_xray: cannot infer architecture from %s\n' "$DIST" >&2; exit 2 ;;
 esac
 
@@ -47,13 +47,12 @@ UPSTREAM_BASE="https://github.com/XTLS/Xray-core/releases/download/v$VERSION"
 # the build-time trust anchor; any mismatch aborts the stage.
 declare -A ZIP_SHA256=(
   [Xray-linux-64]=23cd9af937744d97776ee35ecad4972cf4b2109d1e0fe6be9930467608f7c8ae
-  [Xray-linux-arm32-v6]=33bc2686a77f6fe438616982b347f852eb7f9572dbe97adc1459f8fb639aea13
+  [Xray-linux-arm32-v7a]=c7265ae13c63ca0241a037df4ef960ad37938c8a67d984cc08834b2cfdf5654b
+  [Xray-linux-arm64-v8a]=4d30283ae614e3057f730f67cd088a42be6fdf91f8639d82cb69e48cde80413c
 )
 
 if [[ "$ARCH" == "arm64" ]]; then
-  printf 'stage_xray: xray-core upstream does not ship an arm64 binary in v%s.\n' "$VERSION" >&2
-  printf 'DuckOS on arm64 will not expose the Xray service until upstream provides a binary.\n' >&2
-  exit 0  # do not fail the build; just skip staging and document the gap.
+  printf 'stage_xray: arm64 binary present in upstream v%s; downloading.\n' "$VERSION" >&2
 fi
 
 STAGE=$DIST/xray-core

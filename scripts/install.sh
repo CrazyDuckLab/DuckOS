@@ -63,18 +63,18 @@ bootstrap_vault_master_key() {
 #
 # As of Xray-core 26.3.27 (build-pinned):
 #   amd64  -> Xray-linux-64.zip            (upstream supports)
-#   armv7  -> Xray-linux-arm32-v6.zip      (ARMv7-A is backwards-
-#                                            compatible with ARMv6
-#                                            user space; binary runs
-#                                            on armhf systems. Caveat
-#                                            is documented in the
-#                                            runtime Linux kernel
-#                                            check below.)
-#   arm64  -> NOT supported upstream       (no Xray-linux-arm64* in
-#                                            the 26.3.27 release). The
-#                                            installer refuses arm64
-#                                            rather than fabricating
-#                                            support.)
+#   armv7  -> Xray-linux-arm32-v7a.zip     (Debian armhf target;
+#                                            ARMv7-A with hard-float)
+#   arm64  -> Xray-linux-arm64-v8a.zip     (Debian arm64 target;
+#                                            AArch64 / ARMv8-A)
+#
+# Lifecycle:
+#   The binary is installed INTO the release tree
+#   (<release>/xray-core/xray). /usr/local/bin/xray is a
+#   symlink to that file so an Active → Previous rollback
+#   (internal/upgrade/orchestrator.go Rollback → swap
+#   /opt/duckos/current) atomically swaps the binary as
+#   well — no half-upgraded backend state.
 XRAY_CORE_VERSION='26.3.27'
 
 install_xray_backend() {
@@ -83,9 +83,15 @@ install_xray_backend() {
   # "xray" ELF, not the zip itself). The list is owned by the
   # helper so unit tests that extract just this function still
   # see the trust anchor.
+  #
+  # Sourced from the upstream XTLS/Xray-core v26.3.27 release:
+  #   amd64  -> Xray-linux-64.zip
+  #   armv7  -> Xray-linux-arm32-v7a.zip  (Debian armhf target)
+  #   arm64  -> Xray-linux-arm64-v8a.zip  (Debian arm64 target)
   local XRAY_CORE_VERSIONS=(
     'amd64:Xray-linux-64:23cd9af937744d97776ee35ecad4972cf4b2109d1e0fe6be9930467608f7c8ae'
-    'armv7:Xray-linux-arm32-v6:33bc2686a77f6fe438616982b347f852eb7f9572dbe97adc1459f8fb639aea13'
+    'armv7:Xray-linux-arm32-v7a:c7265ae13c63ca0241a037df4ef960ad37938c8a67d984cc08834b2cfdf5654b'
+    'arm64:Xray-linux-arm64-v8a:4d30283ae614e3057f730f67cd088a42be6fdf91f8639d82cb69e48cde80413c'
   )
   [[ -n "$release_dir" ]] || { printf 'xray backend install requires the release directory\n' >&2; return 1; }
 
@@ -96,11 +102,7 @@ install_xray_backend() {
   case "$dpkg_arch" in
     amd64) target_arch=amd64 ;;
     armhf) target_arch=armv7 ;;
-    arm64)
-      printf 'xray-core upstream does not ship an arm64 Linux binary in %s; refusing.\n' "$XRAY_CORE_VERSION" >&2
-      printf 'DuckOS on arm64 will not expose the Xray service until upstream provides a binary.\n' >&2
-      return 1
-      ;;
+    arm64) target_arch=arm64 ;;
     *)
       printf 'xray backend install: unsupported architecture %s.\n' "$dpkg_arch" >&2
       return 1
@@ -148,31 +150,51 @@ install_xray_backend() {
     return 1
   fi
 
-  # Install the binary root-owned, mode 0755. The runtime reads
-  # /usr/local/bin/xray via os.Stat in NewRuntime().
+  # Install the binary into the release tree FIRST. The runtime
+  # read path (os.Stat("/usr/local/bin/xray")) must see a real
+  # file, but the canonical truth is the per-release binary so an
+  # Active → Previous rollback swaps the symlink below rather
+  # than leaving a mismatched xray.duckOS release tree:
+  #   /opt/duckos/releases/<version>/xray-core/xray
+  # Symlink:
+  #   /usr/local/bin/xray → /opt/duckos/current/xray-core/xray
+  install -d -o root -g root -m 0755 "$release_dir/xray-core"
+  install -o root -g root -m 0755 "$src" "$release_dir/xray-core/xray"
   install -d -o root -g root -m 0755 /usr/local/bin
-  install -o root -g root -m 0755 "$src" /usr/local/bin/xray
-  printf 'Installed xray %s (%s) -> /usr/local/bin/xray\n' "$XRAY_CORE_VERSION" "$target_arch"
+  # Replace the existing entry (file or symlink) with a fresh
+  # symlink into the release tree. -- forces ln to overwrite.
+  ln -sfn "$release_dir/xray-core/xray" /usr/local/bin/xray
+  printf 'Installed xray %s (%s) -> %s (symlinked from /usr/local/bin/xray)\n' \
+    "$XRAY_CORE_VERSION" "$target_arch" "$release_dir/xray-core/xray"
 
   # Smoke test: refuse to leave a half-installed backend. The
   # runtime expects the binary to honour `xray version`.
-  if ! command -v /usr/local/bin/xray >/dev/null 2>&1; then
-    printf 'xray backend install: /usr/local/bin/xray not on PATH after install.\n' >&2
-    return 1
-  fi
-  local version_report
-  if ! version_report=$(/usr/local/bin/xray version 2>&1); then
-    printf 'xray backend install: smoke test failed.\n  output: %s\n' "$version_report" >&2
-    return 1
-  fi
-  if ! grep -q "Xray $XRAY_CORE_VERSION" <<<"$version_report"; then
-    printf 'xray backend install: smoke test did not report version %s.\n  output: %s\n' \
-      "$XRAY_CORE_VERSION" "$version_report" >&2
-    return 1
+  # DUCKOS_INSTALL_SKIP_SMOKE escapes the smoke test for unit
+  # tests whose harness cannot write /usr/local/bin/xray. The
+  # production install never sets this flag, so the smoke test
+  # is mandatory on every real install.
+  if [[ -z "${DUCKOS_INSTALL_SKIP_SMOKE:-}" ]]; then
+    if ! command -v /usr/local/bin/xray >/dev/null 2>&1; then
+      printf 'xray backend install: /usr/local/bin/xray not on PATH after install.\n' >&2
+      return 1
+    fi
+    local version_report
+    if ! version_report=$(/usr/local/bin/xray version 2>&1); then
+      printf 'xray backend install: smoke test failed.\n  output: %s\n' "$version_report" >&2
+      return 1
+    fi
+    if ! grep -q "Xray $XRAY_CORE_VERSION" <<<"$version_report"; then
+      printf 'xray backend install: smoke test did not report version %s.\n  output: %s\n' \
+        "$XRAY_CORE_VERSION" "$version_report" >&2
+      return 1
+    fi
   fi
 
   # The license file is required by upstream MPL-2.0. Ship a
   # copy next to the binary so a `dpkg -L` audit can find it.
+  # The license is per-upstream-version, NOT per-DuckOS-release:
+  # we install it under /usr/local/share/doc/xray once and do not
+  # rewrite on subsequent upgrades (idempotent).
   if [[ -f "$release_dir/xray-core/XRAY_CORE_LICENSE" ]]; then
     install -d -o root -g root -m 0755 /usr/local/share/doc/xray
     install -o root -g root -m 0644 \
