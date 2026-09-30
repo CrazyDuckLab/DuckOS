@@ -95,6 +95,12 @@ type Engine interface {
 	// /agent/v1/xray/xray/v1/* IPC. DV04-XRAY
 	// production-path contract.
 	XrayProxy(ctx context.Context, method, path, token string, body io.Reader) (status int, data []byte, contentType string, err error)
+	// VaultProxy proxies the public /api/v1/vault/*
+	// request to the privileged Agent
+	// /agent/v1/vault/vault/v1/* IPC. DV04-VAULT
+	// production-path contract. The vault never returns
+	// secret bytes.
+	VaultProxy(ctx context.Context, method, path, token string, body io.Reader) (status int, data []byte, contentType string, err error)
 }
 type Handler struct {
 	updaterHealthKey []byte
@@ -269,7 +275,7 @@ func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]string{"status": "ok", "schemaVersion": model.SchemaVersion})
 		return
 	}
-	if r.URL.Path != "/api/v1/overview" && r.URL.Path != "/api/v1/ready" && r.URL.Path != "/api/v1/readiness" && r.URL.Path != "/api/v1/doctor" && r.URL.Path != "/api/v1/topology" && r.URL.Path != "/api/v1/multiwan" && r.URL.Path != "/api/v1/qos" && r.URL.Path != "/api/v1/qos/apply" && r.URL.Path != "/api/v1/qos/rollback" && r.URL.Path != "/api/v1/ups" && r.URL.Path != "/api/v1/ups/probe" && r.URL.Path != "/api/v1/migrate" && r.URL.Path != "/api/v1/sites" && r.URL.Path != "/api/v1/wifi" && r.URL.Path != "/api/v1/upgrade" && r.URL.Path != "/api/v1/upgrade/stage" && r.URL.Path != "/api/v1/upgrade/activate" && r.URL.Path != "/api/v1/upgrade/rollback" && r.URL.Path != "/api/v1/backup" && r.URL.Path != "/api/v1/backup/restore" && r.URL.Path != "/api/v1/frr" && r.URL.Path != "/api/v1/frr/apply" && r.URL.Path != "/api/v1/frr/rollback" && r.URL.Path != "/api/v1/ztp/issue" && r.URL.Path != "/api/v1/ztp/redeem" && !strings.HasPrefix(r.URL.Path, "/api/v1/wireguard/") && r.URL.Path != "/api/v1/wireguard" && !strings.HasPrefix(r.URL.Path, "/api/v1/xray/") && r.URL.Path != "/api/v1/xray" {
+	if r.URL.Path != "/api/v1/overview" && r.URL.Path != "/api/v1/ready" && r.URL.Path != "/api/v1/readiness" && r.URL.Path != "/api/v1/doctor" && r.URL.Path != "/api/v1/topology" && r.URL.Path != "/api/v1/multiwan" && r.URL.Path != "/api/v1/qos" && r.URL.Path != "/api/v1/qos/apply" && r.URL.Path != "/api/v1/qos/rollback" && r.URL.Path != "/api/v1/ups" && r.URL.Path != "/api/v1/ups/probe" && r.URL.Path != "/api/v1/migrate" && r.URL.Path != "/api/v1/sites" && r.URL.Path != "/api/v1/wifi" && r.URL.Path != "/api/v1/upgrade" && r.URL.Path != "/api/v1/upgrade/stage" && r.URL.Path != "/api/v1/upgrade/activate" && r.URL.Path != "/api/v1/upgrade/rollback" && r.URL.Path != "/api/v1/backup" && r.URL.Path != "/api/v1/backup/restore" && r.URL.Path != "/api/v1/frr" && r.URL.Path != "/api/v1/frr/apply" && r.URL.Path != "/api/v1/frr/rollback" && r.URL.Path != "/api/v1/ztp/issue" && r.URL.Path != "/api/v1/ztp/redeem" && !strings.HasPrefix(r.URL.Path, "/api/v1/wireguard/") && r.URL.Path != "/api/v1/wireguard" && !strings.HasPrefix(r.URL.Path, "/api/v1/xray/") && r.URL.Path != "/api/v1/xray" && !strings.HasPrefix(r.URL.Path, "/api/v1/vault/") && r.URL.Path != "/api/v1/vault" {
 		problem(w, r, 404, errorCategoryFromCode("not_found"), "not_found", "Unknown API operation.")
 		return
 	}
@@ -351,6 +357,14 @@ func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.handleXrayProxy(w, r, identity.ForwardedToken(h.assertionKey, user))
+		return
+	}
+	if strings.HasPrefix(r.URL.Path, "/api/v1/vault/") || r.URL.Path == "/api/v1/vault" {
+		if h.assertionKey == "" {
+			problem(w, r, 503, errorCategoryFromCode("agent_unavailable"), "agent_unavailable", "Agent assertion key is not configured.")
+			return
+		}
+		h.handleVaultProxy(w, r, identity.ForwardedToken(h.assertionKey, user))
 		return
 	}
 	if r.URL.Path == "/api/v1/ready" {
@@ -914,6 +928,50 @@ func (h *Handler) handleXrayProxy(w http.ResponseWriter, r *http.Request, token 
 		body = io.LimitReader(r.Body, 1<<20)
 	}
 	status, data, contentType, err := h.engine.XrayProxy(r.Context(), r.Method, r.URL.Path, token, body)
+	if err != nil {
+		problem(w, r, 503, errorCategoryFromCode("agent_unavailable"), "agent_unavailable", err.Error())
+		return
+	}
+	if contentType != "" {
+		w.Header().Set("Content-Type", contentType)
+	} else {
+		w.Header().Set("Content-Type", "application/json")
+	}
+	w.WriteHeader(status)
+	if len(data) > 0 {
+		_, _ = w.Write(data)
+	}
+}
+
+// handleVaultProxy proxies the public /api/v1/vault/*
+// request to the privileged Agent
+// /agent/v1/vault/vault/v1/* IPC through Engine.VaultProxy.
+//
+// DV04-VAULT production-path contract:
+//
+//	PUBLIC -> handleVaultProxy -> Engine.VaultProxy
+//	        -> Agent /agent/v1/vault/vault/v1/* -> VaultHost
+//	        -> vault.API -> VaultLifecycle.Put / List / Revoke
+//
+// The handler never reads the request body itself; the body is
+// forwarded to the Agent unchanged. Secret bytes that reach
+// the Agent are wiped before the Agent returns the Reference
+// (see internal/vault/api.go). The handler enforces the Owner
+// (secrets.write) permission at the Agent boundary, so this
+// layer only needs to keep the public envelope intact.
+func (h *Handler) handleVaultProxy(w http.ResponseWriter, r *http.Request, token string) {
+	// Bounded body. The vault handler re-bounds at 16 KiB; this
+	// guard short-circuits oversized requests at the public
+	// boundary so we do not waste an Agent round-trip.
+	if r.ContentLength > 16<<10 {
+		problem(w, r, 413, errorCategoryFromCode("payload_too_large"), "payload_too_large", "Vault payload exceeds 16 KiB.")
+		return
+	}
+	var body io.Reader
+	if r.Body != nil {
+		body = io.LimitReader(r.Body, 16<<10)
+	}
+	status, data, contentType, err := h.engine.VaultProxy(r.Context(), r.Method, r.URL.Path, token, body)
 	if err != nil {
 		problem(w, r, 503, errorCategoryFromCode("agent_unavailable"), "agent_unavailable", err.Error())
 		return

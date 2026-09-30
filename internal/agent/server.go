@@ -41,6 +41,7 @@ type Handler struct {
 	linuxObjs *LinuxObjectsHost
 	wireguard *WireguardHost
 	xray      *XrayHost
+	vault     *VaultHost
 	frr       *FRRHost
 	slots     chan struct{}
 	network   *NetworkService
@@ -227,6 +228,15 @@ func (h *Handler) EnableXray(host *XrayHost) {
 	h.xray = host
 }
 
+// EnableVault registers the production vault host. The host
+// owns the protected secret lifecycle (Put / List / Revoke);
+// the loopback IPC dispatches every request through the
+// authorisation gate (ManageSecrets) before the underlying
+// vault.API runs. Secret bytes never leave the agent.
+func (h *Handler) EnableVault(host *VaultHost) {
+	h.vault = host
+}
+
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
@@ -364,6 +374,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.xray.ServeHTTP(w, r)
+		return
+	}
+	if strings.HasPrefix(r.URL.EscapedPath(), VaultPath) {
+		if h.vault == nil {
+			NewVaultHost(nil, nil).ServeHTTP(w, r)
+			return
+		}
+		h.vault.ServeHTTP(w, r)
 		return
 	}
 	if r.URL.EscapedPath() != OverviewPath {

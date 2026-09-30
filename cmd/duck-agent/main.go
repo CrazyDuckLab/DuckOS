@@ -33,6 +33,7 @@ import (
 	"github.com/CrazyDuckLab/DuckOS/internal/state"
 	"github.com/CrazyDuckLab/DuckOS/internal/upgrade"
 	"github.com/CrazyDuckLab/DuckOS/internal/ups"
+	"github.com/CrazyDuckLab/DuckOS/internal/vault"
 	"github.com/CrazyDuckLab/DuckOS/internal/wireguard"
 	"github.com/CrazyDuckLab/DuckOS/internal/xray"
 	"github.com/CrazyDuckLab/DuckOS/internal/ztp"
@@ -146,6 +147,9 @@ func main() {
 		log.Print("protected vault is unavailable; WireGuard mutations are disabled")
 	} else {
 		defer vaultStore.Close()
+		vaultAPI := &vault.API{Source: vaultStore, Access: networkAccess, Prefix: "/vault/v1/"}
+		handler.EnableVault(agent.NewVaultHost(vaultAPI, networkAccess))
+		log.Print("vault service is enabled; Owner-only secret Put/List/Revoke will be admitted through the loopback")
 	}
 	if wgHost, err := enableWireguardService(*wgCatalogDir, *wgConfigDir, networkAccess, vaultStore); err == nil {
 		handler.EnableWireguard(wgHost)

@@ -21,12 +21,13 @@ const (
 	ManageSecurity   Permission = "security.write"
 	ManageUpdates    Permission = "updates.write"
 	ManageBackups    Permission = "backups.write"
+	ManageSecrets    Permission = "secrets.write"
 	ExportClients    Permission = "clients.export"
 )
 
 func validPermission(p Permission) bool {
 	switch p {
-	case Observe, ConfigureNetwork, Diagnose, ManageGuests, ManageUsers, ManageSecurity, ManageUpdates, ManageBackups, ExportClients:
+	case Observe, ConfigureNetwork, Diagnose, ManageGuests, ManageUsers, ManageSecurity, ManageUpdates, ManageBackups, ManageSecrets, ExportClients:
 		return true
 	default:
 		return false
@@ -43,7 +44,7 @@ func Allowed(role Role, p Permission) bool {
 		return role == Owner || role == NetworkAdmin || role == Helpdesk
 	case ManageGuests:
 		return role == Owner || role == NetworkAdmin || role == Reception
-	case ManageUsers, ManageSecurity, ManageUpdates, ManageBackups:
+	case ManageUsers, ManageSecurity, ManageUpdates, ManageBackups, ManageSecrets:
 		return role == Owner
 	default:
 		return false

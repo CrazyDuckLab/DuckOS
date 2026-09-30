@@ -761,6 +761,10 @@ func (e *Engine) restoreOperation(ctx context.Context, payload []byte, reconcile
 // payloads (server / peer JSON + the rendered .conf).
 const WireGuardMaxBytes = 1 << 20
 
+// VaultMaxBytes is the Engine IPC cap for vault payloads
+// (Reference metadata; bytes never leave the Agent).
+const VaultMaxBytes = 64 << 10
+
 // UpgradeStageMaxBytes is the Engine IPC cap for the
 // signed-update Stage payload. The orchestrator's
 // MaxPayloadBytes is the authoritative cap; this is the
@@ -1041,6 +1045,47 @@ func (e *Engine) XrayProxy(ctx context.Context, method, path, token string, body
 	}
 	if len(data) > XrayMaxBytes {
 		return resp.StatusCode, nil, resp.Header.Get("Content-Type"), errors.New("Agent Xray response exceeds size limit")
+	}
+	return resp.StatusCode, data, resp.Header.Get("Content-Type"), nil
+}
+
+// VaultProxy proxies a public /api/v1/vault/* request to the
+// privileged Agent /agent/v1/vault/v1/* IPC. The vault never
+// returns secret bytes; the Engine only forwards the public
+// envelope (Owner bearer token) to the Agent, which is the
+// only place that ever sees the bytes.
+//
+// DV04-VAULT production-path contract:
+//
+//	PUBLIC API -> Engine.VaultProxy -> Agent IPC
+//	           -> VaultHost -> vault.API -> VaultLifecycle.Put / List / Revoke
+func (e *Engine) VaultProxy(ctx context.Context, method, path, token string, body io.Reader) (status int, data []byte, contentType string, err error) {
+	if e == nil {
+		return 0, nil, "", errors.New("engine not configured")
+	}
+	tail := strings.TrimPrefix(path, "/api/v1/vault/")
+	if tail == "" {
+		tail = path
+	}
+	target := "http://agent" + agent.VaultPath + "/vault/v1/" + strings.TrimPrefix(tail, "/")
+	req, err := http.NewRequestWithContext(ctx, method, target, body)
+	if err != nil {
+		return 0, nil, "", err
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := e.client.Do(req)
+	if err != nil {
+		return 0, nil, "", errors.New("Agent is unavailable")
+	}
+	defer resp.Body.Close()
+	data, err = io.ReadAll(io.LimitReader(resp.Body, VaultMaxBytes+1))
+	if err != nil {
+		return resp.StatusCode, nil, resp.Header.Get("Content-Type"), errors.New("Agent Vault response read failed")
+	}
+	if len(data) > VaultMaxBytes {
+		return resp.StatusCode, nil, resp.Header.Get("Content-Type"), errors.New("Agent Vault response exceeds size limit")
 	}
 	return resp.StatusCode, data, resp.Header.Get("Content-Type"), nil
 }
