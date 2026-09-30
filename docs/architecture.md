@@ -1,13 +1,16 @@
 # DuckOS architecture
 
-Status: target architecture; current implementation snapshot is governed by
-the ADRs in [`docs/adr/`](adr/) and the product specification in
-[`docs/product-spec-1.0.md`](product-spec-1.0.md).
+Status: target architecture; current implementation snapshot is [handoff/ARCHITECTURE.md](handoff/ARCHITECTURE.md)
+
+The handoff snapshot and subsequent ADRs supersede historical future-tense status
+notes here. Product-wide intent-driven workflows, visible owned generated objects,
+stable Full navigation and GUI/CLI parity follow [the frozen V1 contract](handoff/V1_SCOPE.md).
+Requirements source: [`requirements/product.md`](requirements/product.md)
 
 This document defines the target component boundaries and the invariants that
 implementation must preserve. [ADR-0005](adr/0005-executable-observation-foundation.md)
 defines the implemented read-only subset. Other flows below remain target
-architecture.
+architecture; see [evidence](evidence/executable-foundation.md).
 
 ## Product boundary
 

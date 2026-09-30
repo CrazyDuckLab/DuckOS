@@ -5,12 +5,11 @@ Product implementation status: **OBSERVATION RUNTIME + TRANSACTION/NETWORK CORE 
 Target external release: **DuckOS 1.0.0**
 Requirements source: [`requirements/product.md`](requirements/product.md)
 
-This specification's V1 scope is frozen at the 2026-09-10 baseline.
+This specification's V1 scope is frozen at the 2026-09-10 handoff baseline.
 The authoritative deduplicated requirements and delivery classification are
-recorded in this document (the V1 frozen scope itself), together with the
-ADRs in [`docs/adr/`](adr/). They include stable Easy/Full UX, first-class
-CLI, portable/hardware-remapped restore, explicit client isolation, client
-artifact lifecycle, native Xray VLESS/Trojan/supported REALITY, product-wide
+[the frozen V1 scope](handoff/V1_SCOPE.md). They include stable Easy/Full UX,
+first-class CLI, portable/hardware-remapped restore, explicit client isolation,
+client artifact lifecycle, native Xray VLESS/Trojan/supported REALITY, product-wide
 intent-driven management and strictly bounded logging/diagnostics.
 
 The existing M/S/P IDs and detailed acceptance intent below are retained for
@@ -19,8 +18,7 @@ A (V1 Alpha blocker), B (architecture-now/implementation-later), C (post-Alpha)
 classification. B/C V1 requirements are deferred within development, not deleted.
 Explicit existing post-V1 reservations remain reserved. Internal Alpha does not
 authorize a public intermediate release. Current implementation/evidence is
-recorded in the [ADRs](adr/) and the [roadmap](roadmap.md), not inferred from
-this matrix.
+recorded in [PROJECT_STATE](handoff/PROJECT_STATE.md), not inferred from this matrix.
 
 ## Product outcome
 
@@ -50,8 +48,8 @@ security/recovery components are locally tested. The static managed-routing
 Safe Apply adapter and pre-networkd recovery gate exist but installed network
 mutation, full WAN/LAN recovery and native qualification remain incomplete.
 Vault, SQLite client metadata and reusable QR exports are implemented components,
-not yet a live client provisioning product. See the [ADRs](adr/) for design
-decisions and the [roadmap](roadmap.md) for current release status.
+not yet a live client provisioning product. See the exact code checkpoint and
+test status in [PROJECT_STATE](handoff/PROJECT_STATE.md).
 
 ## Historical scope vocabulary (traceability only)
 
@@ -157,7 +155,7 @@ release choices from completed foundation decisions.
 
 | ID | Decision | Required output | Status |
 |---|---|---|---|
-| U-001 | V1 scope freeze | Consolidated 2026-09-10 requirements and A/B/C timing; this document is the authoritative V1 frozen scope. | RESOLVED |
+| U-001 | V1 scope freeze | Consolidated 2026-09-10 requirements and A/B/C timing in handoff/V1_SCOPE.md. | RESOLVED FOR HANDOFF |
 | U-002 | Supported Debian/kernel/systemd/nftables/ABI baselines | Versioned matrix for ARMv7, ARM64, and amd64 plus installer ownership assumptions. | NOT QUALIFIED |
 | U-003 | API/Engine topology | ADR-0005 resolves the shared unprivileged process; future compatibility evolution remains controlled. | BASELINE RESOLVED |
 | U-004 | Agent IPC | ADR-0005/0010 resolve bounded peer-authenticated HTTP/JSON Unix IPC and network coordination. Installed mutation activation remains gated. | BASELINE RESOLVED |

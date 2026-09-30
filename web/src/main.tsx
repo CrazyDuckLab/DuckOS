@@ -7,6 +7,7 @@ import "./v1-tokens.css";
 import "./v1-shell.css";
 import "./v1-page.css";
 import "./v1-forms.css";
+import "./v1-login.css";
 import "./shell-v2.css";
 import "./shell-v2-pages.css";
 /* V4 shell must come last so its topbar / rail / main / action overrides

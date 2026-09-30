@@ -73,25 +73,6 @@ is qualified on one architecture but not another, this page says so.
 - Real ARMv7 native qualification is pending. Cross-build success
   is not native qualification.
 
-## LAN onboarding
-
-- The V1 beta binds the management UI/API to `127.0.0.1:8080` only.
-  No mDNS / DNS-SD advertisement, no automatic LAN URL, no browser
-  discovery, no self-signed HTTPS onboarding, no ACME client, and no
-  zero-touch flow ship with this beta.
-- Administrators reach the dashboard via SSH local-forward
-  (`ssh -L 8080:127.0.0.1:8080 <user>@<duckos-ip>`) and open
-  `http://127.0.0.1:8080`. See [`docs/user/getting-started.md`](user/getting-started.md).
-- LAN-friendly onboarding improvements may land in a later release;
-  this beta makes no commitment to that surface.
-
-- Wi-Fi hardware variance is high. The V1 beta does not test
-  every chipset. Use a chipset listed in
-  [`docs/hardware-support.md`](hardware-support.md) before deploying.
-- Modems and LTE are not supported.
-- Real ARMv7 native qualification is pending. Cross-build success
-  is not native qualification.
-
 ## Recovery
 
 - The pre-networkd boot recovery unit exists and is qualified in

@@ -45,7 +45,8 @@ This guide describes the **V1 beta** as it exists today. Many areas
 listed below are partially implemented; the guide is honest about which
 controls work end-to-end and which are gated behind the
 qualification/activation gates. See [`docs/beta-limitations.md`](../beta-limitations.md)
-and [`docs/release-notes.md`](../release-notes.md) for the current state.
+and the [release-note draft](../release-notes-draft.md) for the current
+state.
 
 The guide uses the same product terminology as the UI. Words like
 "Easy Mode", "Full Mode", "Safe Apply", "Inspector", "Doctor", "Owner"

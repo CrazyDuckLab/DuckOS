@@ -1,0 +1,363 @@
+/* DuckOS V1 — login / first-run enrollment layout.
+ *
+ * Extracted from the legacy styles.css so the first-run page can render
+ * the form in the initial 1440x900 viewport without an oversized
+ * decorative illustration pushing the form below the fold. The lock
+ * icon, the grid columns, the card padding, the responsive collapse to
+ * a single column below 760px, the brand mark + tagline layout, and
+ * the card's opaque, readable dark surface are all defined here.
+ */
+
+:root {
+  /* Mirror the legacy design tokens used by the login surface so the
+   * variables below resolve even when the V4 stylesheet is not imported.
+   * Values match styles.css so the login page looks identical to the
+   * previously-qualified dark theme rendering. */
+  --page: #0a111a;
+  --panel: #111d29;
+  --text: #ebf0f5;
+  --muted: #9caebb;
+  --subtle: #8293a2;
+  --line: #d5e8ff17;
+  --accent: #87e5ce;
+  --radius: 18px;
+  --card-from: #19303b;
+  --card-to: #101c2a;
+  --card-inset: #ffffff05;
+  --input-bg: #0a1622;
+  --input-border: #d5e8ff24;
+  --lock-chip-bg: #7ae2c810;
+  --lock-chip-border: #7ae2c81e;
+}
+
+/* Light theme overrides — applied when the operator has set
+ * data-theme="light" on <html> via the dashboard theme toggle, the same
+ * mechanism AppShell uses. Without these the login card would stay dark
+ * because the legacy tokens above have hard-coded dark values. */
+[data-theme="light"] {
+  --page: #f4f7fa;
+  --panel: #ffffff;
+  --text: #142231;
+  --muted: #4a5b6e;
+  --subtle: #6b7c8f;
+  --line: #dde6ee;
+  --accent: #2a7a64;
+  --card-from: #ffffff;
+  --card-to: #f1f5f9;
+  --card-inset: #00000006;
+  --input-bg: #ffffff;
+  --input-border: #c0d0df;
+  --lock-chip-bg: #e3f1f0;
+  --lock-chip-border: #b6d8d4;
+}
+
+.icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+/* Top-left brand: mark + wordmark + tagline. Mirrors styles.css .brand.
+ * Without these rules, the SVG and the inline <span>DuckOS<small>...</small>
+ * collapse onto a single line and "DuckOS" runs into "YOUR NETWORK. CLEARLY."
+ * because the brand wrapper has no display semantics of its own. */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  font-size: 25px;
+  letter-spacing: -0.05em;
+  font-weight: 680;
+  line-height: 1.15;
+}
+
+.brand svg {
+  flex-shrink: 0;
+}
+
+.brand small {
+  display: block;
+  margin-top: 6px;
+  font-size: 7px;
+  letter-spacing: 0.15em;
+  color: var(--subtle);
+  font-weight: 600;
+}
+
+.login-page {
+  min-height: 100svh;
+  padding: 38px 6vw 24px;
+  background:
+    radial-gradient(ellipse at 27% 50%, #1b4b4822, transparent 60%),
+    radial-gradient(ellipse at 90% 20%, #254b7422, transparent 45%),
+    var(--page);
+}
+
+.login-top,
+.login-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.login-top > .eyebrow {
+  color: var(--muted);
+}
+
+.login-content {
+  display: grid;
+  grid-template-columns: 1fr 440px;
+  align-items: center;
+  gap: 9vw;
+  min-height: calc(100svh - 185px);
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 52px 0;
+}
+
+.login-story > .eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 22px;
+}
+
+.login-story h1 {
+  font-size: clamp(40px, 4.5vw, 62px);
+  line-height: 1.09;
+  letter-spacing: -0.055em;
+}
+
+.login-story h1 span {
+  color: var(--muted);
+}
+
+.login-story > p {
+  margin-top: 24px;
+  max-width: 360px;
+  font-size: 16px;
+  line-height: 1.75;
+}
+
+.login-caption {
+  font-size: 11px;
+  color: var(--subtle);
+  letter-spacing: 0.04em;
+  margin-top: 19px;
+}
+
+.login-card {
+  padding: 36px;
+  /* Fully opaque gradient whose stops switch with the theme via
+   * --card-from / --card-to. The legacy dark gradient is preserved as
+   * the default; the light override above swaps in a near-white card. */
+  background: linear-gradient(145deg, var(--card-from), var(--card-to));
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow:
+    0 30px 90px #00000026,
+    inset 0 1px 0 var(--card-inset);
+}
+
+.login-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  background: var(--lock-chip-bg);
+  border: 1px solid var(--lock-chip-border);
+  color: var(--accent);
+  border-radius: 15px;
+  margin-bottom: 28px;
+}
+
+.login-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.login-card h2 {
+  margin-top: 10px;
+  font-size: 27px;
+  letter-spacing: -0.04em;
+}
+
+.login-card > p {
+  font-size: 13px;
+  line-height: 1.8;
+  margin-top: 12px;
+}
+
+.login-card form {
+  margin-top: 27px;
+}
+
+.login-card label {
+  display: block;
+  font-size: 12px;
+  font-weight: 550;
+  margin-bottom: 9px;
+}
+
+.login-card input + label {
+  margin-top: 18px;
+}
+
+.login-card input {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--input-border);
+  /* Theme-aware surface: dark translucent in default theme, opaque white
+   * under [data-theme="light"]. Keeps the field clearly readable in both. */
+  background: var(--input-bg);
+  padding: 14px;
+  font-size: 13px;
+  border-radius: 10px;
+  color: var(--text);
+}
+
+.login-card input::placeholder {
+  color: var(--subtle);
+}
+
+.login-card .button {
+  width: 100%;
+  margin-top: 16px;
+  min-height: 47px;
+}
+
+.login-card .button .icon {
+  margin-left: auto;
+}
+
+/* Shared button system used by the login surface. Mirrors the legacy
+ * styles.css .button / .button-primary rules so the login page renders
+ * a proper teal primary action instead of a default browser button. */
+.button {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text);
+  transition:
+    background-color 160ms,
+    border-color 160ms,
+    transform 160ms;
+}
+
+.button .icon {
+  width: 17px;
+  height: 17px;
+}
+
+.button-primary {
+  color: #092c28;
+  background: var(--accent);
+  box-shadow: 0 4px 22px #6dd7bc10;
+}
+
+.button-primary:hover:not(:disabled) {
+  background: #a4f2df;
+}
+
+.button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.token-help {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 17px;
+  color: var(--subtle);
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+.token-help .icon {
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+}
+
+.login-footnote {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* Shared login surface primitives. Mirrors styles.css. */
+.eyebrow {
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.15em;
+  color: var(--subtle);
+}
+
+.accent-text {
+  color: var(--accent);
+}
+
+.login-error {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--v1-bad-soft, #d7707030);
+  background: var(--v1-bad-soft, #3a2424);
+  color: var(--v1-text, #f1c5c5);
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* Mid-size desktops: shrink the form column, increase padding density. */
+@media (max-width: 1100px) {
+  .login-content {
+    gap: 5vw;
+    grid-template-columns: 1fr 390px;
+  }
+  .login-card {
+    padding: 28px;
+  }
+  .login-story h1 {
+    font-size: 42px;
+  }
+  .login-story > p {
+    font-size: 14px;
+  }
+}
+
+/* Narrow / tablet: single column, hide the headline column. */
+@media (max-width: 760px) {
+  .login-content {
+    grid-template-columns: 1fr;
+    min-height: auto;
+    max-width: 450px;
+    padding: 44px 0;
+  }
+  .login-story {
+    display: none;
+  }
+  .login-page {
+    padding: 27px 24px;
+  }
+  .login-top > .eyebrow {
+    display: none;
+  }
+  .login-card {
+    padding: 32px;
+  }
+}

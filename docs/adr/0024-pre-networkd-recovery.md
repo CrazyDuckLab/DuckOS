@@ -18,5 +18,5 @@ enable it, provision enrollment/journal or modify networkd dependencies.
 Tests cover all pending phases, restart/file recovery, idempotence, missing state,
 unknown artifacts, service/dependency drift and installation non-activation.
 Actual systemd ordering, kernel-state reconstruction and management preservation
-are not qualified. The [roadmap](../roadmap.md) names the
+are not qualified. The [current roadmap](../handoff/CURRENT_ROADMAP.md) names the
 remaining activation/security gates, including the no-pending enrollment check.

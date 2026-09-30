@@ -1325,3 +1325,29 @@ export function Icon({
 
 // Re-export the themed mark from src/brand/.
 export { DuckMark, DuckWordmark } from "./brand/DuckMark";
+
+/* Dev-only: serialize each icon's SVG markup to a JSON object keyed
+ * by IconName. Consumed by `vite.config.ts`'s dev middleware during
+ * iconography visual capture. The wrapper SVG includes the standard
+ * 24×24 viewBox so consumers can size it freely via CSS width/height. */
+import { renderToStaticMarkup } from "react-dom/server";
+
+export const __iconPathsForCapture: Record<IconName, string> = Object.fromEntries(
+  (Object.entries(paths) as [IconName, ReactNode][]).map(([k, v]) => [
+    k,
+    renderToStaticMarkup(
+      <svg
+        viewBox="0 0 24 24"
+        width="24"
+        height="24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        {v}
+      </svg>,
+    ),
+  ]),
+) as Record<IconName, string>;
