@@ -36,6 +36,9 @@ import (
 	"github.com/CrazyDuckLab/DuckOS/internal/vault"
 	"github.com/CrazyDuckLab/DuckOS/internal/wireguard"
 	"github.com/CrazyDuckLab/DuckOS/internal/xray"
+	"github.com/CrazyDuckLab/DuckOS/internal/speedlab"
+	"github.com/CrazyDuckLab/DuckOS/internal/upnp"
+	"github.com/CrazyDuckLab/DuckOS/internal/wake"
 	"github.com/CrazyDuckLab/DuckOS/internal/ztp"
 	"github.com/CrazyDuckLab/DuckOS/pkg/brand"
 	"github.com/CrazyDuckLab/DuckOS/pkg/buildinfo"
@@ -53,6 +56,8 @@ func main() {
 	vaultDir := flag.String("vault-dir", agent.StandardVaultPath+"/records", "Protected Agent secret records")
 	vaultMasterFile := flag.String("vault-master-file", agent.StandardVaultMasterPath, "Private vault master key file")
 	xrayCatalogDir := flag.String("xray-catalog-dir", "/var/lib/duckos-agent/xray", "Xray durable catalog directory (Agent owns writes)")
+	speedlabCatalogDir := flag.String("speedlab-catalog-dir", "/var/lib/duckos-agent/speedlab", "Speed Lab durable catalog directory (Agent owns writes)")
+	speedlabAllowHosts := flag.String("speedlab-allow-hosts", "", "Comma-separated allow-list of hosts the Speed Lab collector may dial; empty refuses every probe (safe default).")
 	frrPathspace := flag.String("frr-pathspace", "duckos", "FRR pathspace used by the DuckOS managed FRR runtime")
 	frrNetNS := flag.String("frr-netns", "", "Optional Linux netns for the DuckOS managed FRR runtime; empty means host netns")
 	frrStateDir := flag.String("frr-state-dir", "/var/lib/duckos-agent/frr", "Durable FRR desired configuration")
@@ -162,6 +167,29 @@ func main() {
 		log.Print("xray service is enabled; server/user/subscription CRUD will be admitted through the loopback")
 	} else {
 		log.Printf("xray service is not enabled: %v", err)
+	}
+	// Speed Lab: bounded Linux collector for latency / HTTP /
+	// throughput probes. The collector refuses every probe
+	// unless the runtimeConfig carry an explicit allowed-host
+	// list (the safe default). The Manager is goroutine-safe;
+	// the Host runs only on linux.
+	if slHost, slErr := enableSpeedLabService(*speedlabCatalogDir, *speedlabAllowHosts, networkAccess); slErr == nil {
+		handler.EnableSpeedLab(slHost)
+		log.Print("speedlab service is enabled; probe Start/Status/Cancel/List will be admitted through the loopback")
+	} else {
+		log.Printf("speedlab service is not enabled: %v", slErr)
+	}
+	if upnpHost, upnpErr := enableUPnPService(networkAccess); upnpErr == nil {
+		handler.EnableUPnP(upnpHost)
+		log.Print("upnp service is enabled; state/networks/mappings will be admitted through the loopback")
+	} else {
+		log.Printf("upnp service is not enabled: %v", upnpErr)
+	}
+	if wakeHost, wakeErr := enableWakeService(networkAccess); wakeErr == nil {
+		handler.EnableWake(wakeHost)
+		log.Print("wake service is enabled; /api/v1/wake/send will be admitted through the loopback")
+	} else {
+		log.Printf("wake service is not enabled: %v", wakeErr)
 	}
 	if frrHost, err := enableFRRService(*frrNetNS, *frrPathspace, *frrStateDir); err == nil {
 		defer frrHost.Close()
@@ -843,6 +871,98 @@ func enableXrayService(catalogDir string, access identityAccess) (*agent.XrayHos
 		return nil, errors.New("xray: startup reconciliation failed")
 	}
 	return host, nil
+}
+
+// enableSpeedLabService wires the production Speed Lab
+// host. The Host wraps the bounded Manager; the Linux
+// collector refuses every probe unless the operator provided
+// an explicit allow-list. Empty allow-list is the safe default.
+func enableSpeedLabService(catalogDir, allowHosts string, access identityAccess) (*agent.SpeedLabHost, error) {
+	if access == nil {
+		return nil, errors.New("speedlab: identity service is required")
+	}
+	if catalogDir == "" {
+		return nil, errors.New("speedlab: durable catalog directory is required")
+	}
+	allowList := splitCSV(allowHosts)
+	// empty allow-list is the safe default — refuse every probe.
+	// A non-empty list opens the SSRF gate to those hosts.
+	linux := speedlab.NewLinuxHost(speedlab.RuntimeConfig{
+		AllowedHosts:  allowList,
+		AllowLoopback: false,
+		AllowPrivate:  false,
+		DialTimeout:   3 * time.Second,
+		TotalTimeout:  speedlab.MaxDuration,
+		UserAgent:     "DuckOS-SpeedLab/1.0",
+	})
+	// The Manager is the in-process store + concurrency gate.
+	mgr := speedlab.NewManager(linux)
+	host := agent.NewSpeedLabHost(mgr, access)
+	return host, nil
+}
+
+// enableUPnPService wires the production UPnP / NAT-PMP /
+// PCP host. The runtime stays OFF by default; the
+// NftablesBackend is the only path that mutates firewall
+// state, and it always writes through the dedicated
+// `inet duckos_upnp` table. If `nft` is missing the
+// production wiring falls back to the fixture backend so
+// the public API renders a clean "backend unavailable"
+// state instead of fake success.
+func enableUPnPService(access identityAccess) (*agent.UPnPHost, error) {
+	if access == nil {
+		return nil, errors.New("upnp: identity service is required")
+	}
+	mgr := upnp.NewManager()
+	var backend upnp.NetworkBackend
+	if b, err := upnp.NewNftablesBackend(""); err == nil {
+		backend = b
+		log.Print("upnp: nftables backend wired (real nft binary)")
+	} else {
+		backend = upnp.NftablesBackendFixture()
+		log.Printf("upnp: nft binary not available (%v); using fixture backend", err)
+	}
+	rt := upnp.NewRuntime(mgr, backend)
+	go rt.Start(context.Background())
+	return agent.NewUPnPHost(rt, access), nil
+}
+
+// enableWakeService wires the production Wake-on-LAN host.
+// The manager enforces a 5-sends/sec rate cap and the IPC
+// always reports PACKET_SENT (never DEVICE_ONLINE) so the
+// public API cannot mislead the operator.
+func enableWakeService(access identityAccess) (*agent.WakeHost, error) {
+	if access == nil {
+		return nil, errors.New("wake: identity service is required")
+	}
+	return agent.NewWakeHost(wake.NewManager(), access), nil
+}
+
+// splitCSV is a tiny CSV parser that trims spaces and drops
+// empty entries.
+func splitCSV(s string) []string {
+	if s == "" {
+		return nil
+	}
+	out := []string{}
+	start := 0
+	for i := 0; i <= len(s); i++ {
+		if i == len(s) || s[i] == ',' {
+			tok := s[start:i]
+			// trim spaces
+			for len(tok) > 0 && (tok[0] == ' ' || tok[0] == '\t') {
+				tok = tok[1:]
+			}
+			for len(tok) > 0 && (tok[len(tok)-1] == ' ' || tok[len(tok)-1] == '\t') {
+				tok = tok[:len(tok)-1]
+			}
+			if tok != "" {
+				out = append(out, tok)
+			}
+			start = i + 1
+		}
+	}
+	return out
 }
 
 // enableFRRService wires the production DV09 path:

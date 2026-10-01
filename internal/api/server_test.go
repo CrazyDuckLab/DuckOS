@@ -154,6 +154,18 @@ func (e *testEngine) XrayProxy(_ context.Context, _, _, token string, _ io.Reade
 	e.lastXRToken = token
 	return 200, []byte(`{"ok":true}`), "application/json", nil
 }
+func (e *testEngine) SpeedLabProxy(_ context.Context, _, _, token string, _ io.Reader) (int, []byte, string, error) {
+	e.lastToken = token
+	return 200, []byte(`{"ok":true}`), "application/json", nil
+}
+func (e *testEngine) UPnPProxy(_ context.Context, _, _, token string, _ io.Reader) (int, []byte, string, error) {
+	e.lastToken = token
+	return 200, []byte(`{"ok":true}`), "application/json", nil
+}
+func (e *testEngine) WakeProxy(_ context.Context, _, _, token string, _ io.Reader) (int, []byte, string, error) {
+	e.lastToken = token
+	return 200, []byte(`{"ok":true}`), "application/json", nil
+}
 func (e *testEngine) UpgradeStage(context.Context, []byte) ([]byte, error) {
 	return []byte(`{"version":1,"result":"staged"}`), nil
 }

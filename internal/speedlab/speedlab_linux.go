@@ -37,26 +37,23 @@ import (
 // allow-list, default timeouts, default client UA. The
 // production wiring reads this from /etc/duckos/speedlab.yaml;
 // tests use newTestHost with an explicit allow-list.
-type runtimeConfig struct {
-	// AllowedHosts is the explicit allow-list. Empty means
-	// the host refuses every probe (safest default). The
-	// allow-list is matched on the URL host (after IDN
-	// decode) or the literal hostname.
-	AllowedHosts []string
-	// AllowPrivate is an opt-in: when true, RFC1918 / ULA
-	// ranges are accepted. Off by default.
-	AllowPrivate bool
-	// AllowLoopback is an opt-in: when true, 127.0.0.0/8
-	// and ::1 are accepted. Off by default.
+// RuntimeConfig is the platform-specific policy. The
+// production wiring reads this from /etc/duckos/speedlab.yaml;
+// tests use a stub. An empty AllowedHosts refuses every
+// probe — the safe default.
+type RuntimeConfig struct {
+	AllowedHosts  []string
+	AllowPrivate  bool
 	AllowLoopback bool
-	// DialTimeout is the per-sample dial deadline.
-	DialTimeout time.Duration
-	// TotalTimeout caps the whole probe. The model already
-	// enforces MaxDuration; this is the platform extra.
-	TotalTimeout time.Duration
-	// UserAgent is the HTTP UA the collector uses.
-	UserAgent string
+	DialTimeout   time.Duration
+	TotalTimeout  time.Duration
+	UserAgent     string
 }
+
+// runtimeConfig is the unexported alias kept for the
+// internal helpers below; it mirrors RuntimeConfig so the
+// file does not need to duplicate field declarations.
+type runtimeConfig = RuntimeConfig
 
 // LinuxHost is the production Host implementation. A nil
 // config falls back to runtimeConfig{} (refuses every probe).

@@ -101,6 +101,25 @@ type Engine interface {
 	// production-path contract. The vault never returns
 	// secret bytes.
 	VaultProxy(ctx context.Context, method, path, token string, body io.Reader) (status int, data []byte, contentType string, err error)
+	// SpeedLabProxy proxies the public /api/v1/speedlab/*
+	// request to the privileged Agent
+	// /agent/v1/speedlab/* IPC. The Speed Lab never opens a
+	// network connection from the public API path; only the
+	// Agent collector is allowed to dial. DV04-SPEEDLAB
+	// production-path contract.
+	SpeedLabProxy(ctx context.Context, method, path, token string, body io.Reader) (status int, data []byte, contentType string, err error)
+	// UPnPProxy proxies the public /api/v1/upnp/* request
+	// to the privileged Agent /agent/v1/upnp/* IPC. The
+	// public API never opens a network listener; only the
+	// Agent is allowed to mutate nftables state. P065
+	// production-path contract.
+	UPnPProxy(ctx context.Context, method, path, token string, body io.Reader) (status int, data []byte, contentType string, err error)
+	// WakeProxy proxies the public /api/v1/wake/* request
+	// to the privileged Agent /agent/v1/wake/* IPC. Wake
+	// never opens a raw socket from the public API path;
+	// only the Agent is allowed to dial UDP/9. P065
+	// production-path contract.
+	WakeProxy(ctx context.Context, method, path, token string, body io.Reader) (status int, data []byte, contentType string, err error)
 }
 type Handler struct {
 	updaterHealthKey []byte
@@ -275,7 +294,7 @@ func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]string{"status": "ok", "schemaVersion": model.SchemaVersion})
 		return
 	}
-	if r.URL.Path != "/api/v1/overview" && r.URL.Path != "/api/v1/ready" && r.URL.Path != "/api/v1/readiness" && r.URL.Path != "/api/v1/doctor" && r.URL.Path != "/api/v1/topology" && r.URL.Path != "/api/v1/multiwan" && r.URL.Path != "/api/v1/qos" && r.URL.Path != "/api/v1/qos/apply" && r.URL.Path != "/api/v1/qos/rollback" && r.URL.Path != "/api/v1/ups" && r.URL.Path != "/api/v1/ups/probe" && r.URL.Path != "/api/v1/migrate" && r.URL.Path != "/api/v1/sites" && r.URL.Path != "/api/v1/wifi" && r.URL.Path != "/api/v1/upgrade" && r.URL.Path != "/api/v1/upgrade/stage" && r.URL.Path != "/api/v1/upgrade/activate" && r.URL.Path != "/api/v1/upgrade/rollback" && r.URL.Path != "/api/v1/backup" && r.URL.Path != "/api/v1/backup/restore" && r.URL.Path != "/api/v1/frr" && r.URL.Path != "/api/v1/frr/apply" && r.URL.Path != "/api/v1/frr/rollback" && r.URL.Path != "/api/v1/ztp/issue" && r.URL.Path != "/api/v1/ztp/redeem" && !strings.HasPrefix(r.URL.Path, "/api/v1/wireguard/") && r.URL.Path != "/api/v1/wireguard" && !strings.HasPrefix(r.URL.Path, "/api/v1/xray/") && r.URL.Path != "/api/v1/xray" && !strings.HasPrefix(r.URL.Path, "/api/v1/vault/") && r.URL.Path != "/api/v1/vault" {
+	if r.URL.Path != "/api/v1/overview" && r.URL.Path != "/api/v1/ready" && r.URL.Path != "/api/v1/readiness" && r.URL.Path != "/api/v1/doctor" && r.URL.Path != "/api/v1/topology" && r.URL.Path != "/api/v1/multiwan" && r.URL.Path != "/api/v1/qos" && r.URL.Path != "/api/v1/qos/apply" && r.URL.Path != "/api/v1/qos/rollback" && r.URL.Path != "/api/v1/ups" && r.URL.Path != "/api/v1/ups/probe" && r.URL.Path != "/api/v1/migrate" && r.URL.Path != "/api/v1/sites" && r.URL.Path != "/api/v1/wifi" && r.URL.Path != "/api/v1/upgrade" && r.URL.Path != "/api/v1/upgrade/stage" && r.URL.Path != "/api/v1/upgrade/activate" && r.URL.Path != "/api/v1/upgrade/rollback" && r.URL.Path != "/api/v1/backup" && r.URL.Path != "/api/v1/backup/restore" && r.URL.Path != "/api/v1/frr" && r.URL.Path != "/api/v1/frr/apply" && r.URL.Path != "/api/v1/frr/rollback" && r.URL.Path != "/api/v1/ztp/issue" && r.URL.Path != "/api/v1/ztp/redeem" && !strings.HasPrefix(r.URL.Path, "/api/v1/wireguard/") && r.URL.Path != "/api/v1/wireguard" && !strings.HasPrefix(r.URL.Path, "/api/v1/xray/") && r.URL.Path != "/api/v1/xray" && !strings.HasPrefix(r.URL.Path, "/api/v1/vault/") && r.URL.Path != "/api/v1/vault" && !strings.HasPrefix(r.URL.Path, "/api/v1/speedlab/") && r.URL.Path != "/api/v1/speedlab" && !strings.HasPrefix(r.URL.Path, "/api/v1/upnp/") && r.URL.Path != "/api/v1/upnp" && !strings.HasPrefix(r.URL.Path, "/api/v1/wake/") && r.URL.Path != "/api/v1/wake" {
 		problem(w, r, 404, errorCategoryFromCode("not_found"), "not_found", "Unknown API operation.")
 		return
 	}
@@ -365,6 +384,30 @@ func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.handleVaultProxy(w, r, identity.ForwardedToken(h.assertionKey, user))
+		return
+	}
+	if strings.HasPrefix(r.URL.Path, "/api/v1/speedlab/") || r.URL.Path == "/api/v1/speedlab" {
+		if h.assertionKey == "" {
+			problem(w, r, 503, errorCategoryFromCode("agent_unavailable"), "agent_unavailable", "Agent assertion key is not configured.")
+			return
+		}
+		h.handleSpeedLabProxy(w, r, identity.ForwardedToken(h.assertionKey, user))
+		return
+	}
+	if strings.HasPrefix(r.URL.Path, "/api/v1/upnp/") || r.URL.Path == "/api/v1/upnp" {
+		if h.assertionKey == "" {
+			problem(w, r, 503, errorCategoryFromCode("agent_unavailable"), "agent_unavailable", "Agent assertion key is not configured.")
+			return
+		}
+		h.handleUPnPProxy(w, r, identity.ForwardedToken(h.assertionKey, user))
+		return
+	}
+	if strings.HasPrefix(r.URL.Path, "/api/v1/wake/") || r.URL.Path == "/api/v1/wake" {
+		if h.assertionKey == "" {
+			problem(w, r, 503, errorCategoryFromCode("agent_unavailable"), "agent_unavailable", "Agent assertion key is not configured.")
+			return
+		}
+		h.handleWakeProxy(w, r, identity.ForwardedToken(h.assertionKey, user))
 		return
 	}
 	if r.URL.Path == "/api/v1/ready" {
@@ -972,6 +1015,120 @@ func (h *Handler) handleVaultProxy(w http.ResponseWriter, r *http.Request, token
 		body = io.LimitReader(r.Body, 16<<10)
 	}
 	status, data, contentType, err := h.engine.VaultProxy(r.Context(), r.Method, r.URL.Path, token, body)
+	if err != nil {
+		problem(w, r, 503, errorCategoryFromCode("agent_unavailable"), "agent_unavailable", err.Error())
+		return
+	}
+	if contentType != "" {
+		w.Header().Set("Content-Type", contentType)
+	} else {
+		w.Header().Set("Content-Type", "application/json")
+	}
+	w.WriteHeader(status)
+	if len(data) > 0 {
+		_, _ = w.Write(data)
+	}
+}
+
+// handleSpeedLabProxy proxies the public /api/v1/speedlab/*
+// request to the privileged Agent /agent/v1/speedlab/* IPC
+// through Engine.SpeedLabProxy.
+//
+// DV04-SPEEDLAB production-path contract:
+//
+//	PUBLIC -> handleSpeedLabProxy -> Engine.SpeedLabProxy
+//	        -> Agent /agent/v1/speedlab/speedlab/v1/* -> SpeedLabHost
+//	        -> speedlab.Manager -> LinuxHost
+//
+// The public API never opens a network connection itself;
+// only the Agent collector is allowed to dial.
+func (h *Handler) handleSpeedLabProxy(w http.ResponseWriter, r *http.Request, token string) {
+	// Bounded body. The speedlab handler re-bounds at 4 KiB;
+	// this guard short-circuits oversized requests at the
+	// public boundary so we do not waste an Agent round-trip.
+	if r.ContentLength > 4<<10 {
+		problem(w, r, 413, errorCategoryFromCode("payload_too_large"), "payload_too_large", "Speed Lab payload exceeds 4 KiB.")
+		return
+	}
+	var body io.Reader
+	if r.Body != nil {
+		body = io.LimitReader(r.Body, 4<<10)
+	}
+	status, data, contentType, err := h.engine.SpeedLabProxy(r.Context(), r.Method, r.URL.Path, token, body)
+	if err != nil {
+		problem(w, r, 503, errorCategoryFromCode("agent_unavailable"), "agent_unavailable", err.Error())
+		return
+	}
+	if contentType != "" {
+		w.Header().Set("Content-Type", contentType)
+	} else {
+		w.Header().Set("Content-Type", "application/json")
+	}
+	w.WriteHeader(status)
+	if len(data) > 0 {
+		_, _ = w.Write(data)
+	}
+}
+
+// handleUPnPProxy proxies the public /api/v1/upnp/* request
+// to the privileged Agent /agent/v1/upnp/* IPC through
+// Engine.UPnPProxy.
+//
+// P065 production-path contract:
+//
+//	PUBLIC -> handleUPnPProxy -> Engine.UPnPProxy
+//	       -> Agent /agent/v1/upnp/upnp/v1/* -> UPnPHost
+//	       -> upnp.Runtime -> NftablesBackend
+//
+// The public API never opens a network listener or
+// mutates nftables; only the Agent is allowed to.
+func (h *Handler) handleUPnPProxy(w http.ResponseWriter, r *http.Request, token string) {
+	if r.ContentLength > 4<<10 {
+		problem(w, r, 413, errorCategoryFromCode("payload_too_large"), "payload_too_large", "UPnP payload exceeds 4 KiB.")
+		return
+	}
+	var body io.Reader
+	if r.Body != nil {
+		body = io.LimitReader(r.Body, 4<<10)
+	}
+	status, data, contentType, err := h.engine.UPnPProxy(r.Context(), r.Method, r.URL.Path, token, body)
+	if err != nil {
+		problem(w, r, 503, errorCategoryFromCode("agent_unavailable"), "agent_unavailable", err.Error())
+		return
+	}
+	if contentType != "" {
+		w.Header().Set("Content-Type", contentType)
+	} else {
+		w.Header().Set("Content-Type", "application/json")
+	}
+	w.WriteHeader(status)
+	if len(data) > 0 {
+		_, _ = w.Write(data)
+	}
+}
+
+// handleWakeProxy proxies the public /api/v1/wake/* request
+// to the privileged Agent /agent/v1/wake/* IPC through
+// Engine.WakeProxy.
+//
+// P065 production-path contract:
+//
+//	PUBLIC -> handleWakeProxy -> Engine.WakeProxy
+//	        -> Agent /agent/v1/wake/wake/v1/* -> WakeHost
+//	        -> wake.Manager -> standard WOL magic packet
+//
+// The public API never opens a raw socket; only the Agent
+// is allowed to dial UDP/9.
+func (h *Handler) handleWakeProxy(w http.ResponseWriter, r *http.Request, token string) {
+	if r.ContentLength > 4<<10 {
+		problem(w, r, 413, errorCategoryFromCode("payload_too_large"), "payload_too_large", "Wake payload exceeds 4 KiB.")
+		return
+	}
+	var body io.Reader
+	if r.Body != nil {
+		body = io.LimitReader(r.Body, 4<<10)
+	}
+	status, data, contentType, err := h.engine.WakeProxy(r.Context(), r.Method, r.URL.Path, token, body)
 	if err != nil {
 		problem(w, r, 503, errorCategoryFromCode("agent_unavailable"), "agent_unavailable", err.Error())
 		return

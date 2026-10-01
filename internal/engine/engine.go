@@ -1008,6 +1008,20 @@ func (e *Engine) WireGuardProxy(ctx context.Context, method, path, token string,
 // rendered base64 subscription URL).
 const XrayMaxBytes = 1 << 20
 
+// SpeedLabMaxBytes is the Engine IPC cap for Speed Lab
+// payloads (ActiveRef + redacted Summary; raw samples never
+// cross the boundary).
+const SpeedLabMaxBytes = 32 << 10
+
+// UPnPMaxBytes is the Engine IPC cap for UPnP / NAT-PMP /
+// PCP payloads (network + mapping envelopes; no nftables
+// staging files cross the boundary).
+const UPnPMaxBytes = 32 << 10
+
+// WakeMaxBytes is the Engine IPC cap for Wake-on-LAN
+// payloads (single WOL result envelope).
+const WakeMaxBytes = 4 << 10
+
 // XrayProxy proxies a public /api/v1/xray/* mutation
 // to the privileged Agent /agent/v1/xray/xray/v1/*
 // IPC.
@@ -1086,6 +1100,126 @@ func (e *Engine) VaultProxy(ctx context.Context, method, path, token string, bod
 	}
 	if len(data) > VaultMaxBytes {
 		return resp.StatusCode, nil, resp.Header.Get("Content-Type"), errors.New("Agent Vault response exceeds size limit")
+	}
+	return resp.StatusCode, data, resp.Header.Get("Content-Type"), nil
+}
+
+// SpeedLabProxy proxies a public /api/v1/speedlab/* request
+// to the privileged Agent /agent/v1/speedlab/* IPC. The
+// Speed Lab never opens a network connection from the public
+// API path; only the Agent collector is allowed to dial.
+//
+// DV04-SPEEDLAB production-path contract:
+//
+//	PUBLIC -> Engine.SpeedLabProxy -> Agent IPC
+//	        -> SpeedLabHost -> speedlab.Manager -> LinuxHost
+func (e *Engine) SpeedLabProxy(ctx context.Context, method, path, token string, body io.Reader) (status int, data []byte, contentType string, err error) {
+	if e == nil {
+		return 0, nil, "", errors.New("engine not configured")
+	}
+	tail := strings.TrimPrefix(path, "/api/v1/speedlab/")
+	if tail == "" {
+		tail = path
+	}
+	target := "http://agent" + agent.SpeedLabPath + "/speedlab/v1/" + strings.TrimPrefix(tail, "/")
+	req, err := http.NewRequestWithContext(ctx, method, target, body)
+	if err != nil {
+		return 0, nil, "", err
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := e.client.Do(req)
+	if err != nil {
+		return 0, nil, "", errors.New("Agent is unavailable")
+	}
+	defer resp.Body.Close()
+	data, err = io.ReadAll(io.LimitReader(resp.Body, SpeedLabMaxBytes+1))
+	if err != nil {
+		return resp.StatusCode, nil, resp.Header.Get("Content-Type"), errors.New("Agent Speed Lab response read failed")
+	}
+	if len(data) > SpeedLabMaxBytes {
+		return resp.StatusCode, nil, resp.Header.Get("Content-Type"), errors.New("Agent Speed Lab response exceeds size limit")
+	}
+	return resp.StatusCode, data, resp.Header.Get("Content-Type"), nil
+}
+
+// UPnPProxy proxies a public /api/v1/upnp/* request to the
+// privileged Agent /agent/v1/upnp/* IPC. The public API
+// never opens a network listener; only the Agent is allowed
+// to mutate nftables state.
+//
+// P065 production-path contract:
+//
+//	PUBLIC -> Engine.UPnPProxy -> Agent IPC
+//	       -> UPnPHost -> upnp.Runtime -> NftablesBackend
+func (e *Engine) UPnPProxy(ctx context.Context, method, path, token string, body io.Reader) (status int, data []byte, contentType string, err error) {
+	if e == nil {
+		return 0, nil, "", errors.New("engine not configured")
+	}
+	tail := strings.TrimPrefix(path, "/api/v1/upnp/")
+	if tail == "" {
+		tail = path
+	}
+	target := "http://agent" + agent.UPnPPath + "/upnp/v1/" + strings.TrimPrefix(tail, "/")
+	req, err := http.NewRequestWithContext(ctx, method, target, body)
+	if err != nil {
+		return 0, nil, "", err
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := e.client.Do(req)
+	if err != nil {
+		return 0, nil, "", errors.New("Agent is unavailable")
+	}
+	defer resp.Body.Close()
+	data, err = io.ReadAll(io.LimitReader(resp.Body, UPnPMaxBytes+1))
+	if err != nil {
+		return resp.StatusCode, nil, resp.Header.Get("Content-Type"), errors.New("Agent UPnP response read failed")
+	}
+	if len(data) > UPnPMaxBytes {
+		return resp.StatusCode, nil, resp.Header.Get("Content-Type"), errors.New("Agent UPnP response exceeds size limit")
+	}
+	return resp.StatusCode, data, resp.Header.Get("Content-Type"), nil
+}
+
+// WakeProxy proxies a public /api/v1/wake/* request to the
+// privileged Agent /agent/v1/wake/* IPC. Wake never opens a
+// raw socket from the public API path; only the Agent is
+// allowed to dial UDP/9 to send magic packets.
+//
+// P065 production-path contract:
+//
+//	PUBLIC -> Engine.WakeProxy -> Agent IPC
+//	        -> WakeHost -> wake.Manager -> standard WOL packet
+func (e *Engine) WakeProxy(ctx context.Context, method, path, token string, body io.Reader) (status int, data []byte, contentType string, err error) {
+	if e == nil {
+		return 0, nil, "", errors.New("engine not configured")
+	}
+	tail := strings.TrimPrefix(path, "/api/v1/wake/")
+	if tail == "" {
+		tail = path
+	}
+	target := "http://agent" + agent.WakePath + "/wake/v1/" + strings.TrimPrefix(tail, "/")
+	req, err := http.NewRequestWithContext(ctx, method, target, body)
+	if err != nil {
+		return 0, nil, "", err
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := e.client.Do(req)
+	if err != nil {
+		return 0, nil, "", errors.New("Agent is unavailable")
+	}
+	defer resp.Body.Close()
+	data, err = io.ReadAll(io.LimitReader(resp.Body, WakeMaxBytes+1))
+	if err != nil {
+		return resp.StatusCode, nil, resp.Header.Get("Content-Type"), errors.New("Agent Wake response read failed")
+	}
+	if len(data) > WakeMaxBytes {
+		return resp.StatusCode, nil, resp.Header.Get("Content-Type"), errors.New("Agent Wake response exceeds size limit")
 	}
 	return resp.StatusCode, data, resp.Header.Get("Content-Type"), nil
 }

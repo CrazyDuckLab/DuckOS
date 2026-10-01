@@ -28,25 +28,10 @@ import (
 	"time"
 )
 
-// NetworkBackend is the firewall / nftables side of the
-// runtime. The runtime decides when to call Add / Remove; the
-// backend is responsible for actually changing the kernel /
-// nftables state. Production wiring uses
-// NftablesBackend (nft integration); tests use a no-op.
-type NetworkBackend interface {
-	// Add installs a mapping. If the backend cannot install
-	// the mapping, it returns an explicit error and the
-	// runtime MUST roll back the Manager state.
-	Add(m Mapping) error
-	// Remove removes a mapping. A Remove failure is logged
-	// but does not block the runtime's clean-up cycle.
-	Remove(id string) error
-	// WanListener refuses to bind a UPnP / NAT-PMP / PCP
-	// listener on a WAN address. The default implementation
-	// rejects any non-private address; production may
-	// extend this to consult the firewall zone table.
-	AllowListen(iface string, addr net.Addr) bool
-}
+// NetworkBackend is defined cross-platform in upnp.go so
+// the Agent and API packages can refer to it from non-linux
+// builds. The Linux runtime in this file consumes the same
+// interface.
 
 // MappingEvent is one event on the mapping channel. The
 // public API exposes a filtered view; the channel is for
@@ -243,13 +228,9 @@ func (r *Runtime) Stats() RuntimeStats {
 	}
 }
 
-// RuntimeStats is the small public summary.
-type RuntimeStats struct {
-	Networks   int       `json:"networks"`
-	Mappings   int       `json:"mappings"`
-	ObservedAt time.Time `json:"observedAt"`
-	Stopped    bool      `json:"stopped"`
-}
+// RuntimeStats is defined cross-platform in upnp.go so
+// the Agent and API packages can reference it from
+// non-linux builds. The Stats() method is here.
 
 // findNetwork returns a copy of the network entry or nil.
 func (r *Runtime) findNetwork(ref string) *Network {

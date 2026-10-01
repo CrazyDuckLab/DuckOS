@@ -9,6 +9,7 @@ package upnp
 
 import (
 	"errors"
+	"net"
 	"regexp"
 	"sort"
 	"sync"
@@ -188,3 +189,101 @@ func (m *Manager) Networks() []Network {
 	sort.Slice(out, func(i, j int) bool { return out[i].NetworkRef < out[j].NetworkRef })
 	return out
 }
+
+// RuntimeStats is the small public summary returned by
+// Runtime.Stats. The struct is platform-independent so
+// agent and API packages can refer to it from darwin
+// builds without depending on the runtime's linux-only
+// methods.
+type RuntimeStats struct {
+	Networks   int       `json:"networks"`
+	Mappings   int       `json:"mappings"`
+	ObservedAt time.Time `json:"observedAt"`
+	Stopped    bool      `json:"stopped"`
+}
+
+// NetworkBackend is the firewall / nftables side of the
+// runtime. The runtime decides when to call Add / Remove;
+// the backend is responsible for actually changing the
+// kernel / nftables state. Production wiring uses
+// NftablesBackend (nft integration, linux); tests use a
+// no-op. The interface lives in the cross-platform file so
+// the agent can refer to it from any build target.
+type NetworkBackend interface {
+	Add(m Mapping) error
+	Remove(id string) error
+	AllowListen(iface string, addr net.Addr) bool
+}
+
+// RuntimeStub is a cross-platform stub that satisfies the
+// runtime contract used by the agent and API layers. It is
+// available on every build so the agent package compiles
+// on darwin; production wiring uses the linux Runtime.
+type RuntimeStub struct {
+	mgr     *Manager
+	backend NetworkBackend
+}
+
+// NewRuntimeStub returns an in-process stub that records
+// the manager and backend without performing any
+// platform-specific work. Tests use this to drive the
+// agent and API layers from non-linux hosts.
+func NewRuntimeStub(mgr *Manager, backend NetworkBackend) *RuntimeStub {
+	if mgr == nil {
+		mgr = NewManager()
+	}
+	if backend == nil {
+		backend = noopBackendCross{}
+	}
+	return &RuntimeStub{mgr: mgr, backend: backend}
+}
+
+// EnableNetwork is the stub equivalent of the linux
+// Runtime's method. The iface argument is ignored in the
+// stub; the linux runtime forwards it to the backend.
+func (r *RuntimeStub) EnableNetwork(n Network, iface string) error {
+	if err := n.Valid(); err != nil {
+		return err
+	}
+	if !r.backend.AllowListen(iface, nil) {
+		return errors.New("upnp: stub backend refuses all interfaces")
+	}
+	return r.mgr.EnableNetwork(n)
+}
+
+// DisableNetwork is the stub equivalent.
+func (r *RuntimeStub) DisableNetwork(ref string) {
+	r.mgr.DisableNetwork(ref)
+}
+
+// Networks is the stub equivalent.
+func (r *RuntimeStub) Networks() []Network { return r.mgr.Networks() }
+
+// Mappings is the stub equivalent.
+func (r *RuntimeStub) Mappings() []Mapping { return r.mgr.Mappings() }
+
+// RevokeMapping is the stub equivalent.
+func (r *RuntimeStub) RevokeMapping(id string) {
+	r.mgr.RevokeMapping(id)
+}
+
+// Stats is the stub equivalent.
+func (r *RuntimeStub) Stats() RuntimeStats { return RuntimeStats{Networks: len(r.mgr.networks), Mappings: len(r.mgr.mappings)} }
+
+// Compile-time interface check.
+var _ interface {
+	EnableNetwork(n Network, iface string) error
+	DisableNetwork(ref string)
+	Networks() []Network
+	Mappings() []Mapping
+	RevokeMapping(id string)
+	Stats() RuntimeStats
+} = (*RuntimeStub)(nil)
+
+// noopBackendCross is the test / default backend available
+// on every build target.
+type noopBackendCross struct{}
+
+func (noopBackendCross) Add(Mapping) error                { return nil }
+func (noopBackendCross) Remove(string) error              { return nil }
+func (noopBackendCross) AllowListen(string, net.Addr) bool { return false }

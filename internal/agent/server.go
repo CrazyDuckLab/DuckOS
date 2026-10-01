@@ -42,6 +42,9 @@ type Handler struct {
 	wireguard *WireguardHost
 	xray      *XrayHost
 	vault     *VaultHost
+	speedlab  *SpeedLabHost
+	upnp      *UPnPHost
+	wake      *WakeHost
 	frr       *FRRHost
 	slots     chan struct{}
 	network   *NetworkService
@@ -237,6 +240,34 @@ func (h *Handler) EnableVault(host *VaultHost) {
 	h.vault = host
 }
 
+// EnableSpeedLab registers the production Speed Lab host.
+// The host owns the Manager + the bounded Linux collector;
+// the loopback IPC dispatches every request through the
+// authorization gate (ManageSecrets for Start / Cancel;
+// Observe for List / Status) before the underlying
+// speedlab.Manager runs.
+func (h *Handler) EnableSpeedLab(host *SpeedLabHost) {
+	h.speedlab = host
+}
+
+// EnableUPnP registers the production UPnP / NAT-PMP / PCP
+// host. The host owns the runtime; the loopback IPC
+// dispatches every request through the authorization gate
+// (ManageServices for enable/disable/revoke, Observe for
+// state). The runtime stays OFF by default.
+func (h *Handler) EnableUPnP(host *UPnPHost) {
+	h.upnp = host
+}
+
+// EnableWake registers the production Wake-on-LAN host.
+// The host owns the bounded manager; the loopback IPC
+// dispatches every request through the authorization gate
+// (ManageServices) so a stale session cannot spam magic
+// packets.
+func (h *Handler) EnableWake(host *WakeHost) {
+	h.wake = host
+}
+
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
@@ -382,6 +413,30 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.vault.ServeHTTP(w, r)
+		return
+	}
+	if strings.HasPrefix(r.URL.EscapedPath(), SpeedLabPath) {
+		if h.speedlab == nil {
+			NewSpeedLabHost(nil, nil).ServeHTTP(w, r)
+			return
+		}
+		h.speedlab.ServeHTTP(w, r)
+		return
+	}
+	if strings.HasPrefix(r.URL.EscapedPath(), UPnPPath) {
+		if h.upnp == nil {
+			NewUPnPHost(nil, nil).ServeHTTP(w, r)
+			return
+		}
+		h.upnp.ServeHTTP(w, r)
+		return
+	}
+	if strings.HasPrefix(r.URL.EscapedPath(), WakePath) {
+		if h.wake == nil {
+			NewWakeHost(nil, nil).ServeHTTP(w, r)
+			return
+		}
+		h.wake.ServeHTTP(w, r)
 		return
 	}
 	if r.URL.EscapedPath() != OverviewPath {
