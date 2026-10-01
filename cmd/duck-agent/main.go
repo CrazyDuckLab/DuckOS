@@ -905,10 +905,18 @@ func enableSpeedLabService(catalogDir, allowHosts string, access identityAccess)
 // PCP host. The runtime stays OFF by default; the
 // NftablesBackend is the only path that mutates firewall
 // state, and it always writes through the dedicated
-// `inet duckos_upnp` table. If `nft` is missing the
-// production wiring falls back to the fixture backend so
+// `inet duckos_upnp` table.
+//
+// When `nft` is missing the wiring selects the production
+// UnavailableBackend — NOT the test-only fixture, which is
+// strictly package-private. The runtime stays consistent and
 // the public API renders a clean "backend unavailable"
-// state instead of fake success.
+// state instead of fake success; every Add / EnableNetwork
+// returns ErrBackendUnavailable and the Manager state is
+// rolled back. A separate test
+// (TestProductionUPnPWiringNeverSelectsFixture) fails the
+// build if the fixture is ever referenced from production
+// wiring again.
 func enableUPnPService(access identityAccess) (*agent.UPnPHost, error) {
 	if access == nil {
 		return nil, errors.New("upnp: identity service is required")
@@ -919,8 +927,11 @@ func enableUPnPService(access identityAccess) (*agent.UPnPHost, error) {
 		backend = b
 		log.Print("upnp: nftables backend wired (real nft binary)")
 	} else {
-		backend = upnp.NftablesBackendFixture()
-		log.Printf("upnp: nft binary not available (%v); using fixture backend", err)
+		backend = upnp.NewUnavailableBackend(
+			"nft-binary-missing",
+			err.Error(),
+		)
+		log.Printf("upnp: nft binary not available (%v); runtime is wired to UnavailableBackend so the UI shows 'backend unavailable'", err)
 	}
 	rt := upnp.NewRuntime(mgr, backend)
 	go rt.Start(context.Background())

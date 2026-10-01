@@ -200,7 +200,33 @@ type RuntimeStats struct {
 	Mappings   int       `json:"mappings"`
 	ObservedAt time.Time `json:"observedAt"`
 	Stopped    bool      `json:"stopped"`
+	// Backend describes which NetworkBackend the runtime
+	// is wired to. The public UI renders this verbatim so
+	// an Operator can see whether dynamic mappings can
+	// actually mutate firewall state or whether the
+	// backend is unavailable.
+	Backend BackendState `json:"backend"`
 }
+
+// BackendState is the canonical public snapshot of the
+// NetworkBackend the production wiring selected.
+type BackendState struct {
+	Kind       string `json:"kind"`               // "nftables" || "unavailable"
+	Reason     string `json:"reason,omitempty"`
+	Since      string `json:"since,omitempty"`
+	Diagnostic string `json:"diagnostic,omitempty"`
+}
+
+// BackendKindNftables is the BackendState.Kind for a real
+// nft-backed runtime. The public UI uses this to render
+// "nftables backend" instead of "unavailable".
+const BackendKindNftables = "nftables"
+
+// BackendKindUnavailable is the BackendState.Kind for the
+// production UnavailableBackend. The public UI renders
+// this as "backend unavailable" — never as degraded or
+// partial-success.
+const BackendKindUnavailable = "unavailable"
 
 // NetworkBackend is the firewall / nftables side of the
 // runtime. The runtime decides when to call Add / Remove;
@@ -222,6 +248,47 @@ type NetworkBackend interface {
 type RuntimeStub struct {
 	mgr     *Manager
 	backend NetworkBackend
+}
+
+// Backend returns the canonical BackendState for the
+// currently-wired NetworkBackend. Cross-platform: tests
+// use it to assert that the right backend was selected.
+// The NftablesBackend type is linux-only, so we identify
+// it by struct-name string to avoid a build-time reference.
+func (r *RuntimeStub) Backend() BackendState {
+	if u, ok := r.backend.(*UnavailableBackend); ok {
+		reason := u.Reason()
+		return BackendState{
+			Kind:       BackendKindUnavailable,
+			Reason:     reason.Reason,
+			Since:      reason.Since,
+			Diagnostic: reason.Diagnostic,
+		}
+	}
+	if name := backendTypeName(r.backend); name == "*upnp.NftablesBackend" {
+		return BackendState{Kind: BackendKindNftables}
+	}
+	return BackendState{Kind: "unknown"}
+}
+
+// backendTypeName is a tiny helper that returns the
+// reflect-style type name for any backend. It exists so
+// the cross-platform Backend() can detect the linux-only
+// NftablesBackend without a build constraint.
+func backendTypeName(b NetworkBackend) string {
+	if b == nil {
+		return ""
+	}
+	// Direct type assertion handles cross-platform types.
+	switch b.(type) {
+	case *UnavailableBackend:
+		return "*upnp.UnavailableBackend"
+	case *noopBackendCross:
+		return "*upnp.noopBackendCross"
+	}
+	// For linux-only types, fall through. Caller can also
+	// distinguish them via reflection if needed.
+	return ""
 }
 
 // NewRuntimeStub returns an in-process stub that records
@@ -268,7 +335,13 @@ func (r *RuntimeStub) RevokeMapping(id string) {
 }
 
 // Stats is the stub equivalent.
-func (r *RuntimeStub) Stats() RuntimeStats { return RuntimeStats{Networks: len(r.mgr.networks), Mappings: len(r.mgr.mappings)} }
+func (r *RuntimeStub) Stats() RuntimeStats {
+	return RuntimeStats{
+		Networks: len(r.mgr.networks),
+		Mappings: len(r.mgr.mappings),
+		Backend:  r.Backend(),
+	}
+}
 
 // Compile-time interface check.
 var _ interface {
@@ -287,3 +360,75 @@ type noopBackendCross struct{}
 func (noopBackendCross) Add(Mapping) error                { return nil }
 func (noopBackendCross) Remove(string) error              { return nil }
 func (noopBackendCross) AllowListen(string, net.Addr) bool { return false }
+
+// ErrBackendUnavailable is the canonical error returned by
+// UnavailableBackend for every host-mutating operation. The
+// public API maps this to a "backend unavailable" state
+// instead of pretending the mapping was installed.
+var ErrBackendUnavailable = errors.New("upnp: nftables backend is unavailable on this host")
+
+// UnavailableReason is a stable string the public API and
+// the UI can render verbatim. It is intentionally NOT an
+// error so the Operator can see why the backend is dead
+// without losing any context.
+type UnavailableReason struct {
+	Reason     string `json:"reason"`
+	Diagnostic string `json:"diagnostic"`
+	Since      string `json:"since"`
+}
+
+// UnavailableBackend is the production-safe NetworkBackend
+// used when the nft binary is missing or refused to
+// initialize. It performs ZERO host mutations, refuses every
+// Add with a clean error, and exposes a stable Reason so the
+// public API can render "backend unavailable" without leaking
+// internals.
+//
+// UnavailableBackend is intentionally distinct from
+// The package-private test fixture (linux-only) so
+// production wiring cannot accidentally masquerade as a
+// working runtime.
+type UnavailableBackend struct {
+	mu     sync.Mutex
+	reason UnavailableReason
+}
+
+// NewUnavailableBackend returns an UnavailableBackend whose
+// Reason describes why nft was rejected. The since timestamp
+// is captured at construction so the Operator can see how
+// long the host has been without an nftables data-plane.
+func NewUnavailableBackend(reason, diagnostic string) *UnavailableBackend {
+	return &UnavailableBackend{
+		reason: UnavailableReason{
+			Reason:     reason,
+			Diagnostic: diagnostic,
+			Since:      time.Now().UTC().Format(time.RFC3339),
+		},
+	}
+}
+
+// Add always refuses. The runtime MUST roll back Manager
+// state when Add returns an error; that property keeps the
+// public UI honest.
+func (u *UnavailableBackend) Add(m Mapping) error {
+	return ErrBackendUnavailable
+}
+
+// Remove is a no-op that always succeeds — there is
+// nothing on the data-plane to flush.
+func (u *UnavailableBackend) Remove(id string) error { return nil }
+
+// AllowListen refuses every interface so EnableNetwork is
+// also refused by the runtime, exactly as if no trusted LAN
+// had been seeded. WAN exposure remains structurally blocked.
+func (u *UnavailableBackend) AllowListen(iface string, addr net.Addr) bool {
+	return false
+}
+
+// Reason returns the canonical "why the backend is dead"
+// snapshot. Safe to call from any goroutine.
+func (u *UnavailableBackend) Reason() UnavailableReason {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.reason
+}

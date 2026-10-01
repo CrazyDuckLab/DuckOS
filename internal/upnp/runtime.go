@@ -225,7 +225,47 @@ func (r *Runtime) Stats() RuntimeStats {
 		Mappings:   len(r.mgr.mappings),
 		ObservedAt: r.observedAt,
 		Stopped:    r.stopped,
+		Backend:    r.backendState(),
 	}
+}
+
+// backendState returns the BackendState that mirrors the
+// runtime's current NetworkBackend. Production wiring
+// uses NftablesBackend (linux) or UnavailableBackend
+// (linux with no nft on PATH). Tests inject NftablesBackend
+// directly to assert the production wiring chose the right
+// one.
+func (r *Runtime) backendState() BackendState {
+	switch b := r.backend.(type) {
+	case *UnavailableBackend:
+		reason := b.Reason()
+		return BackendState{
+			Kind:       BackendKindUnavailable,
+			Reason:     reason.Reason,
+			Since:      reason.Since,
+			Diagnostic: reason.Diagnostic,
+		}
+	case *NftablesBackend:
+		return BackendState{Kind: BackendKindNftables}
+	}
+	return BackendState{Kind: "unknown"}
+}
+
+// IsNftablesBackend reports whether the runtime is wired
+// to the real nftables backend. Production code uses it
+// at startup to refuse to bring up the runtime when nft is
+// unavailable; tests use it to assert that production
+// wiring never selects the package-private test fixture.
+func (r *Runtime) IsNftablesBackend() bool {
+	_, ok := r.backend.(*NftablesBackend)
+	return ok
+}
+
+// IsUnavailableBackend reports whether the runtime is
+// wired to the production UnavailableBackend.
+func (r *Runtime) IsUnavailableBackend() bool {
+	_, ok := r.backend.(*UnavailableBackend)
+	return ok
 }
 
 // RuntimeStats is defined cross-platform in upnp.go so

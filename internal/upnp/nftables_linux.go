@@ -90,15 +90,15 @@ func NewNftablesBackendTrusted(stagingDir string, trusted []string) (*NftablesBa
 	return b, nil
 }
 
-// NftablesBackendFixture returns a backend that never touches
-// the host. It is used by the test suite and by the
-// production wiring when nft is not installed (the runtime
-// stays consistent and the public API renders
-// "backend unavailable" rather than fake success).
-//
-// Records every Add / Remove call so tests can assert the
-// lifecycle without depending on `nft`.
-func NftablesBackendFixture() *NftablesBackend {
+// nftablesBackendFixture is a package-private test helper.
+// It lives in nftables_linux.go so the test suite can
+// drive the runtime without a real nft binary, but it is
+// strictly lower-case so production code outside this
+// package cannot import it. The no_fixture_in_production
+// test additionally guards against accidental references
+// from cmd/, internal/agent, internal/api or
+// internal/engine.
+func nftablesBackendFixture() *NftablesBackend {
 	return &NftablesBackend{
 		binPath:      "/bin/true",
 		stagingDir:   filepath.Join(os.TempDir(), "duckos-upnp-test"),
@@ -186,6 +186,10 @@ func (n *NftablesBackend) AllowListen(iface string, addr net.Addr) bool {
 // WanRefusedErr returns the canonical WAN-refusal error so
 // callers can use errors.Is.
 func WanRefusedErr() error { return WanRefused }
+
+// UnavailableBackend + ErrBackendUnavailable + UnavailableReason
+// live in the cross-platform file (upnp.go) so the Agent and
+// API packages can refer to them from darwin builds.
 
 // renderMapping produces a minimal nftables snippet that
 // installs one DNAT rule for the dynamic mapping. The full
