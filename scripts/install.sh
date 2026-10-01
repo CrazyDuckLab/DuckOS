@@ -169,11 +169,17 @@ install_xray_backend() {
 
   # Smoke test: refuse to leave a half-installed backend. The
   # runtime expects the binary to honour `xray version`.
-  # DUCKOS_INSTALL_SKIP_SMOKE escapes the smoke test for unit
-  # tests whose harness cannot write /usr/local/bin/xray. The
-  # production install never sets this flag, so the smoke test
-  # is mandatory on every real install.
-  if [[ -z "${DUCKOS_INSTALL_SKIP_SMOKE:-}" ]]; then
+  # DUCKOS_INSTALL_SKIP_SMOKE alone is NOT enough to escape
+  # the smoke test. The flag is honoured ONLY when the
+  # install is running inside a recognised test harness
+  # (DUCKOS_INSTALL_TEST_HARNESS=1 set by the test driver).
+  # Production installers never set either flag, so the
+  # smoke test is mandatory on every real install.
+  local skip_smoke=0
+  if [[ -n "${DUCKOS_INSTALL_SKIP_SMOKE:-}" && "${DUCKOS_INSTALL_TEST_HARNESS:-}" == "1" ]]; then
+    skip_smoke=1
+  fi
+  if [[ $skip_smoke -eq 0 ]]; then
     if ! command -v /usr/local/bin/xray >/dev/null 2>&1; then
       printf 'xray backend install: /usr/local/bin/xray not on PATH after install.\n' >&2
       return 1

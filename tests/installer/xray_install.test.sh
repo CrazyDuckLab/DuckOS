@@ -230,6 +230,7 @@ for arch_pair in "amd64:Xray-linux-64:amd64" "armv7:Xray-linux-arm32-v7a:armhf" 
   R=$(fake_release "$arch")
   patch_for_release "$R"
   export DUCKOS_TEST_ARCH=$dpkg_arch
+  export DUCKOS_INSTALL_TEST_HARNESS=1
   export DUCKOS_INSTALL_SKIP_SMOKE=1
   # The smoke test (command -v /usr/local/bin/xray; xray version)
   # requires writing into real /usr/local/bin which a non-root test
@@ -264,6 +265,7 @@ R_V2=$(fake_release amd64)
 V2_SHA=$(awk '{print $1}' "$R_V2/xray-core/XRAY_CORE_SHA256SUMS")
 patch_for_release "$R_V1"
 export DUCKOS_TEST_ARCH=amd64
+export DUCKOS_INSTALL_TEST_HARNESS=1
 export DUCKOS_INSTALL_SKIP_SMOKE=1
 install_xray_backend "$R_V1" >/dev/null 2>&1
 patch_for_release "$R_V2"
