@@ -34,6 +34,7 @@ type testEngine struct {
 	xrayCalls   int
 	lastWGToken string
 	lastXRToken string
+	lastToken   string
 }
 
 func (e *testEngine) Overview(context.Context) ([]byte, error) {
@@ -152,6 +153,10 @@ func (e *testEngine) WireGuardProxy(_ context.Context, _, _, token string, _ io.
 func (e *testEngine) XrayProxy(_ context.Context, _, _, token string, _ io.Reader) (int, []byte, string, error) {
 	e.xrayCalls++
 	e.lastXRToken = token
+	return 200, []byte(`{"ok":true}`), "application/json", nil
+}
+func (e *testEngine) VaultProxy(_ context.Context, _, _, token string, _ io.Reader) (int, []byte, string, error) {
+	e.lastToken = token
 	return 200, []byte(`{"ok":true}`), "application/json", nil
 }
 func (e *testEngine) SpeedLabProxy(_ context.Context, _, _, token string, _ io.Reader) (int, []byte, string, error) {
