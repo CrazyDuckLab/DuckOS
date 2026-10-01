@@ -21,6 +21,8 @@ import {
 import {
   TopologyPage,
 } from "./Concrete";
+import { SpeedLabPage } from "./SpeedLabPage";
+import { ServiceDiscoveryPage } from "./ServiceDiscoveryPage";
 import {
   EasyHomePage,
   EasyInternetPage,
@@ -378,13 +380,20 @@ export function PagesRouter({
     case "P062":
     case "P063":
     case "P064":
-    case "P065":
     case "P066":
       return (
         <ServicesSubareaStub
           page={page}
           bundle={bundle}
           spec={ServicesSubareaSpecs[page.id] ?? { columns: [], endpoint: "" }}
+        />
+      );
+    case "P065":
+      return (
+        <ServiceDiscoveryPage
+          page={page}
+          bundle={bundle as unknown as Record<string, unknown>}
+          client={client}
         />
       );
 
@@ -401,7 +410,6 @@ export function PagesRouter({
     case "P085":
     case "P086":
     case "P088":
-    case "P090":
     case "P092":
       return (
         <LogsSubareaStub
@@ -410,6 +418,8 @@ export function PagesRouter({
           spec={LogsSubareaSpecs[page.id] ?? { columns: [], endpoint: "" }}
         />
       );
+    case "P090":
+      return <SpeedLabPage page={page} bundle={bundle as unknown as Record<string, unknown>} client={client} />;
 
     /* — Easy mode (v3) — */
     case "P094":

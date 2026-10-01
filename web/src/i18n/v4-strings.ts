@@ -344,6 +344,91 @@ interface V4 {
   "v4.since": string;
   "v4.units.bytes": (n: number) => string;
   "v4.units.percent": (n: number) => string;
+
+  /* Speed Lab (P090) */
+  "speedlab.title": string;
+  "speedlab.subtitle": string;
+  "speedlab.newProbe": string;
+  "speedlab.kind": string;
+  "speedlab.kindLatency": string;
+  "speedlab.kindHttp": string;
+  "speedlab.kindThroughput": string;
+  "speedlab.host": string;
+  "speedlab.port": string;
+  "speedlab.url": string;
+  "speedlab.duration": string;
+  "speedlab.samples": string;
+  "speedlab.label": string;
+  "speedlab.start": string;
+  "speedlab.cancel": string;
+  "speedlab.state": string;
+  "speedlab.stateIdle": string;
+  "speedlab.stateRunning": string;
+  "speedlab.stateCompleted": string;
+  "speedlab.stateFailed": string;
+  "speedlab.stateCancelled": string;
+  "speedlab.results": string;
+  "speedlab.resultSamples": string;
+  "speedlab.resultMin": string;
+  "speedlab.resultAvg": string;
+  "speedlab.resultMax": string;
+  "speedlab.resultP50": string;
+  "speedlab.resultP95": string;
+  "speedlab.resultP99": string;
+  "speedlab.resultBytes": string;
+  "speedlab.resultSeconds": string;
+  "speedlab.resultBps": string;
+  "speedlab.resultMbps": string;
+  "speedlab.caveat": string;
+  "speedlab.emptyState": string;
+  "speedlab.colMetric": string;
+  "speedlab.colValue": string;
+  "speedlab.colCaveat": string;
+  "speedlab.invalidUrl": string;
+  "speedlab.hostRequired": string;
+  "speedlab.portRequired": string;
+  "speedlab.probeId": string;
+  "speedlab.startedAt": string;
+  "speedlab.finishedAt": string;
+  "speedlab.notPing": string;
+
+  /* UPnP / NAT-PMP / PCP / Wake (P065) */
+  "upnp.title": string;
+  "upnp.subtitle": string;
+  "upnp.serviceStatus": string;
+  "upnp.protocolUpnp": string;
+  "upnp.protocolNatpmp": string;
+  "upnp.protocolPcp": string;
+  "upnp.protocolWake": string;
+  "upnp.serviceOff": string;
+  "upnp.serviceOn": string;
+  "upnp.trustedNetworks": string;
+  "upnp.activeMappings": string;
+  "upnp.wakeAction": string;
+  "upnp.enable": string;
+  "upnp.disable": string;
+  "upnp.revoke": string;
+  "upnp.wake": string;
+  "upnp.wakeMac": string;
+  "upnp.wakeNetwork": string;
+  "upnp.wakeSent": string;
+  "upnp.warning": string;
+  "upnp.mappingProtocol": string;
+  "upnp.mappingClient": string;
+  "upnp.mappingExternalPort": string;
+  "upnp.mappingInternal": string;
+  "upnp.mappingAge": string;
+  "upnp.mappingExpires": string;
+  "upnp.mappingSource": string;
+  "upnp.protocolsLabel": string;
+  "upnp.ttlLabel": string;
+  "upnp.allowListLabel": string;
+  "upnp.runtimeState": string;
+  "upnp.disabledByChoice": string;
+  "upnp.noMappings": string;
+  "upnp.macInvalid": string;
+  "upnp.sendWake": string;
+  "upnp.notOnline": string;
 }
 
 const en: V4Bundle = {
@@ -776,6 +861,91 @@ const en: V4Bundle = {
   "v4.since": "since",
   "v4.units.bytes": (n: number) => formatBytes(n),
   "v4.units.percent": (n: number) => `${Math.round(n)}%`,
+
+  /* Speed Lab (P090) */
+  "speedlab.title": "Duck Speed Lab",
+  "speedlab.subtitle": "Bounded latency, HTTP, and throughput probes against an allow-listed target set. Each probe is sandboxed by the Agent.",
+  "speedlab.newProbe": "New probe",
+  "speedlab.kind": "Probe type",
+  "speedlab.kindLatency": "Latency (TCP handshake RTT)",
+  "speedlab.kindHttp": "HTTP (HEAD RTT)",
+  "speedlab.kindThroughput": "Throughput (HTTP GET body)",
+  "speedlab.host": "Host",
+  "speedlab.port": "Port",
+  "speedlab.url": "URL",
+  "speedlab.duration": "Duration (seconds, 1–30)",
+  "speedlab.samples": "Sample limit (1–1024)",
+  "speedlab.label": "Label (optional)",
+  "speedlab.start": "Start",
+  "speedlab.cancel": "Cancel",
+  "speedlab.state": "State",
+  "speedlab.stateIdle": "Idle",
+  "speedlab.stateRunning": "Running",
+  "speedlab.stateCompleted": "Completed",
+  "speedlab.stateFailed": "Failed",
+  "speedlab.stateCancelled": "Cancelled",
+  "speedlab.results": "Results",
+  "speedlab.resultSamples": "Samples",
+  "speedlab.resultMin": "Min",
+  "speedlab.resultAvg": "Average",
+  "speedlab.resultMax": "Max",
+  "speedlab.resultP50": "p50",
+  "speedlab.resultP95": "p95",
+  "speedlab.resultP99": "p99",
+  "speedlab.resultBytes": "Bytes transferred",
+  "speedlab.resultSeconds": "Elapsed (seconds)",
+  "speedlab.resultBps": "Throughput (bytes/sec)",
+  "speedlab.resultMbps": "Throughput (Mbps)",
+  "speedlab.caveat": "This is the throughput to the configured target, not Internet bandwidth.",
+  "speedlab.emptyState": "Configure a probe and press Start.",
+  "speedlab.colMetric": "Metric",
+  "speedlab.colValue": "Value",
+  "speedlab.colCaveat": "Caveat",
+  "speedlab.invalidUrl": "URL must start with http:// or https://",
+  "speedlab.hostRequired": "Host is required for Latency probes",
+  "speedlab.portRequired": "Port is required for Latency probes",
+  "speedlab.probeId": "Probe",
+  "speedlab.startedAt": "started",
+  "speedlab.finishedAt": "finished",
+  "speedlab.notPing": "TCP handshake RTT is not ICMP ping.",
+
+  /* UPnP / NAT-PMP / PCP / Wake (P065) */
+  "upnp.title": "Service discovery",
+  "upnp.subtitle": "Dynamic port mapping and Wake-on-LAN, disabled by default. Only enable on a trusted LAN/VLAN.",
+  "upnp.serviceStatus": "Service status",
+  "upnp.protocolUpnp": "UPnP IGD",
+  "upnp.protocolNatpmp": "NAT-PMP",
+  "upnp.protocolPcp": "PCP",
+  "upnp.protocolWake": "Wake-on-LAN",
+  "upnp.serviceOff": "Disabled",
+  "upnp.serviceOn": "Enabled",
+  "upnp.trustedNetworks": "Trusted networks",
+  "upnp.activeMappings": "Active dynamic mappings",
+  "upnp.wakeAction": "Wake device",
+  "upnp.enable": "Enable",
+  "upnp.disable": "Disable",
+  "upnp.revoke": "Revoke",
+  "upnp.wake": "Wake",
+  "upnp.wakeMac": "Target MAC",
+  "upnp.wakeNetwork": "Network interface",
+  "upnp.wakeSent": "Packet sent",
+  "upnp.warning": "Dynamic port mapping is disabled by default and must only be enabled on trusted LANs.",
+  "upnp.mappingProtocol": "Protocol",
+  "upnp.mappingClient": "Client",
+  "upnp.mappingExternalPort": "External port",
+  "upnp.mappingInternal": "Internal destination",
+  "upnp.mappingAge": "Age",
+  "upnp.mappingExpires": "Expires",
+  "upnp.mappingSource": "Source",
+  "upnp.protocolsLabel": "Enabled protocols",
+  "upnp.ttlLabel": "Mapping TTL (seconds)",
+  "upnp.allowListLabel": "Allowed clients (CIDR)",
+  "upnp.runtimeState": "Runtime state",
+  "upnp.disabledByChoice": "Disabled by operator choice — not a failure.",
+  "upnp.noMappings": "No active mappings on this network.",
+  "upnp.macInvalid": "MAC must be six colon-separated hex octets.",
+  "upnp.sendWake": "Send magic packet",
+  "upnp.notOnline": "Wake only confirms packet transmission, not that the device is online.",
 };
 
 const ru: V4Bundle = {
@@ -1211,6 +1381,91 @@ const ru: V4Bundle = {
   "v4.since": "с",
   "v4.units.bytes": (n: number) => formatBytes(n),
   "v4.units.percent": (n: number) => `${Math.round(n)}%`,
+
+  /* Speed Lab (P090) */
+  "speedlab.title": "Duck Speed Lab",
+  "speedlab.subtitle": "Ограниченные замеры задержки, HTTP и пропускной способности по списку разрешённых целей. Каждый запуск изолирован на стороне агента.",
+  "speedlab.newProbe": "Новый замер",
+  "speedlab.kind": "Тип замера",
+  "speedlab.kindLatency": "Задержка (RTT TCP-хэндшейка)",
+  "speedlab.kindHttp": "HTTP (RTT HEAD)",
+  "speedlab.kindThroughput": "Пропускная способность (тело HTTP GET)",
+  "speedlab.host": "Хост",
+  "speedlab.port": "Порт",
+  "speedlab.url": "URL",
+  "speedlab.duration": "Длительность (секунды, 1–30)",
+  "speedlab.samples": "Лимит выборки (1–1024)",
+  "speedlab.label": "Метка (необязательно)",
+  "speedlab.start": "Запуск",
+  "speedlab.cancel": "Отмена",
+  "speedlab.state": "Состояние",
+  "speedlab.stateIdle": "Ожидание",
+  "speedlab.stateRunning": "Выполняется",
+  "speedlab.stateCompleted": "Завершено",
+  "speedlab.stateFailed": "Ошибка",
+  "speedlab.stateCancelled": "Отменено",
+  "speedlab.results": "Результаты",
+  "speedlab.resultSamples": "Выборок",
+  "speedlab.resultMin": "Минимум",
+  "speedlab.resultAvg": "Среднее",
+  "speedlab.resultMax": "Максимум",
+  "speedlab.resultP50": "p50",
+  "speedlab.resultP95": "p95",
+  "speedlab.resultP99": "p99",
+  "speedlab.resultBytes": "Передано байт",
+  "speedlab.resultSeconds": "Прошло (секунды)",
+  "speedlab.resultBps": "Пропускная способность (байт/с)",
+  "speedlab.resultMbps": "Пропускная способность (Мбит/с)",
+  "speedlab.caveat": "Это пропускная способность до выбранной цели, а не скорость Интернета.",
+  "speedlab.emptyState": "Настройте замер и нажмите «Запуск».",
+  "speedlab.colMetric": "Метрика",
+  "speedlab.colValue": "Значение",
+  "speedlab.colCaveat": "Примечание",
+  "speedlab.invalidUrl": "URL должен начинаться с http:// или https://",
+  "speedlab.hostRequired": "Для замера задержки требуется хост",
+  "speedlab.portRequired": "Для замера задержки требуется порт",
+  "speedlab.probeId": "Замер",
+  "speedlab.startedAt": "запущен",
+  "speedlab.finishedAt": "завершён",
+  "speedlab.notPing": "RTT TCP-хэндшейка — это не ICMP ping.",
+
+  /* UPnP / NAT-PMP / PCP / Wake (P065) */
+  "upnp.title": "Обнаружение сервисов",
+  "upnp.subtitle": "Динамические пробросы портов и Wake-on-LAN. По умолчанию отключено. Включайте только на доверенной LAN/VLAN.",
+  "upnp.serviceStatus": "Состояние сервиса",
+  "upnp.protocolUpnp": "UPnP IGD",
+  "upnp.protocolNatpmp": "NAT-PMP",
+  "upnp.protocolPcp": "PCP",
+  "upnp.protocolWake": "Wake-on-LAN",
+  "upnp.serviceOff": "Отключено",
+  "upnp.serviceOn": "Включено",
+  "upnp.trustedNetworks": "Доверенные сети",
+  "upnp.activeMappings": "Активные пробросы",
+  "upnp.wakeAction": "Разбудить устройство",
+  "upnp.enable": "Включить",
+  "upnp.disable": "Отключить",
+  "upnp.revoke": "Отозвать",
+  "upnp.wake": "Разбудить",
+  "upnp.wakeMac": "MAC-адрес цели",
+  "upnp.wakeNetwork": "Сетевой интерфейс",
+  "upnp.wakeSent": "Пакет отправлен",
+  "upnp.warning": "Динамические пробросы портов по умолчанию отключены. Включайте только на доверенных LAN.",
+  "upnp.mappingProtocol": "Протокол",
+  "upnp.mappingClient": "Клиент",
+  "upnp.mappingExternalPort": "Внешний порт",
+  "upnp.mappingInternal": "Внутренний адрес",
+  "upnp.mappingAge": "Возраст",
+  "upnp.mappingExpires": "Истекает",
+  "upnp.mappingSource": "Источник",
+  "upnp.protocolsLabel": "Включённые протоколы",
+  "upnp.ttlLabel": "TTL проброса (секунды)",
+  "upnp.allowListLabel": "Разрешённые клиенты (CIDR)",
+  "upnp.runtimeState": "Состояние среды исполнения",
+  "upnp.disabledByChoice": "Отключено оператором — это не сбой.",
+  "upnp.noMappings": "На этой сети нет активных пробросов.",
+  "upnp.macInvalid": "MAC должен состоять из шести hex-октетов через двоеточие.",
+  "upnp.sendWake": "Отправить magic-пакет",
+  "upnp.notOnline": "Wake только подтверждает отправку пакета, а не то, что устройство включилось.",
 };
 
 const de: V4Bundle = {
@@ -1635,6 +1890,91 @@ const de: V4Bundle = {
   "v4.since": "seit",
   "v4.units.bytes": (n: number) => formatBytes(n),
   "v4.units.percent": (n: number) => `${Math.round(n)}%`,
+
+  /* Speed Lab (P090) */
+  "speedlab.title": "Duck Speed Lab",
+  "speedlab.subtitle": "Begrenzte Latenz-, HTTP- und Durchsatz-Messungen gegen eine Allow-list. Jede Messung wird im Agenten isoliert ausgeführt.",
+  "speedlab.newProbe": "Neue Messung",
+  "speedlab.kind": "Messtyp",
+  "speedlab.kindLatency": "Latenz (TCP-Handshake-RTT)",
+  "speedlab.kindHttp": "HTTP (HEAD-RTT)",
+  "speedlab.kindThroughput": "Durchsatz (HTTP-GET-Body)",
+  "speedlab.host": "Host",
+  "speedlab.port": "Port",
+  "speedlab.url": "URL",
+  "speedlab.duration": "Dauer (Sekunden, 1–30)",
+  "speedlab.samples": "Sample-Limit (1–1024)",
+  "speedlab.label": "Bezeichnung (optional)",
+  "speedlab.start": "Start",
+  "speedlab.cancel": "Abbrechen",
+  "speedlab.state": "Zustand",
+  "speedlab.stateIdle": "Bereit",
+  "speedlab.stateRunning": "Läuft",
+  "speedlab.stateCompleted": "Abgeschlossen",
+  "speedlab.stateFailed": "Fehlgeschlagen",
+  "speedlab.stateCancelled": "Abgebrochen",
+  "speedlab.results": "Ergebnisse",
+  "speedlab.resultSamples": "Samples",
+  "speedlab.resultMin": "Min",
+  "speedlab.resultAvg": "Mittel",
+  "speedlab.resultMax": "Max",
+  "speedlab.resultP50": "p50",
+  "speedlab.resultP95": "p95",
+  "speedlab.resultP99": "p99",
+  "speedlab.resultBytes": "Übertragene Bytes",
+  "speedlab.resultSeconds": "Dauer (Sekunden)",
+  "speedlab.resultBps": "Durchsatz (Bytes/s)",
+  "speedlab.resultMbps": "Durchsatz (Mbit/s)",
+  "speedlab.caveat": "Das ist der Durchsatz zum konfigurierten Ziel, nicht die Internet-Bandbreite.",
+  "speedlab.emptyState": "Messung konfigurieren und Start drücken.",
+  "speedlab.colMetric": "Metrik",
+  "speedlab.colValue": "Wert",
+  "speedlab.colCaveat": "Hinweis",
+  "speedlab.invalidUrl": "URL muss mit http:// oder https:// beginnen",
+  "speedlab.hostRequired": "Host ist für Latenz-Messungen erforderlich",
+  "speedlab.portRequired": "Port ist für Latenz-Messungen erforderlich",
+  "speedlab.probeId": "Messung",
+  "speedlab.startedAt": "gestartet",
+  "speedlab.finishedAt": "beendet",
+  "speedlab.notPing": "TCP-Handshake-RTT ist kein ICMP-Ping.",
+
+  /* UPnP / NAT-PMP / PCP / Wake (P065) */
+  "upnp.title": "Service-Erkennung",
+  "upnp.subtitle": "Dynamische Portfreigaben und Wake-on-LAN. Standardmäßig deaktiviert. Nur auf vertrauenswürdigem LAN/VLAN aktivieren.",
+  "upnp.serviceStatus": "Dienststatus",
+  "upnp.protocolUpnp": "UPnP IGD",
+  "upnp.protocolNatpmp": "NAT-PMP",
+  "upnp.protocolPcp": "PCP",
+  "upnp.protocolWake": "Wake-on-LAN",
+  "upnp.serviceOff": "Deaktiviert",
+  "upnp.serviceOn": "Aktiviert",
+  "upnp.trustedNetworks": "Vertrauenswürdige Netzwerke",
+  "upnp.activeMappings": "Aktive dynamische Freigaben",
+  "upnp.wakeAction": "Gerät aufwecken",
+  "upnp.enable": "Aktivieren",
+  "upnp.disable": "Deaktivieren",
+  "upnp.revoke": "Zurückziehen",
+  "upnp.wake": "Aufwecken",
+  "upnp.wakeMac": "Ziel-MAC",
+  "upnp.wakeNetwork": "Netzwerkschnittstelle",
+  "upnp.wakeSent": "Paket gesendet",
+  "upnp.warning": "Dynamische Portfreigaben sind standardmäßig deaktiviert und nur auf vertrauenswürdigen LANs zu aktivieren.",
+  "upnp.mappingProtocol": "Protokoll",
+  "upnp.mappingClient": "Client",
+  "upnp.mappingExternalPort": "Externer Port",
+  "upnp.mappingInternal": "Internes Ziel",
+  "upnp.mappingAge": "Alter",
+  "upnp.mappingExpires": "Läuft ab",
+  "upnp.mappingSource": "Quelle",
+  "upnp.protocolsLabel": "Aktivierte Protokolle",
+  "upnp.ttlLabel": "Mapping-TTL (Sekunden)",
+  "upnp.allowListLabel": "Erlaubte Clients (CIDR)",
+  "upnp.runtimeState": "Laufzeit-Zustand",
+  "upnp.disabledByChoice": "Vom der Operator deaktiviert — kein Fehler.",
+  "upnp.noMappings": "Keine aktiven Freigaben in diesem Netz.",
+  "upnp.macInvalid": "MAC muss sechs hex-Oktette durch Doppelpunkt getrennt enthalten.",
+  "upnp.sendWake": "Magic-Paket senden",
+  "upnp.notOnline": "Wake bestätigt nur den Versand des Pakets, nicht dass das Gerät online ist.",
 };
 
 const es: V4Bundle = {
@@ -2061,6 +2401,91 @@ const es: V4Bundle = {
   "v4.since": "desde",
   "v4.units.bytes": (n: number) => formatBytes(n),
   "v4.units.percent": (n: number) => `${Math.round(n)}%`,
+
+  /* Speed Lab (P090) */
+  "speedlab.title": "Duck Speed Lab",
+  "speedlab.subtitle": "Mediciones acotadas de latencia, HTTP y rendimiento contra una lista de destinos permitidos. Cada sonda se ejecuta aislada en el agente.",
+  "speedlab.newProbe": "Nueva sonda",
+  "speedlab.kind": "Tipo de sonda",
+  "speedlab.kindLatency": "Latencia (RTT de handshake TCP)",
+  "speedlab.kindHttp": "HTTP (RTT de HEAD)",
+  "speedlab.kindThroughput": "Rendimiento (cuerpo HTTP GET)",
+  "speedlab.host": "Host",
+  "speedlab.port": "Puerto",
+  "speedlab.url": "URL",
+  "speedlab.duration": "Duración (segundos, 1–30)",
+  "speedlab.samples": "Límite de muestras (1–1024)",
+  "speedlab.label": "Etiqueta (opcional)",
+  "speedlab.start": "Iniciar",
+  "speedlab.cancel": "Cancelar",
+  "speedlab.state": "Estado",
+  "speedlab.stateIdle": "Inactivo",
+  "speedlab.stateRunning": "En curso",
+  "speedlab.stateCompleted": "Completado",
+  "speedlab.stateFailed": "Fallido",
+  "speedlab.stateCancelled": "Cancelado",
+  "speedlab.results": "Resultados",
+  "speedlab.resultSamples": "Muestras",
+  "speedlab.resultMin": "Mín",
+  "speedlab.resultAvg": "Media",
+  "speedlab.resultMax": "Máx",
+  "speedlab.resultP50": "p50",
+  "speedlab.resultP95": "p95",
+  "speedlab.resultP99": "p99",
+  "speedlab.resultBytes": "Bytes transferidos",
+  "speedlab.resultSeconds": "Transcurrido (segundos)",
+  "speedlab.resultBps": "Rendimiento (bytes/s)",
+  "speedlab.resultMbps": "Rendimiento (Mbps)",
+  "speedlab.caveat": "Esto es el rendimiento hacia el destino configurado, no el ancho de banda de Internet.",
+  "speedlab.emptyState": "Configure una sonda y pulse Iniciar.",
+  "speedlab.colMetric": "Métrica",
+  "speedlab.colValue": "Valor",
+  "speedlab.colCaveat": "Nota",
+  "speedlab.invalidUrl": "La URL debe comenzar por http:// o https://",
+  "speedlab.hostRequired": "Host obligatorio para sondas de latencia",
+  "speedlab.portRequired": "Puerto obligatorio para sondas de latencia",
+  "speedlab.probeId": "Sonda",
+  "speedlab.startedAt": "iniciada",
+  "speedlab.finishedAt": "finalizada",
+  "speedlab.notPing": "El RTT de handshake TCP no es un ping ICMP.",
+
+  /* UPnP / NAT-PMP / PCP / Wake (P065) */
+  "upnp.title": "Descubrimiento de servicios",
+  "upnp.subtitle": "Mapeos dinámicos de puertos y Wake-on-LAN. Desactivado por defecto. Actívelo solo en LAN/VLAN de confianza.",
+  "upnp.serviceStatus": "Estado del servicio",
+  "upnp.protocolUpnp": "UPnP IGD",
+  "upnp.protocolNatpmp": "NAT-PMP",
+  "upnp.protocolPcp": "PCP",
+  "upnp.protocolWake": "Wake-on-LAN",
+  "upnp.serviceOff": "Desactivado",
+  "upnp.serviceOn": "Activado",
+  "upnp.trustedNetworks": "Redes de confianza",
+  "upnp.activeMappings": "Mapeos dinámicos activos",
+  "upnp.wakeAction": "Activar dispositivo",
+  "upnp.enable": "Activar",
+  "upnp.disable": "Desactivar",
+  "upnp.revoke": "Revocar",
+  "upnp.wake": "Activar",
+  "upnp.wakeMac": "MAC destino",
+  "upnp.wakeNetwork": "Interfaz de red",
+  "upnp.wakeSent": "Paquete enviado",
+  "upnp.warning": "Los mapeos dinámicos están desactivados por defecto y solo deben activarse en LAN de confianza.",
+  "upnp.mappingProtocol": "Protocolo",
+  "upnp.mappingClient": "Cliente",
+  "upnp.mappingExternalPort": "Puerto externo",
+  "upnp.mappingInternal": "Destino interno",
+  "upnp.mappingAge": "Antigüedad",
+  "upnp.mappingExpires": "Caduca",
+  "upnp.mappingSource": "Origen",
+  "upnp.protocolsLabel": "Protocolos activados",
+  "upnp.ttlLabel": "TTL del mapeo (segundos)",
+  "upnp.allowListLabel": "Clientes permitidos (CIDR)",
+  "upnp.runtimeState": "Estado de ejecución",
+  "upnp.disabledByChoice": "Desactivado por decisión del operador — no es un fallo.",
+  "upnp.noMappings": "No hay mapeos activos en esta red.",
+  "upnp.macInvalid": "La MAC debe tener seis octetos hexadecimales separados por dos puntos.",
+  "upnp.sendWake": "Enviar paquete mágico",
+  "upnp.notOnline": "Wake solo confirma el envío del paquete, no que el dispositivo esté en línea.",
 };
 
 const v4: V4Messages = { en, ru, de, es };
