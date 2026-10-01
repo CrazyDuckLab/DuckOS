@@ -302,12 +302,34 @@
   margin-bottom: var(--space-l);
 }
 .duck-rail-group-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
   font-size: var(--fs-3xs);
   font-weight: var(--fw-semibold);
   color: var(--text-subtle);
   letter-spacing: var(--track-caps);
   padding: var(--space-xs) var(--space-m);
   text-transform: uppercase;
+}
+.duck-rail-group-label:hover {
+  color: var(--text);
+}
+.duck-rail-group-caret {
+  width: 10px;
+  display: inline-grid;
+  place-items: center;
+  color: var(--text-muted);
+  font-size: var(--fs-2xs);
+}
+.duck-rail-group-collapsed {
+  margin-bottom: var(--space-s);
 }
 
 .duck-rail-item {
@@ -464,7 +486,7 @@
   border-left-color: var(--bad);
 }
 
-/* — ActionBar — */
+/* — ActionBar — compact status strip (B-018) */
 .duck-actionbar {
   grid-area: action;
   position: sticky;
@@ -475,16 +497,21 @@
   display: flex;
   align-items: center;
   gap: var(--space-m);
-  padding: 12px var(--space-2xl);
-  font-size: var(--fs-s);
+  padding: 6px var(--space-xl);
+  font-size: var(--fs-2xs);
   color: var(--text-muted);
   transition: background var(--motion-base) var(--ease-out);
+  min-height: 28px;
+  max-height: 56px;
+  overflow: hidden;
 }
 .duck-actionbar[data-state="idle-quiet"] {
-  padding: 8px var(--space-2xl);
-  font-size: var(--fs-2xs);
+  padding: 4px var(--space-xl);
+  font-size: var(--fs-3xs);
   background: var(--surface-rail);
   color: var(--text-subtle);
+  min-height: 24px;
+  max-height: 32px;
 }
 .duck-actionbar[data-state="pending"],
 .duck-actionbar[data-state="applying"],

@@ -761,6 +761,45 @@ function SideRail({
   page: PageMeta;
   onSelectRoute: (r: string) => void;
 }) {
+  // Collapsible Full-Mode nav. State persists per group key
+  // in localStorage so the rail remembers which thematic groups
+  // the operator has expanded across sessions. The current
+  // page's group is always auto-expanded.
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(
+    () => {
+      if (typeof window === "undefined") return {};
+      try {
+        const raw = window.localStorage.getItem("duckos.rail.expanded");
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          return parsed as Record<string, boolean>;
+        }
+      } catch {
+        /* ignore corrupt local storage */
+      }
+      return {};
+    },
+  );
+  const toggleGroup = (key: string) => {
+    setExpandedGroups((prev) => {
+      const next = {
+        ...prev,
+        [key]: prev[key] === undefined ? false : !prev[key],
+      };
+      if (typeof window !== "undefined") {
+        try {
+          window.localStorage.setItem(
+            "duckos.rail.expanded",
+            JSON.stringify(next),
+          );
+        } catch {
+          /* ignore quota errors */
+        }
+      }
+      return next;
+    });
+  };
   if (mode === "easy") {
     return (
       <nav
@@ -781,10 +820,31 @@ function SideRail({
           pages.push(...pagesBySection(sid));
         }
         if (pages.length === 0) return null;
+        const containsCurrent = pages.some((p) => p.id === page.id);
+        const stored = expandedGroups[g.key];
+        // Auto-expand the group that contains the current page;
+        // otherwise fall back to the stored preference; the very
+        // first render defaults to expanded.
+        const isOpen =
+          containsCurrent || stored === undefined ? true : stored;
         return (
-          <div className="duck-rail-group" key={g.key}>
-            <div className="duck-rail-group-label">{v4t(locale, `rail.${g.key}`)}</div>
-            {pages.map((p) => (
+          <div
+            className={`duck-rail-group${isOpen ? "" : " duck-rail-group-collapsed"}`}
+            key={g.key}
+            data-rail-group={g.key}
+          >
+            <button
+              type="button"
+              className="duck-rail-group-label"
+              aria-expanded={isOpen}
+              onClick={() => toggleGroup(g.key)}
+            >
+              <span className="duck-rail-group-caret" aria-hidden="true">
+                {isOpen ? "▾" : "▸"}
+              </span>
+              {v4t(locale, `rail.${g.key}`)}
+            </button>
+            {isOpen && pages.map((p) => (
               <button
                 key={p.id}
                 type="button"
