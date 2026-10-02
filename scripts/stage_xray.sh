@@ -50,7 +50,7 @@ UPSTREAM_BASE="https://github.com/XTLS/Xray-core/releases/download/v$VERSION"
 # keys with hyphens under `set -u`.
 zip_sha256() {
   case "$1" in
-    "Xray-linux-64")          printf '%s' "8255dd939c34cf966cc91517b6324dd3c8d0bcf49ffac8beca049a38c46845ed" ;;
+    "Xray-linux-64")          printf '%s' "23cd9af937744d97776ee35ecad4972cf4b2109d1e0fe6be9930467608f7c8ae" ;;
     "Xray-linux-arm32-v7a")   printf '%s' "c7265ae13c63ca0241a037df4ef960ad37938c8a67d984cc08834b2cfdf5654b" ;;
     "Xray-linux-arm64-v8a")   printf '%s' "4d30283ae614e3057f730f67cd088a42be6fdf91f8639d82cb69e48cde80413c" ;;
     *) printf 'stage_xray: unknown zip name %s\n' "$1" >&2; return 1 ;;
