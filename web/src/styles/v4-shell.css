@@ -1058,8 +1058,16 @@
   font-weight: var(--fw-semibold);
   color: var(--text-subtle);
   border-bottom: 1px solid var(--line);
-  position: sticky;
-  top: 56px;
+  /* Sticky positioning is opt-in via `.v4-table-sticky`.
+   * The previous default of `position: sticky; top: 56px`
+   * caused the Easy Devices table's first row to render
+   * inside/overlapping the header at small viewports:
+   * `overflow: hidden` on the table created a containing
+   * block whose top edge sits where `top: 56px` is
+   * interpreted as an offset, pushing the TH down into
+   * the first tbody row's vertical space. Long tables
+   * that genuinely need a sticky header now opt in
+   * explicitly with `v4-table-sticky`. */
 }
 .v4-table tbody tr {
   transition: background var(--motion-fast) var(--ease-out);
@@ -1067,6 +1075,20 @@
 }
 .v4-table tbody tr:hover { background: var(--surface-row-hover); }
 .v4-table tbody tr.is-selected { background: var(--surface-row-selected); }
+/* Long tables opt in to sticky headers. The default
+ * `.v4-table` deliberately does NOT apply `position:
+ * sticky` to thead th because the combination with
+ * `overflow: hidden` on short tables caused the first
+ * row to overlap the header at 1280x800. Tables that
+ * genuinely scroll benefit from the opt-in. */
+.v4-table-sticky {
+  overflow: visible;
+}
+.v4-table-sticky thead th {
+  position: sticky;
+  top: 56px;
+  z-index: 1;
+}
 .v4-table .v4-status-pill {
   display: inline-flex;
   align-items: center;
