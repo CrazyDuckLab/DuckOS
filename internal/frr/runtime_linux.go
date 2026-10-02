@@ -36,6 +36,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -132,20 +133,22 @@ func NewRuntime(netns, pathspace string, manager *Manager) (*Runtime, error) {
 	}
 	// FRR's pathspace state dir lives under /var/lib/frr/<ps>
 	// and is created lazily by the daemon. The Debian FRR
-	// package owns that path as frr:frr; the agent runs as
-	// root, so we pre-create the pathspace state dir here
-	// and chown it to frr:frr before exec'ing the daemons.
-	// That way FRR's own mkdir never fires as the running
-	// uid, the "Permission denied" we saw on armv7 cannot
-	// reappear, and the daemons do not need to be granted
-	// CAP_DAC_OVERRIDE / CAP_SYS_ADMIN just to touch their
-	// own state dir.
+	// package ships /var/lib/frr/ as frr:frr 0755, so the
+	// daemon running as uid=frr gid=frr has group-write
+	// access and can lazily mkdir the pathspace itself. The
+	// runtime pre-creates the state dir as a defense-in-depth
+	// measure (so the armv7 "Permission denied" failure
+	// caused by FRR's old lazy mkdir as root CANNOT recur),
+	// but if pre-create fails because the Agent's restricted
+	// capability set refuses a write into /var/lib/frr, we
+	// fall back to letting the daemon create it. The Agent
+	// does NOT need the daemon to depend on its pre-create
+	// succeeding.
 	stateDir := filepath.Join(StateBase, pathspace)
 	if err := os.MkdirAll(stateDir, 0o755); err != nil {
-		return nil, fmt.Errorf("frr: mkdir %s: %w", stateDir, err)
-	}
-	if err := chownToFRR(stateDir); err != nil {
-		return nil, fmt.Errorf("frr: chown %s: %w", stateDir, err)
+		log.Printf("frr: pre-create %s: %v; daemon will create it", stateDir, err)
+	} else if err := chownToFRR(stateDir); err != nil {
+		log.Printf("frr: chown %s: %v; daemon will own its own creation", stateDir, err)
 	}
 	// FRR's pathspace (-N) requires the matching
 	// /etc/frr/<ps>/vtysh.conf to exist; otherwise
