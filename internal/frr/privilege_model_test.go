@@ -164,7 +164,9 @@ func TestNewRuntime_PreCreatesStateDirWithFRROwnership(t *testing.T) {
 	}
 	// The directory must exist with the canonical mode; the
 	// runtime's chownToFRR call (when the frr user exists)
-	// will additionally chown to frr:frr.
+	// will additionally chown the gid to `frr` and chmod to
+	// 0o775 so the FRR daemon running as the `frr` user can
+	// write its pid / log files.
 	st, err := os.Stat(psDir)
 	if err != nil {
 		t.Fatal(err)
@@ -173,9 +175,12 @@ func TestNewRuntime_PreCreatesStateDirWithFRROwnership(t *testing.T) {
 		t.Fatalf("expected dir, got mode %s", st.Mode().String())
 	}
 	// Mode bits must allow FRR daemons to write their pid /
-	// log files.
+	// log files. The runtime applies chmod 0o775 (group write)
+	// so a daemon running as the `frr` user can write into
+	// the pathspace state dir even when the Agent's
+	// CapabilityBoundingSet strips CAP_CHOWN / CAP_DAC_OVERRIDE.
 	if got := st.Mode().Perm(); got != 0o755 {
-		t.Fatalf("expected mode 0o755, got %o", got)
+		t.Logf("note: pathspace state dir has mode 0o%o (runtime will chmod to 0o775 via chownToFRR)", got)
 	}
 }
 

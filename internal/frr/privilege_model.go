@@ -86,13 +86,25 @@ const (
 	FRRRunGroup = "frr"
 )
 
-// chownToFRR changes the ownership of path to the FRR
-// service user / group. The helper REFUSES to chown any
-// path that does not live under StateBase ("/var/lib/frr")
-// or PathspaceBase ("/run/frr"). This is the narrow
-// guarantee that the runtime cannot accidentally chown
-// arbitrary user-controlled paths; it can only ever
-// prepare the directories FRR itself needs.
+// chownToFRR changes the group ownership of path to the
+// FRR service group and grants the group write bit. The
+// helper REFUSES to chown any path that does not live
+// under StateBase ("/var/lib/frr") or PathspaceBase
+// ("/run/frr"). This is the narrow guarantee that the
+// runtime cannot accidentally chown arbitrary user-
+// controlled paths; it can only ever prepare the
+// directories FRR itself needs.
+//
+// The Agent's CapabilityBoundingSet is CAP_NET_ADMIN
+// CAP_NET_RAW only, which strips CAP_CHOWN / CAP_DAC_OVERRIDE.
+// Without CAP_CHOWN the kernel forbids chown(2) to a
+// different uid; with the Agent's SupplementaryGroups
+// (frr, frrvty) the kernel DOES allow chown(2) to change
+// only the gid, when the new gid is in the process's
+// supplementary groups. We therefore chown(-1, gid) —
+// pass uid=-1 to leave the uid untouched — and chmod
+// 0o775 so the FRR daemon running as the `frr` user can
+// still write into the pathspace state directory.
 //
 // Tests stub the user lookup by setting
 // DUCKOS_FRR_RUN_UID / DUCKOS_FRR_RUN_GID env vars;
@@ -105,12 +117,23 @@ func chownToFRR(path string) error {
 		path != PathspaceBase {
 		return fmt.Errorf("frr: chownToFRR refuses non-FRR path %q", path)
 	}
-	uid, gid, err := lookupFRRIDs()
+	_, gid, err := lookupFRRIDs()
 	if err != nil {
 		return err
 	}
-	if err := os.Chown(path, uid, gid); err != nil {
-		return fmt.Errorf("frr: chown %s to uid=%d gid=%d: %w", path, uid, gid, err)
+	// Preserve the existing uid (-1 leaves it as-is); only
+	// chown the gid, which the kernel permits because the
+	// new gid is in the Agent's supplementary groups and
+	// we hold the file's uid. This avoids needing
+	// CAP_CHOWN while still handing the directory off to
+	// the FRR service group.
+	if err := os.Chown(path, -1, gid); err != nil {
+		return fmt.Errorf("frr: chown %s gid=%d: %w", path, gid, err)
+	}
+	// Group write so the FRR daemon (which drops to
+	// uid=frr) can write its own state into the dir.
+	if err := os.Chmod(path, 0o775); err != nil {
+		return fmt.Errorf("frr: chmod %s to 0o775: %w", path, err)
 	}
 	return nil
 }
