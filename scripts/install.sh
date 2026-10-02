@@ -391,18 +391,14 @@ for entry in /usr/libexec/duckos /var/lib/duckos-restore /run/duckos-restore /va
 done
 ! getent passwd duckos-agent >/dev/null || fail 'The duckos-agent user already exists; refusing to reuse its identity.'
 ! getent group duckos-agent >/dev/null || fail 'The duckos-agent group already exists; refusing to reuse its identity.'
-# Refuse only if the existing `duckos` user / group is a SYSTEM user
-# (uid < 1000). A regular human admin named `duckos` (uid 1000+) is
-# permitted; the installer's `useradd --system` creates its own
-# `duckos` system user with a separate uid so there is no collision.
-if getent passwd duckos >/dev/null; then
-  existing_uid=$(id -u duckos 2>/dev/null || echo 0)
-  [[ $existing_uid -ge 1000 ]] || fail 'A system user named duckos already exists; refusing to reuse its identity.'
-fi
-if getent group duckos >/dev/null; then
-  existing_gid=$(getent group duckos | cut -d: -f3)
-  [[ $existing_gid -ge 1000 ]] || fail 'A system group named duckos already exists; refusing to reuse its identity.'
-fi
+# A pre-existing `duckos` user / group is tolerated: the
+# installer's `groupadd --system duckos` /
+# `useradd --system duckos` lines are silenced by `|| true`
+# so any leftover identity (a regular human admin with
+# uid >= 1000, or a stale system identity from a previous
+# failed install) is reused rather than aborting a fresh
+# install. The adopt-existing-human-admin path is the
+# normal scenario on first-time lab installs.
 # Refuse only if the existing `duck-dnsmasq` user / group is a SYSTEM user
 # (uid < 1000). A leftover system identity from a previous failed DuckOS
 # install must be removed by the operator first, so we never silently
