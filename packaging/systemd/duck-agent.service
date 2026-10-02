@@ -56,8 +56,15 @@ NoNewPrivileges=yes
 #   version the original armv7 fix targeted. The Agent does
 #   not USE CAP_SYS_ADMIN; it is present only so FRR's
 #   startup is admitted.
-CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_SETGID CAP_SETUID CAP_SYS_ADMIN
-AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_SETGID CAP_SETUID CAP_SYS_ADMIN
+# CAP_NET_BIND_SERVICE: required by bgpd to bind TCP/179
+#   (the well-known BGP port). Without it bgpd's
+#   privs_init fails with the same "cap_set_proc failed:
+#   Operation not permitted" error, this time for
+#   cap_net_bind_service=p. The Agent does not USE
+#   CAP_NET_BIND_SERVICE; it is present only so bgpd can
+#   bind 179.
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_SETGID CAP_SETUID CAP_SYS_ADMIN CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_SETGID CAP_SETUID CAP_SYS_ADMIN CAP_NET_BIND_SERVICE
 ProtectSystem=strict
 ProtectHome=yes
 ReadWritePaths=/run/duckos-agent /run/frr /var/lib/frr /var/lib/duckos-agent /var/lib/duckos-agent/network /var/lib/duckos-agent/ztp /var/lib/duckos-agent/wireguard /var/lib/duckos-agent/xray /var/lib/duckos-agent/frr /var/lib/duckos-agent/qos /var/lib/duckos-agent/vault /var/lib/duckos-agent/vault/records /etc/systemd/network

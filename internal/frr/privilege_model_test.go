@@ -209,13 +209,15 @@ func TestSystemdCapsRemainNarrow(t *testing.T) {
 	src := string(data)
 	// Note: CAP_SYS_ADMIN IS present in the live unit because
 	// FRR 10.x's privs_init unconditionally requests it.
-	// The Agent does not USE CAP_SYS_ADMIN; it is present
-	// only so FRR's startup is admitted. Any capability
-	// BEYOND {NET_ADMIN, NET_RAW, SETGID, SETUID, SYS_ADMIN}
-	// is a regression and must be refused here. Scan only
-	// the CapabilityBoundingSet / AmbientCapabilities
-	// directive lines so that the test does not match
-	// capability names mentioned in explanatory comments.
+	// CAP_NET_BIND_SERVICE IS present because bgpd binds
+	// TCP/179. The Agent does not USE either; both are
+	// present only so FRR's startup is admitted. Any
+	// capability BEYOND {NET_ADMIN, NET_RAW, SETGID, SETUID,
+	// SYS_ADMIN, NET_BIND_SERVICE} is a regression and must
+	// be refused here. Scan only the CapabilityBoundingSet /
+	// AmbientCapabilities directive lines so that the test
+	// does not match capability names mentioned in
+	// explanatory comments.
 	for _, directive := range []string{
 		"CapabilityBoundingSet=",
 		"AmbientCapabilities=",
@@ -226,7 +228,7 @@ func TestSystemdCapsRemainNarrow(t *testing.T) {
 			"CAP_SYS_RESOURCE", "CAP_SYS_TIME", "CAP_SYS_TTY_CONFIG",
 			"CAP_SYS_BOOT", "CAP_SYS_CHROOT", "CAP_SYS_PACCT",
 			"CAP_SYS_NICE",
-			"CAP_NET_BIND_SERVICE", "CAP_NET_BROADCAST",
+			"CAP_NET_BROADCAST",
 			"CAP_MKNOD", "CAP_LEASE",
 			"CAP_AUDIT_WRITE", "CAP_AUDIT_CONTROL",
 			"CAP_LINUX_IMMUTABLE",
@@ -239,7 +241,7 @@ func TestSystemdCapsRemainNarrow(t *testing.T) {
 		} {
 			if strings.Contains(src, directive+" "+m) ||
 				strings.Contains(src, directive+m) {
-				t.Fatalf("duck-agent.service %s must not include %s; the narrow capability set is {CAP_NET_ADMIN, CAP_NET_RAW, CAP_SETGID, CAP_SETUID, CAP_SYS_ADMIN}", directive, m)
+				t.Fatalf("duck-agent.service %s must not include %s; the narrow capability set is {CAP_NET_ADMIN, CAP_NET_RAW, CAP_SETGID, CAP_SETUID, CAP_SYS_ADMIN, CAP_NET_BIND_SERVICE}", directive, m)
 			}
 		}
 	}
