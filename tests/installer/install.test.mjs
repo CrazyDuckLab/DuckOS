@@ -266,3 +266,30 @@ test('installer wires boot/recovery ordering and leaves the network inactive', a
   assert.doesNotMatch(script, /networkctl\s+reload/);
   assert.doesNotMatch(script, /networkdReload.*true/);
 });
+
+test('macOS Finder / AppleDouble metadata is excluded from the manifest', async (t) => {
+  // Defense in depth: scripts/manifest.mjs must drop .DS_Store and
+  // ._* sidecar files even if a previous build step leaked them into
+  // the payload. Otherwise a tar packed on Darwin would smuggle them
+  // through, the SHA256SUMS would not list them, and the installer
+  // would refuse the artifact as "Unlisted artifact file" on Linux.
+  const { artifact } = await fixture(t);
+  // Use names that don't collide with real artifact files so the
+  // test runs on any filesystem (APFS treats a `._foo` sidecar as a
+  // sibling of `foo` and refuses to create it).
+  await fs.writeFile(path.join(artifact, '._macos-noise'), 'macos noise');
+  await fs.mkdir(path.join(artifact, 'macos-noise-dir'), { recursive: true });
+  await fs.writeFile(path.join(artifact, 'macos-noise-dir/._sidecar'), 'macos noise');
+  await fs.writeFile(path.join(artifact, '.DS_Store'), 'macos noise');
+  const manifestScript = path.join(root, 'scripts/manifest.mjs');
+  const epoch = '1788796800';
+  const commit = '012345abcdef0000000000000000000000000000';
+  const result = spawnSync('node', [manifestScript, artifact, '1.0.0-test', commit, 'false', 'amd64', epoch], {
+    encoding: 'utf8', timeout: 15000,
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const sums = await fs.readFile(path.join(artifact, 'SHA256SUMS'), 'utf8');
+  assert.match(sums, /  bin\/duck-agent\n/);
+  assert.doesNotMatch(sums, /\._/);
+  assert.doesNotMatch(sums, /\.DS_Store/);
+});

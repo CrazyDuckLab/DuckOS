@@ -29,6 +29,10 @@ for ARCH in "${TARGETS[@]}"; do
   find "$TASK_BUILD/web" -name '.DS_Store' -delete -o -name '._*' -delete
   cp packaging/systemd/*.service "$TASK_BUILD/systemd/"
   cp scripts/install.sh "$TASK_BUILD/install.sh"
+  # Strip macOS Finder / AppleDouble metadata from the systemd unit files
+  # so a later tar on Darwin does not carry ._* sidecar files that the
+  # installer's manifest check would treat as unlisted artifact entries.
+  find "$TASK_BUILD/systemd" -name '._*' -delete -o -name '.DS_Store' -delete
   # Vendor an integrity-pinned xray-core binary into the artifact.
   # The script is a no-op on architectures upstream does not
   # provide (currently arm64) so the build does not fail for the
