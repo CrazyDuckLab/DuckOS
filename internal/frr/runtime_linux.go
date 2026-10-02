@@ -159,8 +159,14 @@ func NewRuntime(netns, pathspace string, manager *Manager) (*Runtime, error) {
 	// sockets are under /run/frr/<ps>/, not
 	// /etc/frr/<ps>/. The dir must be owned by frr:frr
 	// because the daemon opens it after dropping privs.
+	// Best-effort: if the Agent's restricted capability
+	// set refuses to mkdir /etc/frr/<ps>, we log and
+	// continue; vtysh will then emit its warning
+	// without affecting the daemons.
 	etcDir := filepath.Join("/etc/frr", pathspace)
-	if err := os.MkdirAll(etcDir, 0o755); err == nil {
+	if err := os.MkdirAll(etcDir, 0o755); err != nil {
+		log.Printf("frr: pre-create %s: %v; vtysh will warn", etcDir, err)
+	} else {
 		_ = os.WriteFile(filepath.Join(etcDir, "vtysh.conf"), []byte("!\n"), 0o644)
 		// chownToFRR refuses paths outside StateBase and
 		// PathspaceBase. /etc/frr/<ps> is not in that set,
