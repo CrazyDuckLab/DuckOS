@@ -452,7 +452,7 @@ finish_failed() {
 }
 trap finish_failed EXIT
 
-groupadd --system duckos 2>/dev/null || [[ $(getent group duckos | cut -d: -f3) -ge 1000 ]] || fail 'Could not create duckos group; a system group with that name already exists.'
+groupadd --system duckos 2>/dev/null || true
 useradd --system --gid duckos --home-dir /var/lib/duckos --no-create-home --shell /usr/sbin/nologin duckos 2>/dev/null || true
 groupadd --system duck-dnsmasq 2>/dev/null || [[ $(getent group duck-dnsmasq | cut -d: -f3) -ge 1000 ]] || fail 'Could not create duck-dnsmasq group; a system group with that name already exists.'
 useradd --system --gid duck-dnsmasq --home-dir /var/lib/duckos-dnsmasq --no-create-home --shell /usr/sbin/nologin duck-dnsmasq 2>/dev/null || true
