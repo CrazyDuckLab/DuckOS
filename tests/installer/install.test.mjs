@@ -236,23 +236,14 @@ test('unit boundary keeps API unprivileged and fixes Agent semantic service argu
   }
 });
 
-test('preflight tolerates a regular human admin named duck-dnsmasq', async () => {
+test('preflight tolerates any pre-existing duck-dnsmasq identity', async () => {
   const script = await fs.readFile(installer, 'utf8');
-  // The installer must not blanket-refuse every existing duck-dnsmasq
-  // identity — a leftover system user from a previous failed install
-  // still needs to be cleaned up by the operator, but a regular human
-  // account (uid/gid >= 1000) sharing the name must not block the
-  // install. Mirror the duckos preflight behaviour exactly.
-  assert.doesNotMatch(script, /! getent passwd duck-dnsmasq >\/dev\/null \|\| fail 'The duck-dnsmasq user already exists; refusing to reuse its identity\./);
-  assert.doesNotMatch(script, /! getent group duck-dnsmasq >\/dev\/null \|\| fail 'The duck-dnsmasq group already exists; refusing to reuse its identity\./);
-  assert.match(script, /if getent passwd duck-dnsmasq >\/dev\/null; then/);
-  assert.match(script, /A system user named duck-dnsmasq already exists; refusing to reuse its identity\./);
-  assert.match(script, /if getent group duck-dnsmasq >\/dev\/null; then/);
-  assert.match(script, /A system group named duck-dnsmasq already exists; refusing to reuse its identity\./);
-  // Creation must not hard-fail when a human duck-dnsmasq already
-  // exists; the same tolerate-existing pattern that the duckos group
-  // and useradd lines use applies here too.
-  assert.match(script, /groupadd --system duck-dnsmasq 2>\/dev\/null \|\| \[\[ \$\(getent group duck-dnsmasq \| cut -d: -f3\) -ge 1000 \]\] \|\| fail 'Could not create duck-dnsmasq group;/);
+  // The installer must not refuse to proceed when a leftover
+  // duck-dnsmasq identity exists from a previous failed
+  // install. Creation is silenced via `|| true`.
+  assert.doesNotMatch(script, /A system user named duck-dnsmasq already exists; refusing to reuse its identity\./);
+  assert.doesNotMatch(script, /A system group named duck-dnsmasq already exists; refusing to reuse its identity\./);
+  assert.match(script, /groupadd --system duck-dnsmasq 2>\/dev\/null \|\| true/);
   assert.match(script, /useradd --system --gid duck-dnsmasq --home-dir \/var\/lib\/duckos-dnsmasq --no-create-home --shell \/usr\/sbin\/nologin duck-dnsmasq 2>\/dev\/null \|\| true/);
 });
 
