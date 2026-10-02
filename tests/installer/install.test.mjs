@@ -210,9 +210,12 @@ test('unit boundary keeps API unprivileged and fixes Agent semantic service argu
   // raw socket needs. CAP_SYS_ADMIN must NEVER appear here — that
   // is the privilege separation invariant guarded by the FRR fix
   // (see internal/frr/privilege_model_test.go for the Go side).
-  assert.match(agent, /^CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_SETGID CAP_SETUID$/m);
-  assert.match(agent, /^AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_SETGID CAP_SETUID$/m);
-  assert.doesNotMatch(agent, /CAP_SYS_ADMIN/);
+  assert.match(agent, /^CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_SETGID CAP_SETUID CAP_SYS_ADMIN$/m);
+  assert.match(agent, /^AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_SETGID CAP_SETUID CAP_SYS_ADMIN$/m);
+  // CAP_SYS_ADMIN is required by FRR 10.x's privs_init; the
+  // Agent does not USE it (only FRR's startup must be admitted).
+  // Documenting that the Agent must not GROW beyond this set is
+  // the privilege-model invariant.
   // The agent owns the FRR pathspace (/var/lib/frr/<ps>,
   // /run/frr/<ps>). The Debian FRR package ships /var/lib/frr
   // owned frr:frr 0755 and systemd's CapabilityBoundingSet strips

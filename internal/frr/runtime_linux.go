@@ -122,6 +122,14 @@ func NewRuntime(netns, pathspace string, manager *Manager) (*Runtime, error) {
 	if err := os.MkdirAll(sockDir, 0o755); err != nil {
 		return nil, fmt.Errorf("frr: mkdir %s: %w", sockDir, err)
 	}
+	// chownToFRR is narrow: it only accepts paths under
+	// StateBase (/var/lib/frr) or PathspaceBase (/run/frr),
+	// and chowns only the gid to the FRR service group.
+	// The daemon running as uid=frr needs group write on
+	// /run/frr/<ps> to write its vty socket and log files.
+	if err := chownToFRR(sockDir); err != nil {
+		return nil, fmt.Errorf("frr: chown %s: %w", sockDir, err)
+	}
 	// FRR's pathspace state dir lives under /var/lib/frr/<ps>
 	// and is created lazily by the daemon. The Debian FRR
 	// package owns that path as frr:frr; the agent runs as

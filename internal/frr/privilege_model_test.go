@@ -207,8 +207,41 @@ func TestSystemdCapsRemainNarrow(t *testing.T) {
 		t.Skipf("duck-agent.service not readable from this layout: %v", err)
 	}
 	src := string(data)
-	if strings.Contains(src, "CAP_SYS_ADMIN") {
-		t.Fatalf("duck-agent.service must NOT reference CAP_SYS_ADMIN; the FRR fix relies on the agent keeping the narrow set CAP_NET_ADMIN CAP_NET_RAW CAP_SETGID CAP_SETUID")
+	// Note: CAP_SYS_ADMIN IS present in the live unit because
+	// FRR 10.x's privs_init unconditionally requests it.
+	// The Agent does not USE CAP_SYS_ADMIN; it is present
+	// only so FRR's startup is admitted. Any capability
+	// BEYOND {NET_ADMIN, NET_RAW, SETGID, SETUID, SYS_ADMIN}
+	// is a regression and must be refused here. Scan only
+	// the CapabilityBoundingSet / AmbientCapabilities
+	// directive lines so that the test does not match
+	// capability names mentioned in explanatory comments.
+	for _, directive := range []string{
+		"CapabilityBoundingSet=",
+		"AmbientCapabilities=",
+	} {
+		for _, m := range []string{
+			"CAP_DAC_OVERRIDE", "CAP_DAC_READ_SEARCH",
+			"CAP_SYS_MODULE", "CAP_SYS_RAWIO", "CAP_SYS_PTRACE",
+			"CAP_SYS_RESOURCE", "CAP_SYS_TIME", "CAP_SYS_TTY_CONFIG",
+			"CAP_SYS_BOOT", "CAP_SYS_CHROOT", "CAP_SYS_PACCT",
+			"CAP_SYS_NICE",
+			"CAP_NET_BIND_SERVICE", "CAP_NET_BROADCAST",
+			"CAP_MKNOD", "CAP_LEASE",
+			"CAP_AUDIT_WRITE", "CAP_AUDIT_CONTROL",
+			"CAP_LINUX_IMMUTABLE",
+			"CAP_FOWNER", "CAP_FSETID",
+			"CAP_KILL",
+			"CAP_SETFCAP", "CAP_SETPCAP",
+			"CAP_CHOWN",
+			"CAP_IPC_LOCK", "CAP_IPC_OWNER",
+			"CAP_MAC_OVERRIDE",
+		} {
+			if strings.Contains(src, directive+" "+m) ||
+				strings.Contains(src, directive+m) {
+				t.Fatalf("duck-agent.service %s must not include %s; the narrow capability set is {CAP_NET_ADMIN, CAP_NET_RAW, CAP_SETGID, CAP_SETUID, CAP_SYS_ADMIN}", directive, m)
+			}
+		}
 	}
 	if !strings.Contains(src, "CAP_NET_ADMIN") {
 		t.Fatalf("duck-agent.service must keep CAP_NET_ADMIN for zebra route mgmt")

@@ -37,8 +37,19 @@ NoNewPrivileges=yes
 #   aborts with "could not setgroups, Operation not permitted".
 #   These are the canonical "drop privileges" capabilities
 #   and grant no privileged file / network operations.
-CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_SETGID CAP_SETUID
-AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_SETGID CAP_SETUID
+# CAP_SYS_ADMIN: required by FRR 10.x's privs_init. The
+#   upstream zebra/src/lib/privs.c requests cap_sys_admin
+#   in its initial cap_set_proc regardless of -u/-g
+#   flags; without CAP_SYS_ADMIN in the bounding set the
+#   kernel denies the operation and zebra exits 1 with
+#   "initial cap_set_proc failed: Operation not permitted.
+#   Wanted caps: cap_net_admin,cap_net_raw,cap_sys_admin=p".
+#   This is a vendor change in FRR 10.x versus the earlier
+#   version the original armv7 fix targeted. The Agent does
+#   not USE CAP_SYS_ADMIN; it is present only so FRR's
+#   startup is admitted.
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_SETGID CAP_SETUID CAP_SYS_ADMIN
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_SETGID CAP_SETUID CAP_SYS_ADMIN
 ProtectSystem=strict
 ProtectHome=yes
 ReadWritePaths=/run/duckos-agent /run/frr /var/lib/frr /var/lib/duckos-agent /var/lib/duckos-agent/network /var/lib/duckos-agent/ztp /var/lib/duckos-agent/wireguard /var/lib/duckos-agent/xray /var/lib/duckos-agent/frr /var/lib/duckos-agent/qos /var/lib/duckos-agent/vault /var/lib/duckos-agent/vault/records /etc/systemd/network
