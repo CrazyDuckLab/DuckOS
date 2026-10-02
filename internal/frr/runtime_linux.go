@@ -62,10 +62,11 @@ const FRRRollbackPath = "/agent/v1/frr/rollback"
 // The renderer's output is bounded; 1 MiB is generous.
 const ApplyMaxBytes = 1 << 20
 
-// PathspaceBase is the base dir the runtime writes its
-// private FRR socket / pid / log files under. Each
-// runtime instance gets its own subdir.
-const PathspaceBase = "/run/frr"
+// PathspaceBase, StateBase, FRRRunUser, FRRRunGroup,
+// chownToFRR, lookupFRRIDs, ErrFRRUserMissing all live in
+// privilege_model.go so cross-platform tests can assert
+// the narrow privilege contract that fixes the armv7
+// "Permission denied" / "cap_set_proc failed" failure.
 
 // FRRBinary is the canonical path to the zebra / bgpd
 // binaries. Tests can override it via the
@@ -121,6 +122,23 @@ func NewRuntime(netns, pathspace string, manager *Manager) (*Runtime, error) {
 	if err := os.MkdirAll(sockDir, 0o755); err != nil {
 		return nil, fmt.Errorf("frr: mkdir %s: %w", sockDir, err)
 	}
+	// FRR's pathspace state dir lives under /var/lib/frr/<ps>
+	// and is created lazily by the daemon. The Debian FRR
+	// package owns that path as frr:frr; the agent runs as
+	// root, so we pre-create the pathspace state dir here
+	// and chown it to frr:frr before exec'ing the daemons.
+	// That way FRR's own mkdir never fires as the running
+	// uid, the "Permission denied" we saw on armv7 cannot
+	// reappear, and the daemons do not need to be granted
+	// CAP_DAC_OVERRIDE / CAP_SYS_ADMIN just to touch their
+	// own state dir.
+	stateDir := filepath.Join(StateBase, pathspace)
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+		return nil, fmt.Errorf("frr: mkdir %s: %w", stateDir, err)
+	}
+	if err := chownToFRR(stateDir); err != nil {
+		return nil, fmt.Errorf("frr: chown %s: %w", stateDir, err)
+	}
 	// FRR's pathspace (-N) requires the matching
 	// /etc/frr/<ps>/vtysh.conf to exist; otherwise
 	// vtysh aborts with "Can't open configuration
@@ -128,10 +146,19 @@ func NewRuntime(netns, pathspace string, manager *Manager) (*Runtime, error) {
 	// before parsing the runtime's frr.conf. An
 	// empty file is sufficient; the daemon vty
 	// sockets are under /run/frr/<ps>/, not
-	// /etc/frr/<ps>/.
+	// /etc/frr/<ps>/. The dir must be owned by frr:frr
+	// because the daemon opens it after dropping privs.
 	etcDir := filepath.Join("/etc/frr", pathspace)
 	if err := os.MkdirAll(etcDir, 0o755); err == nil {
 		_ = os.WriteFile(filepath.Join(etcDir, "vtysh.conf"), []byte("!\n"), 0o644)
+		// chownToFRR refuses paths outside StateBase and
+		// PathspaceBase. /etc/frr/<ps> is not in that set,
+		// so we deliberately skip chown here: the FRR
+		// Debian package already ships /etc/frr owned by
+		// root:frr and the runtime does not need to mutate
+		// it. If the package is missing, the daemons will
+		// surface a clear error on startup, which is the
+		// right time for the operator to fix the install.
 	}
 	if netns != "" {
 		if err := runIPNetnsAdd(netns); err != nil {
@@ -408,10 +435,10 @@ func (r *Runtime) startDaemons() error {
 	// by -z for zebra named socket path").
 	zebraArgs := []string{"-d", "-f", conf, "-i", zebraPIDFile,
 		"-s", "90000000", "-A", "127.0.0.1", "-N", r.pathspace,
-		"-u", "root", "-g", "frrvty"}
+		"-u", FRRRunUser, "-g", FRRRunGroup}
 	bgpdArgs := []string{"-d", "-f", conf, "-i", bgpdPIDFile,
 		"-A", "127.0.0.1", "-N", r.pathspace,
-		"-u", "root", "-g", "frrvty"}
+		"-u", FRRRunUser, "-g", FRRRunGroup}
 	if err := r.execInNetns(zebraBin, zebraArgs, zebraLog); err != nil {
 		return fmt.Errorf("start zebra: %w", err)
 	}

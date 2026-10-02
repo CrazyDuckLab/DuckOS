@@ -465,6 +465,21 @@ else
   printf 'DuckOS installer: FRR binaries not found and apt-get unavailable; routing protocol features will report not installed.\n' >&2
 fi
 
+# Prepare the FRR per-pathspace state directory. The Debian FRR
+# package ships /var/lib/frr owned by frr:frr, which is the
+# correct baseline. The Agent (running as root:duckos) only
+# ever needs to (1) pre-create /var/lib/frr/<pathspace> with
+# frr:frr ownership and (2) drop FRR daemons to that user via
+# `-u frr -g frr`. This avoids the armv7 failure mode where
+# FRR tried to mkdir the state dir as a non-frr uid
+# (Permission denied) and then attempted cap_set_proc with
+# cap_sys_admin (Operation not permitted). duck-agent keeps
+# CAP_NET_ADMIN CAP_NET_RAW only.
+if [[ -d /var/lib/frr ]]; then
+  chown frr:frr /var/lib/frr 2>/dev/null || true
+  chmod 0755 /var/lib/frr
+fi
+
 # Provision the production network enrollment from real host state.
 # Reads physical NIC MACs via `ip -j link show`, filters out loopback and
 # qualification fixtures (anything starting with ducklab-), and writes a
