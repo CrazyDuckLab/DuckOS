@@ -29,8 +29,16 @@ RestartSec=5
 TimeoutStartSec=20
 TimeoutStopSec=10
 NoNewPrivileges=yes
-CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
-AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+# CAP_NET_ADMIN: routing / addressing (zebra, ip, network).
+# CAP_NET_RAW:  raw socket probes (FRR zebra, ping).
+# CAP_SETGID / CAP_SETUID: required for FRR's privs_init to
+#   setgroups / setgid / setuid to the canonical `frr` user
+#   before exec'ing zebra / bgpd. Without them, the daemon
+#   aborts with "could not setgroups, Operation not permitted".
+#   These are the canonical "drop privileges" capabilities
+#   and grant no privileged file / network operations.
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_SETGID CAP_SETUID
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_SETGID CAP_SETUID
 ProtectSystem=strict
 ProtectHome=yes
 ReadWritePaths=/run/duckos-agent /run/frr /var/lib/frr /var/lib/duckos-agent /var/lib/duckos-agent/network /var/lib/duckos-agent/ztp /var/lib/duckos-agent/wireguard /var/lib/duckos-agent/xray /var/lib/duckos-agent/frr /var/lib/duckos-agent/qos /var/lib/duckos-agent/vault /var/lib/duckos-agent/vault/records /etc/systemd/network

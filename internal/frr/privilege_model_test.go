@@ -208,13 +208,16 @@ func TestSystemdCapsRemainNarrow(t *testing.T) {
 	}
 	src := string(data)
 	if strings.Contains(src, "CAP_SYS_ADMIN") {
-		t.Fatalf("duck-agent.service must NOT reference CAP_SYS_ADMIN; the FRR fix relies on the agent keeping CAP_NET_ADMIN CAP_NET_RAW only")
+		t.Fatalf("duck-agent.service must NOT reference CAP_SYS_ADMIN; the FRR fix relies on the agent keeping the narrow set CAP_NET_ADMIN CAP_NET_RAW CAP_SETGID CAP_SETUID")
 	}
 	if !strings.Contains(src, "CAP_NET_ADMIN") {
 		t.Fatalf("duck-agent.service must keep CAP_NET_ADMIN for zebra route mgmt")
 	}
 	if !strings.Contains(src, "CAP_NET_RAW") {
 		t.Fatalf("duck-agent.service must keep CAP_NET_RAW for raw socket probes")
+	}
+	if !strings.Contains(src, "CAP_SETGID") || !strings.Contains(src, "CAP_SETUID") {
+		t.Fatalf("duck-agent.service must grant CAP_SETGID and CAP_SETUID so FRR's privs_init can setgroups / setgid / setuid to the canonical frr user")
 	}
 }
 
