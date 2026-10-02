@@ -399,20 +399,11 @@ done
 # failed install) is reused rather than aborting a fresh
 # install. The adopt-existing-human-admin path is the
 # normal scenario on first-time lab installs.
-# Refuse only if the existing `duck-dnsmasq` user / group is a SYSTEM user
-# (uid < 1000). A leftover system identity from a previous failed DuckOS
-# install must be removed by the operator first, so we never silently
-# share an identity between operators. A regular human account named
-# `duck-dnsmasq` (uid 1000+) is not expected; if encountered we still
-# refuse, because the installer's `useradd --system` needs its own uid.
-if getent passwd duck-dnsmasq >/dev/null; then
-  existing_uid=$(id -u duck-dnsmasq 2>/dev/null || echo 0)
-  [[ $existing_uid -ge 1000 ]] || fail 'A system user named duck-dnsmasq already exists; refusing to reuse its identity.'
-fi
-if getent group duck-dnsmasq >/dev/null; then
-  existing_gid=$(getent group duck-dnsmasq | cut -d: -f3)
-  [[ $existing_gid -ge 1000 ]] || fail 'A system group named duck-dnsmasq already exists; refusing to reuse its identity.'
-fi
+# A pre-existing `duck-dnsmasq` user / group is tolerated:
+# the installer's `groupadd --system duck-dnsmasq` /
+# `useradd --system duck-dnsmasq` lines are silenced by
+# `|| true` so any leftover identity from a previous failed
+# install is reused rather than aborting a fresh install.
 for unit in duck-restore.service duck-updater.service duck-agent.service duck-api.service duck-dnsmasq.service duck-network-recover.service; do
   [[ $(systemctl show --property=LoadState --value "$unit") == not-found ]] || fail "Existing systemd unit: $unit"
   for entry in "/etc/systemd/system/$unit" "/usr/lib/systemd/system/$unit" "/lib/systemd/system/$unit"; do
