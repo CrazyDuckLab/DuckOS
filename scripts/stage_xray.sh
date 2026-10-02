@@ -34,9 +34,9 @@ DIST=${1:-}
 [[ "$DIST" = /* ]] || DIST="$ROOT/$DIST"
 [[ -d "$DIST" ]] || { printf 'stage_xray: %s is not a directory\n' "$DIST" >&2; exit 2; }
 case "$DIST" in
-  *duckos-linux-amd64) ARCH=amd64;  BINNAME=Xray-linux-64 ;;
-  *duckos-linux-arm64)  ARCH=arm64;  BINNAME=Xray-linux-arm64-v8a ;;
-  *duckos-linux-armv7)  ARCH=armv7;  BINNAME=Xray-linux-arm32-v7a ;;
+  *duckos-linux-amd64|*build-amd64*) ARCH=amd64;  BINNAME=Xray-linux-64 ;;
+  *duckos-linux-arm64|*build-arm64*)  ARCH=arm64;  BINNAME=Xray-linux-arm64-v8a ;;
+  *duckos-linux-armv7|*build-armv7*)  ARCH=armv7;  BINNAME=Xray-linux-arm32-v7a ;;
   *) printf 'stage_xray: cannot infer architecture from %s\n' "$DIST" >&2; exit 2 ;;
 esac
 
@@ -45,11 +45,17 @@ UPSTREAM_BASE="https://github.com/XTLS/Xray-core/releases/download/v$VERSION"
 
 # Per-arch sha256 of the upstream zip itself. The pinned list is
 # the build-time trust anchor; any mismatch aborts the stage.
-declare -A ZIP_SHA256=(
-  [Xray-linux-64]=23cd9af937744d97776ee35ecad4972cf4b2109d1e0fe6be9930467608f7c8ae
-  [Xray-linux-arm32-v7a]=c7265ae13c63ca0241a037df4ef960ad37938c8a67d984cc08834b2cfdf5654b
-  [Xray-linux-arm64-v8a]=4d30283ae614e3057f730f67cd088a42be6fdf91f8639d82cb69e48cde80413c
-)
+# We use a function instead of an associative array because
+# bash 3.2 (macOS /usr/bin/bash) mis-parses associative-array
+# keys with hyphens under `set -u`.
+zip_sha256() {
+  case "$1" in
+    "Xray-linux-64")          printf '%s' "23cd9af937744d97776ee35ecad4972cf4b2109d1e0fe6be9930467608f7c8ae" ;;
+    "Xray-linux-arm32-v7a")   printf '%s' "c7265ae13c63ca0241a037df4ef960ad37938c8a67d984cc08834b2cfdf5654b" ;;
+    "Xray-linux-arm64-v8a")   printf '%s' "4d30283ae614e3057f730f67cd088a42be6fdf91f8639d82cb69e48cde80413c" ;;
+    *) printf 'stage_xray: unknown zip name %s\n' "$1" >&2; return 1 ;;
+  esac
+}
 
 if [[ "$ARCH" == "arm64" ]]; then
   printf 'stage_xray: arm64 binary present in upstream v%s; downloading.\n' "$VERSION" >&2
@@ -75,7 +81,7 @@ trap 'rm -rf -- "$WORK"' EXIT
 
 ZIP="$WORK/$BINNAME.zip"
 URL="$UPSTREAM_BASE/$BINNAME.zip"
-EXPECTED=${ZIP_SHA256[$BINNAME]}
+EXPECTED=$(zip_sha256 "$BINNAME")
 [[ -n "$EXPECTED" ]] || { printf 'stage_xray: no pinned sha256 for %s\n' "$BINNAME" >&2; exit 1; }
 
 # Download with curl-or-wget fallback. We refuse to fall back to
