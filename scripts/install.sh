@@ -403,8 +403,20 @@ if getent group duckos >/dev/null; then
   existing_gid=$(getent group duckos | cut -d: -f3)
   [[ $existing_gid -ge 1000 ]] || fail 'A system group named duckos already exists; refusing to reuse its identity.'
 fi
-! getent passwd duck-dnsmasq >/dev/null || fail 'The duck-dnsmasq user already exists; refusing to reuse its identity.'
-! getent group duck-dnsmasq >/dev/null || fail 'The duck-dnsmasq group already exists; refusing to reuse its identity.'
+# Refuse only if the existing `duck-dnsmasq` user / group is a SYSTEM user
+# (uid < 1000). A leftover system identity from a previous failed DuckOS
+# install must be removed by the operator first, so we never silently
+# share an identity between operators. A regular human account named
+# `duck-dnsmasq` (uid 1000+) is not expected; if encountered we still
+# refuse, because the installer's `useradd --system` needs its own uid.
+if getent passwd duck-dnsmasq >/dev/null; then
+  existing_uid=$(id -u duck-dnsmasq 2>/dev/null || echo 0)
+  [[ $existing_uid -ge 1000 ]] || fail 'A system user named duck-dnsmasq already exists; refusing to reuse its identity.'
+fi
+if getent group duck-dnsmasq >/dev/null; then
+  existing_gid=$(getent group duck-dnsmasq | cut -d: -f3)
+  [[ $existing_gid -ge 1000 ]] || fail 'A system group named duck-dnsmasq already exists; refusing to reuse its identity.'
+fi
 for unit in duck-restore.service duck-updater.service duck-agent.service duck-api.service duck-dnsmasq.service duck-network-recover.service; do
   [[ $(systemctl show --property=LoadState --value "$unit") == not-found ]] || fail "Existing systemd unit: $unit"
   for entry in "/etc/systemd/system/$unit" "/usr/lib/systemd/system/$unit" "/lib/systemd/system/$unit"; do
@@ -446,8 +458,8 @@ trap finish_failed EXIT
 
 groupadd --system duckos 2>/dev/null || [[ $(getent group duckos | cut -d: -f3) -ge 1000 ]] || fail 'Could not create duckos group; a system group with that name already exists.'
 useradd --system --gid duckos --home-dir /var/lib/duckos --no-create-home --shell /usr/sbin/nologin duckos 2>/dev/null || true
-groupadd --system duck-dnsmasq 2>/dev/null || fail 'Could not create duck-dnsmasq group; a system group with that name already exists.'
-useradd --system --gid duck-dnsmasq --home-dir /var/lib/duckos-dnsmasq --no-create-home --shell /usr/sbin/nologin duck-dnsmasq 2>/dev/null || fail 'Could not create duck-dnsmasq user.'
+groupadd --system duck-dnsmasq 2>/dev/null || [[ $(getent group duck-dnsmasq | cut -d: -f3) -ge 1000 ]] || fail 'Could not create duck-dnsmasq group; a system group with that name already exists.'
+useradd --system --gid duck-dnsmasq --home-dir /var/lib/duckos-dnsmasq --no-create-home --shell /usr/sbin/nologin duck-dnsmasq 2>/dev/null || true
 duckos_uid=$(id -u duckos)
 [[ "$duckos_uid" =~ ^[0-9]+$ && "$duckos_uid" -gt 0 ]] || fail 'Invalid DuckOS service UID.'
 dnsmasq_uid=$(id -u duck-dnsmasq)

@@ -205,7 +205,14 @@ test('unit boundary keeps API unprivileged and fixes Agent semantic service argu
   const install = await fs.readFile(installer, 'utf8');
   assert.match(install, /\/usr\/libexec\/duckos\/duck-updater --init-health-key/);
   assert.match(agent, /^User=root$/m);
-  assert.match(agent, /^CapabilityBoundingSet=CAP_NET_ADMIN$/m);
+  // The Agent keeps a deliberately narrow capability set:
+  // CAP_NET_ADMIN for routing / addressing, CAP_NET_RAW for FRR's
+  // raw socket needs. CAP_SYS_ADMIN must NEVER appear here — that
+  // is the privilege separation invariant guarded by the FRR fix
+  // (see internal/frr/privilege_model_test.go for the Go side).
+  assert.match(agent, /^CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW$/m);
+  assert.match(agent, /^AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW$/m);
+  assert.doesNotMatch(agent, /CAP_SYS_ADMIN/);
   assert.match(agent, /--allowed-uid @DUCKOS_UID@ --environment test/);
   assert.match(agent, /^RuntimeDirectoryMode=0750$/m);
   assert.match(agent, /^PrivateNetwork=no$/m);
@@ -216,6 +223,26 @@ test('unit boundary keeps API unprivileged and fixes Agent semantic service argu
     assert.match(unit, /^TasksMax=64$/m);
     assert.match(unit, /^LimitCORE=0$/m);
   }
+});
+
+test('preflight tolerates a regular human admin named duck-dnsmasq', async () => {
+  const script = await fs.readFile(installer, 'utf8');
+  // The installer must not blanket-refuse every existing duck-dnsmasq
+  // identity — a leftover system user from a previous failed install
+  // still needs to be cleaned up by the operator, but a regular human
+  // account (uid/gid >= 1000) sharing the name must not block the
+  // install. Mirror the duckos preflight behaviour exactly.
+  assert.doesNotMatch(script, /! getent passwd duck-dnsmasq >\/dev\/null \|\| fail 'The duck-dnsmasq user already exists; refusing to reuse its identity\./);
+  assert.doesNotMatch(script, /! getent group duck-dnsmasq >\/dev\/null \|\| fail 'The duck-dnsmasq group already exists; refusing to reuse its identity\./);
+  assert.match(script, /if getent passwd duck-dnsmasq >\/dev\/null; then/);
+  assert.match(script, /A system user named duck-dnsmasq already exists; refusing to reuse its identity\./);
+  assert.match(script, /if getent group duck-dnsmasq >\/dev\/null; then/);
+  assert.match(script, /A system group named duck-dnsmasq already exists; refusing to reuse its identity\./);
+  // Creation must not hard-fail when a human duck-dnsmasq already
+  // exists; the same tolerate-existing pattern that the duckos group
+  // and useradd lines use applies here too.
+  assert.match(script, /groupadd --system duck-dnsmasq 2>\/dev\/null \|\| \[\[ \$\(getent group duck-dnsmasq \| cut -d: -f3\) -ge 1000 \]\] \|\| fail 'Could not create duck-dnsmasq group;/);
+  assert.match(script, /useradd --system --gid duck-dnsmasq --home-dir \/var\/lib\/duckos-dnsmasq --no-create-home --shell \/usr\/sbin\/nologin duck-dnsmasq 2>\/dev\/null \|\| true/);
 });
 
 test('installer wires boot/recovery ordering and leaves the network inactive', async () => {
