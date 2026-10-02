@@ -389,8 +389,20 @@ if [[ -e /usr/libexec ]]; then check_root_path /usr/libexec; fi
 for entry in /usr/libexec/duckos /var/lib/duckos-restore /run/duckos-restore /var/lib/duckos-updater /run/duckos-updater /opt/duckos /etc/duckos /var/lib/duckos /var/lib/duckos-agent /run/duckos-agent /etc/duckos-dnsmasq /var/lib/duckos-dnsmasq /run/duckos-dnsmasq; do
   [[ ! -e "$entry" && ! -L "$entry" ]] || fail "Existing installation or conflicting path: $entry. Automatic update/recovery is not implemented."
 done
-! getent passwd duckos >/dev/null || fail 'The duckos user already exists; refusing to reuse its identity.'
-! getent group duckos >/dev/null || fail 'The duckos group already exists; refusing to reuse its identity.'
+! getent passwd duckos-agent >/dev/null || fail 'The duckos-agent user already exists; refusing to reuse its identity.'
+! getent group duckos-agent >/dev/null || fail 'The duckos-agent group already exists; refusing to reuse its identity.'
+# Refuse only if the existing `duckos` user / group is a SYSTEM user
+# (uid < 1000). A regular human admin named `duckos` (uid 1000+) is
+# permitted; the installer's `useradd --system` creates its own
+# `duckos` system user with a separate uid so there is no collision.
+if getent passwd duckos >/dev/null; then
+  existing_uid=$(id -u duckos 2>/dev/null || echo 0)
+  [[ $existing_uid -ge 1000 ]] || fail 'A system user named duckos already exists; refusing to reuse its identity.'
+fi
+if getent group duckos >/dev/null; then
+  existing_gid=$(getent group duckos | cut -d: -f3)
+  [[ $existing_gid -ge 1000 ]] || fail 'A system group named duckos already exists; refusing to reuse its identity.'
+fi
 ! getent passwd duck-dnsmasq >/dev/null || fail 'The duck-dnsmasq user already exists; refusing to reuse its identity.'
 ! getent group duck-dnsmasq >/dev/null || fail 'The duck-dnsmasq group already exists; refusing to reuse its identity.'
 for unit in duck-restore.service duck-updater.service duck-agent.service duck-api.service duck-dnsmasq.service duck-network-recover.service; do
