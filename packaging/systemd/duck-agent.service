@@ -21,7 +21,15 @@ SupplementaryGroups=frr frrvty
 ExecStart=/opt/duckos/current/bin/duck-agent --socket /run/duckos-agent/agent.sock --allowed-uid @DUCKOS_UID@ --environment test
 RuntimeDirectory=duckos-agent
 RuntimeDirectory=frr
-RuntimeDirectoryMode=0750
+# 0751 grants owner=rwx (root) and group=rx (duckos) — the
+# same as 0750 — but adds world=rx. The FRR daemon running
+# as uid=frr (with supplementary groups cleared by privs_init)
+# needs to traverse /run/frr to reach the runtime-managed
+# /run/frr/<pathspace> dir where it writes vty sockets and
+# pid locks. The pathspace dir's ownership and mode are the
+# real access control surface; granting world rx on the
+# parent does not expose any data.
+RuntimeDirectoryMode=0751
 RuntimeDirectoryPreserve=no
 UMask=0007
 Restart=on-failure

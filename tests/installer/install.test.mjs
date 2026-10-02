@@ -225,7 +225,7 @@ test('unit boundary keeps API unprivileged and fixes Agent semantic service argu
   // without expanding its capability set.
   assert.match(agent, /^SupplementaryGroups=frr frrvty$/m);
   assert.match(agent, /--allowed-uid @DUCKOS_UID@ --environment test/);
-  assert.match(agent, /^RuntimeDirectoryMode=0750$/m);
+  assert.match(agent, /^RuntimeDirectoryMode=0751$/m);
   assert.match(agent, /^PrivateNetwork=no$/m);
   for (const unit of [api, agent]) {
     assert.match(unit, /^NoNewPrivileges=yes$/m);
