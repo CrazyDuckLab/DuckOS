@@ -10,6 +10,14 @@ StartLimitBurst=5
 Type=simple
 User=root
 Group=duckos
+# The agent owns the FRR pathspace (/var/lib/frr/<ps>, /run/frr/<ps>).
+# The Debian FRR package ships /var/lib/frr/ owned frr:frr 0755 and
+# /etc/frr/ owned root:frr. systemd's CapabilityBoundingSet strips
+# CAP_DAC_OVERRIDE so User=root alone cannot write into /var/lib/frr
+# or chown the pathspace to frr:frr. Granting SupplementaryGroups is
+# the narrow standard way to give the agent the group membership it
+# needs without expanding its capability set.
+SupplementaryGroups=frr frrvty
 ExecStart=/opt/duckos/current/bin/duck-agent --socket /run/duckos-agent/agent.sock --allowed-uid @DUCKOS_UID@ --environment test
 RuntimeDirectory=duckos-agent
 RuntimeDirectory=frr

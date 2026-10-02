@@ -213,6 +213,14 @@ test('unit boundary keeps API unprivileged and fixes Agent semantic service argu
   assert.match(agent, /^CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW$/m);
   assert.match(agent, /^AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW$/m);
   assert.doesNotMatch(agent, /CAP_SYS_ADMIN/);
+  // The agent owns the FRR pathspace (/var/lib/frr/<ps>,
+  // /run/frr/<ps>). The Debian FRR package ships /var/lib/frr
+  // owned frr:frr 0755 and systemd's CapabilityBoundingSet strips
+  // CAP_DAC_OVERRIDE so User=root alone cannot write into
+  // /var/lib/frr. Granting SupplementaryGroups is the narrow
+  // standard way to give the agent the group membership it needs
+  // without expanding its capability set.
+  assert.match(agent, /^SupplementaryGroups=frr frrvty$/m);
   assert.match(agent, /--allowed-uid @DUCKOS_UID@ --environment test/);
   assert.match(agent, /^RuntimeDirectoryMode=0750$/m);
   assert.match(agent, /^PrivateNetwork=no$/m);
