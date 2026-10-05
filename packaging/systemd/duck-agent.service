@@ -65,7 +65,14 @@ RuntimeDirectory=duckos-agent
 # granting world rx on the parent does not expose any data.
 RuntimeDirectory=frr
 RuntimeDirectoryMode=0751
-RuntimeDirectoryPreserve=no
+# Preserve /run/duckos-agent across restarts so the
+# duck-frr-launcher daemon's Unix socket
+# (/run/duckos-agent/frr-launcher.sock) survives when
+# only the Agent restarts (eg during config reload). With
+# RuntimeDirectoryPreserve=no, systemd wipes the dir on
+# Agent stop and the launcher becomes unreachable until
+# it itself is restarted.
+RuntimeDirectoryPreserve=yes
 ProtectControlGroups=yes
 ProtectSystem=strict
 # The Agent writes /var/lib/frr/<ps>/{frr.conf,vtysh.conf},
