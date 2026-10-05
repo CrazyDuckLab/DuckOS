@@ -35,21 +35,32 @@ SupplementaryGroups=frr frrvty
 #     write of frr.conf for the FRR child. None of those
 #     require caps; UID 0 owner-rwx on the parent paths is
 #     sufficient when ReadWritePaths is set.
-#   - The Agent then exec's
-#     /usr/libexec/duckos/duck-frr-launcher, which drops
-#     to the frr service user, narrows P/E to
-#     {NET_ADMIN, NET_RAW, NET_BIND_SERVICE}, and exec's
-#     /usr/lib/frr/{zebra,bgpd} with `-S` (--skip_runas).
-#   - The FRR child runs as frr with only the caps it
-#     actually uses. CAP_SYS_ADMIN is intentionally absent:
-#     FRR 10.x's privs_init requests it unconditionally,
-#     so the launcher uses FRR's `-S` flag to skip that
-#     call entirely.
+#   - The Agent then dials the duck-frr-launcher daemon
+#     over /run/duckos-agent/frr-launcher.sock and asks
+#     it to start zebra/bgpd. The launcher (running in
+#     its own systemd unit with the privilege-drop
+#     model documented in cmd/duck-frr-launcher/main.go)
+#     re-execs a child that drops to the frr service
+#     user, drops SETUID/SETGID from its bounding set
+#     BEFORE setresuid, and exec's
+#     /usr/lib/frr/{zebra,bgpd} WITHOUT the `-S`
+#     (--skip_runas) flag because Debian's zebra build
+#     does NOT expose that flag.
+#   - The FRR child runs as frr with P/E =
+#     {NET_ADMIN, NET_RAW, NET_BIND_SERVICE, SYS_ADMIN,
+#     SETPCAP}. CAP_SYS_ADMIN reaches the FRR child
+#     because Debian FRR 10.3's zebra calls cap_set_proc
+#     with CAP_SYS_ADMIN unconditionally; the file caps
+#     installed by install.sh include cap_sys_admin and
+#     cap_setpcap so the child's E has both. CAP_SYS_ADMIN
+#     MUST NOT reach the Agent itself; the Agent's
+#     bounding set stays empty.
 #
 # CAP_SYS_ADMIN is therefore NEVER granted to the Agent.
-# The Agent's Role is bounded; the launcher's role is
+# The Agent's role is bounded; the launcher's role is
 # bounded; the FRR child's role is bounded. None of them
-# inherits the previous model's CAP_SYS_ADMIN.
+# inherits the previous model's CAP_SYS_ADMIN except the
+# FRR child, which the BETA.2 review determined needs it.
 CapabilityBoundingSet=
 AmbientCapabilities=
 # NoNewPrivileges ensures setuid binaries and file-cap

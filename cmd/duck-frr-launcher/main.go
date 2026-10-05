@@ -18,43 +18,54 @@
 //   launcher runs as a separate systemd service
 //   (duck-frr-launcher.service) with its own
 //   CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_SETPCAP
-//   and NoNewPrivileges=no. The agent talks to the
-//   launcher over a Unix socket
+//   CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE
+//   CAP_SYS_ADMIN and NoNewPrivileges=no. The agent
+//   talks to the launcher over a Unix socket
 //   (/run/duckos-agent/frr-launcher.sock) using a tiny
 //   line protocol.
 //
-//   For each EXEC command the launcher:
-//     1. fork()
-//     3. PR_SET_KEEPCAPS=1 (in child),
-//     4. setgroups([]), setresgid(frr_gid), setresuid(frr_uid),
-//     5. mkdir /etc/frr/<ps>/ 0755 + write vtysh.conf
-//        (the Agent cannot do this — /etc/frr is
-//        frr:frr 0700; the launcher, now uid=frr,
-//        matches the owner),
-//     6. drop CAP_SETUID, CAP_SETGID, CAP_SETPCAP from
-//        the bounding set (prctl PR_CAPBSET_DROP), so the
-//        child exec's FRR with bounding = {NET_ADMIN,
-//        NET_RAW, NET_BIND_SERVICE} only,
-//     7. cap_set_proc({NET_ADMIN, NET_RAW, NET_BIND_SERVICE})
-//        — narrow P/E/I to FRR's actual needs;
-//     CAP_SYS_ADMIN is intentionally absent.
-//     8. exec /usr/lib/frr/{zebra,bgpd} with `-S`
-//        (--skip_runas) so FRR's privs_init does NOT
-//        call cap_set_proc.
+//   For each EXEC command the launcher (re-exec'd child):
+//     1. PR_SET_KEEPCAPS=1 — preserves P across the
+//        root→frr uid transition.
+//     2. drop CAP_SETUID + CAP_SETGID from the bounding
+//        set via PR_CAPBSET_DROP. This MUST run BEFORE
+//        setresuid: Linux clears E on uid transition,
+//        and PR_CAPBSET_DROP requires CAP_SETPCAP in E.
+//        CAP_SETPCAP is INTENTIONALLY retained in Bnd
+//        so the FRR child inherits it at exec.
+//     3. setgroups([]), setresgid(frr_gid),
+//        setresuid(frr_uid) — drop to frr:frr.
+//     4. mkdir /etc/frr/<ps>/ 0755 + write vtysh.conf.
+//        The Agent cannot do this — /etc/frr is frr:frr
+//        0751; the launcher, now uid=frr, matches the
+//        owner.
+//     5. exec /usr/lib/frr/{zebra,bgpd}. The launcher
+//        does NOT call cap_set_proc itself: kernel exec
+//        semantics hand the FRR child exactly the caps
+//        it needs (parent P ∩ parent Bnd, then file
+//        caps OR'd in). FRR's own privs_init calls
+//        cap_set_proc to narrow further; that requires
+//        CAP_SETPCAP in the child's E, which it has
+//        because the FRR file caps include cap_setpcap.
 //
 //   The FRR child runs as uid=frr, gid=frr, no
 //   supplementary groups, with P/E =
-//   {NET_ADMIN, NET_RAW, NET_BIND_SERVICE}. NO
-//   CAP_SYS_ADMIN. NO CAP_SETUID/SETGID/SETPCAP. NO
-//   duck-agent capabilities.
+//   {NET_ADMIN, NET_RAW, NET_BIND_SERVICE, SYS_ADMIN,
+//   SETPCAP}. NO CAP_SETUID. NO CAP_SETGID. NO
+//   duck-agent capabilities. CAP_SYS_ADMIN is scoped
+//   to the FRR process only (Debian FRR 10.3's zebra
+//   unconditionally calls cap_set_proc with
+//   CAP_SYS_ADMIN and Debian's zebra build does NOT
+//   expose the upstream -S / --skip_runas flag; only
+//   bgpd does).
 //
 //   install.sh sets:
-//     setcap cap_net_admin,cap_net_raw,cap_net_bind_service+ep
+//     setcap cap_net_admin,cap_net_raw,cap_net_bind_service,cap_sys_admin,cap_setpcap+ep
 //         /usr/lib/frr/{zebra,bgpd}
-//     setcap cap_setuid,cap_setgid,cap_setpcap+ep
+//     setcap cap_setuid,cap_setgid,cap_setpcap,cap_net_admin,cap_net_raw,cap_net_bind_service,cap_sys_admin+ep
 //         /usr/libexec/duckos/duck-frr-launcher
-//   The file caps are belt-and-braces in case the
-//   service unit is ever overridden; the unit's
+//   The launcher file caps are belt-and-braces in case
+//   the service unit is ever overridden; the unit's
 //   CapabilityBoundingSet is the canonical grant.
 //
 //   This binary stays as small as possible so its
@@ -76,7 +87,6 @@ import (
 	"strings"
 	"sync"
 	"syscall"
-	"unsafe"
 
 	"golang.org/x/sys/unix"
 )
@@ -95,33 +105,22 @@ const (
 	frrRunGroup = "frr"
 )
 
-// capsToKeep is the capability set we hand to the
-// FRR child. The Debian FRR 10.3 package's zebra
-// binary declares CAP_NET_ADMIN, CAP_NET_RAW, AND
-// CAP_SYS_ADMIN in its cap_set_proc call and DOES
-// NOT support upstream's -S / --skip_runas flag
-// (only bgpd supports it in the Debian build), so
-// zebra's privs_init would fail without CAP_SYS_ADMIN
-// in P. Per the BETA.2 architectural review, CAP_SYS_ADMIN
-// on a FRR-only child is acceptable because the FRR
-// process genuinely needs it. CAP_SYS_ADMIN MUST NOT
-// reach duck-agent itself; the agent's bounding set
-// stays empty.
-var capsToKeep = []string{"net_admin", "net_raw", "net_bind_service", "sys_admin"}
-
-// capSetByName maps the launcher's-own caps (CAP_SETUID,
-// CAP_SETGID) — these are the caps the launcher process
-// itself needs to perform the privilege drop. They are
-// dropped from the bounding set after the drop so the
-// FRR child exec'd from this launcher never inherits them.
+// launcherOnlyCaps is the set of capabilities dropped
+// from the launcher's bounding set BEFORE setresuid.
+// CAP_SETUID + CAP_SETGID are dropped so the FRR child
+// exec'd from this launcher never inherits them.
 //
-// CAP_SETPCAP is INTENTIONALLY NOT dropped. Debian FRR's
-// privs_init calls cap_set_proc and the kernel requires
-// CAP_SETPCAP in the calling process's effective set for
-// that call to succeed. The launcher's own drop is done
-// before the bounding drop so the launcher's applyCaps
-// (which masks P/E/I to capsToKeep) doesn't drop SETPCAP
-// from the bounding set the FRR child inherits.
+// CAP_SETPCAP is INTENTIONALLY NOT dropped. Debian FRR
+// 10.3's zebra calls cap_set_proc in privs_init and
+// that requires CAP_SETPCAP in E. The cap_setpcap file
+// cap on /usr/lib/frr/{zebra,bgpd} (installed by
+// install.sh) gives the FRR child CAP_SETPCAP in E
+// independently of Bnd at exec, so even if the
+// launcher's Bnd retained SETPCAP, the file cap would
+// also work. We retain SETPCAP in Bnd as belt-and-braces
+// so the inherited Bnd is identical to what the FRR
+// child receives from file caps; this matches the Bnd
+// the Debian FRR package's own frr.service unit grants.
 var launcherOnlyCaps = []string{"setuid", "setgid"}
 
 func main() {
@@ -566,12 +565,52 @@ func dropAndExecFRR(binary, pathspace, conf, logPath, pidFile string, passthroug
 // CAP_SETUID+CAP_SETGID+CAP_SETPCAP in its bounding set
 // (the daemon service unit and the launcher's file caps
 // both guarantee this).
+//
+// Sequence:
+//
+//   1. PR_SET_KEEPCAPS=1 — preserves P (and E) across
+//      the root→frr uid transition.
+//   2. PR_CAPBSET_DROP SETUID + SETGID from the bounding
+//      set. This MUST run BEFORE setresuid: Linux clears
+//      the effective set on uid transition, and
+//      PR_CAPBSET_DROP requires CAP_SETPCAP in E. CAP_SETPCAP
+//      is INTENTIONALLY retained in Bnd so the FRR child
+//      inherits it at exec and can itself call
+//      cap_set_proc (Debian FRR 10.3 zebra's privs_init
+//      uses cap_set_proc; that call requires CAP_SETPCAP
+//      in E).
+//   3. setgroups([]), setresgid, setresuid → uid=frr.
+//   4. mkdir /etc/frr/<ps>/ + write vtysh.conf as
+//      uid=frr; /etc/frr is frr:frr 0751 so the frr
+//      user can write.
+//   5. Caller exec's /usr/lib/frr/{zebra,bgpd}.
+//      The launcher does NOT call cap_set_proc: kernel
+//      exec semantics (parent P ∩ parent Bnd, then
+//      file_caps OR'd in) hand the FRR child exactly
+//      the cap set {NET_ADMIN, NET_RAW, NET_BIND_SERVICE,
+//      SYS_ADMIN, SETPCAP}, the file caps installed by
+//      install.sh include cap_setpcap so the child's E
+//      has CAP_SETPCAP and FRR's own privs_init can
+//      narrow further.
 func dropPrivilegesAndCap(uid, gid int, pathspace string) error {
 	// PR_SET_KEEPCAPS preserves P/E across the uid
 	// transition from 0 to a non-zero uid.
 	if _, _, errno := unix.Syscall(unix.PR_SET_KEEPCAPS, 1, 0, 0); errno != 0 {
 		return fmt.Errorf("PR_SET_KEEPCAPS: %v", errno)
 	}
+
+	// Drop launcher-only caps (SETUID, SETGID) from the
+	// bounding set BEFORE setresuid. CAP_SETPCAP is
+	// intentionally retained so the FRR child inherits
+	// it at exec. This is the critical step that was
+	// previously failing because PR_CAPBSET_DROP needs
+	// CAP_SETPCAP in the calling process's effective set,
+	// and the effective set is cleared by setresuid
+	// even with KEEPCAPS=1.
+	if err := dropCapsFromBounding(launcherOnlyCaps); err != nil {
+		return fmt.Errorf("dropCapsFromBounding: %w", err)
+	}
+
 	if err := unix.Setgroups([]int{}); err != nil {
 		return fmt.Errorf("setgroups: %w", err)
 	}
@@ -584,8 +623,9 @@ func dropPrivilegesAndCap(uid, gid int, pathspace string) error {
 
 	// Create /etc/frr/<pathspace>/vtysh.conf as uid=frr.
 	// The Agent cannot do this — /etc/frr is frr:frr
-	// 0700. The launcher, now uid=frr, matches the
-	// owner and can write.
+	// 0751 (root can traverse, frr user owns and can
+	// write its <ps>/). The launcher, now uid=frr,
+	// matches the owner and can write.
 	etcDir := "/etc/frr/" + pathspace
 	if err := os.MkdirAll(etcDir, 0o755); err != nil {
 		// Non-fatal: vtysh will warn but the
@@ -600,24 +640,12 @@ func dropPrivilegesAndCap(uid, gid int, pathspace string) error {
 		}
 	}
 
-	// Drop the launcher's-own caps (SETUID, SETGID,
-	// SETPCAP) from the bounding set so the FRR
-	// child exec'd from this process never inherits
-	// them. CAP_SETPCAP must still be in the
-	// process's permitted set to call PR_CAPBSET_DROP;
-	// it is, because we have not yet called
-	// cap_set_proc.
-	if err := dropCapsFromBounding(launcherOnlyCaps); err != nil {
-		return fmt.Errorf("dropCapsFromBounding: %w", err)
-	}
-
-	// Narrow P/E/I to FRR's actual needs. After
-	// this, the process no longer holds CAP_SETPCAP
-	// so any further cap_set_proc would fail; we
-	// exec FRR immediately.
-	if err := applyCaps(capsToKeep); err != nil {
-		return fmt.Errorf("applyCaps: %w", err)
-	}
+	// No applyCaps() here. The launcher deliberately
+	// does not narrow P/E further because after setresuid
+	// the effective set is cleared even with KEEPCAPS=1,
+	// and cap_set_proc would need CAP_SETPCAP in E.
+	// Kernel exec semantics hand the FRR child the right
+	// cap set without any launcher-level cap_set_proc.
 	return nil
 }
 
@@ -653,61 +681,25 @@ func lookupGroupId(name string) (int, error) {
 	return strconv.Atoi(g.Gid)
 }
 
-// applyCaps sets P/E/I to the union of the named
-// capabilities. Requires CAP_SETPCAP in the calling
-// process's permitted set; the caller's file caps or
-// service-unit bounding set must include CAP_SETPCAP.
-//
-// We use LINUX_CAPABILITY_VERSION_3 with two uint32s
-// per set (the 64-bit caps format).
-// golang.org/x/sys/unix only exposes V1/V2 via
-// CapUserData, so we issue the syscall directly.
-func applyCaps(names []string) error {
-	lo, hi, err := capMask(names)
-	if err != nil {
-		return err
-	}
-	type hdrT struct {
-		Version uint32
-		Pid     int32
-	}
-	type dataT struct {
-		// The kernel's __user_cap_data_struct is
-		// (effective, permitted, inheritable) per
-		// 32-bit slot. For V3 (64-bit caps) the
-		// kernel reads two of these back-to-back,
-		// so the memory layout must be:
-		//   effective0, permitted0, inheritable0,
-		//   effective1, permitted1, inheritable1.
-		// The bug had these in a different order —
-		// the kernel saw permitted as the hi32 of
-		// effective (always 0), rejected the
-		// not-a-subset check, and returned EPERM.
-		effective0, permitted0, inheritable0 uint32
-		effective1, permitted1, inheritable1 uint32
-	}
-	hdr := hdrT{Version: 0x20080522, Pid: 0}
-	data := dataT{
-		effective0:   lo,
-		permitted0:   lo,
-		inheritable0: lo,
-		effective1:   hi,
-		permitted1:   hi,
-		inheritable1: hi,
-	}
-	_, _, errno := unix.Syscall(
-		unix.SYS_CAPSET,
-		uintptr(unsafe.Pointer(&hdr)),
-		uintptr(unsafe.Pointer(&data)),
-		0,
-	)
-	if errno != 0 {
-		fmt.Fprintf(os.Stderr, "frr-launcher: applyCaps(%v) failed: errno=%d lo=0x%x hi=0x%x hdr.version=0x%x hdr.pid=%d\n",
-			names, errno, lo, hi, hdr.Version, hdr.Pid)
-		return errno
-	}
-	return nil
-}
+// applyCaps was previously used to narrow the launcher's
+// P/E/I before exec'ing FRR. It is INTENTIONALLY ABSENT
+// now: after setresuid the launcher's effective set is
+// cleared even with KEEPCAPS=1 (PR_CAPBSET_DROP requires
+// CAP_SETPCAP in E, but E is empty post-setresuid). The
+// fix is to do the bounding drop BEFORE setresuid and to
+// skip post-setresuid cap_set_proc entirely. Kernel exec
+// semantics (parent P ∩ parent Bnd, then file_caps OR'd
+// in) hand the FRR child exactly the cap set it needs,
+// so no launcher-level cap_set_proc is required.
+
+// capMask was previously used by applyCaps to build the
+// V3 capset payload. applyCaps is gone (see comment
+// above); capMask is no longer referenced and is kept
+// only as documentation of how the kernel V3 layout
+// (effective0, permitted0, inheritable0, effective1,
+// permitted1, inheritable1) maps to the launcher-only
+// drop sequence. Go does not flag unused unexported
+// functions, so we leave it as a tombstone.
 
 // dropCapsFromBounding removes the named caps from the
 // calling process's bounding set via prctl

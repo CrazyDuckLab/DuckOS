@@ -449,13 +449,19 @@ func (r *Runtime) daemonsAlive() bool {
 // and NoNewPrivileges=no, listening on
 // /run/duckos-agent/frr-launcher.sock.
 //
-// For each EXEC, the launcher forks; the child does the
-// privilege drop, drops CAP_SETUID/SETGID/SETPCAP from
-// its bounding set, narrows P/E/I to {NET_ADMIN, NET_RAW,
-// NET_BIND_SERVICE}, and exec's /usr/lib/frr/<binary>
-// with `-S` (--skip_runas). The parent (launcher daemon)
-// returns the FRR child's PID to the agent over the
-// socket. CAP_SYS_ADMIN is INTENTIONALLY ABSENT.
+// For each EXEC, the launcher re-execs a child that does
+// the privilege drop (setgroups+setresgid+setresuid to
+// frr:frr), drops CAP_SETUID + CAP_SETGID from the
+// bounding set BEFORE setresuid, and exec's
+// /usr/lib/frr/<binary>. NO `-S` (--skip_runas) flag
+// because Debian's zebra build does not expose it; the
+// FRR child receives {NET_ADMIN, NET_RAW, NET_BIND_SERVICE,
+// SYS_ADMIN, SETPCAP} via kernel exec semantics (parent
+// P ∩ parent Bnd, then file_caps OR'd in). The parent
+// (launcher daemon) returns the FRR child's PID to the
+// agent over the socket. CAP_SYS_ADMIN reaches the FRR
+// child because Debian FRR 10.3's zebra calls cap_set_proc
+// with CAP_SYS_ADMIN unconditionally.
 //
 // Returns the zebra / bgpd PIDs on success. Failure
 // tears down any half-started daemons before

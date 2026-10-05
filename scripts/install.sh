@@ -668,33 +668,43 @@ install -o root -g root -m 0755 "$release/bin/duck-frr-launcher" /usr/libexec/du
 # --skip_runas flag for zebra — only for bgpd). CAP_SYS_ADMIN
 # is scoped to FRR only; it MUST NOT reach duck-agent
 # (the agent's bounding set stays empty).
+#
+# cap_setpcap is INTENTIONALLY included: FRR's own privs_init
+# calls cap_set_proc and that requires CAP_SETPCAP in the
+# child's effective set. Without cap_setpcap in the file
+# caps, FRR's privs_init would fail with EPERM.
 if command -v setcap >/dev/null 2>&1 && [[ -x /usr/lib/frr/zebra ]]; then
-  setcap cap_net_admin,cap_net_raw,cap_net_bind_service,cap_sys_admin+ep /usr/lib/frr/zebra || printf 'DuckOS installer: setcap on /usr/lib/frr/zebra failed; FRR will need to be re-cap after every Debian FRR package upgrade.\n' >&2
-  [[ -x /usr/lib/frr/bgpd ]] && setcap cap_net_admin,cap_net_raw,cap_net_bind_service,cap_sys_admin+ep /usr/lib/frr/bgpd || true
+  setcap cap_net_admin,cap_net_raw,cap_net_bind_service,cap_sys_admin,cap_setpcap+ep /usr/lib/frr/zebra || printf 'DuckOS installer: setcap on /usr/lib/frr/zebra failed; FRR will need to be re-cap after every Debian FRR package upgrade.\n' >&2
+  [[ -x /usr/lib/frr/bgpd ]] && setcap cap_net_admin,cap_net_raw,cap_net_bind_service,cap_sys_admin,cap_setpcap+ep /usr/lib/frr/bgpd || true
 elif ! [[ -x /usr/lib/frr/zebra ]]; then
   : # FRR not installed; install.sh does not abort on this.
 else
   printf 'DuckOS installer: setcap not available; FRR caps will not survive package upgrades.\n' >&2
 fi
 # File capabilities on the launcher: setuid+setgid+setpcap
-# so the launcher can drop privileges, narrow P/E, and
-# exec the FRR child, plus the FRR caps (net_admin,
-# net_raw, net_bind_service, sys_admin) so the launcher's
-# permitted set contains the FRR caps the kernel will
-# raise after the applyCaps capset syscall — capset
-# refuses new P bits that are not already in the calling
-# process's permitted set OR the bounding set, so the
-# launcher must have the FRR caps in P before it can
-# narrow the bounding set and then raise them into P
-# for the FRR child.
-# CAP_SYS_ADMIN is INTENTIONALLY present here (it stays
-# out of the FRR child's process because the launcher
-# drops it from its bounding set before exec'ing FRR
-# and uses cap_set_proc to take the right shape); see
-# the BETA.2 architectural review's verdict for the
-# rationale.
+# so the launcher can drop privileges, drop
+# SETUID/SETGID from its bounding set BEFORE setresuid
+# (PR_CAPBSET_DROP requires CAP_SETPCAP in E), and exec
+# the FRR child. The FRR caps (net_admin, net_raw,
+# net_bind_service, sys_admin) come from the launcher's
+# service unit CapabilityBoundingSet (the canonical
+# grant) and propagate into Bnd at exec; the launcher
+# itself does NOT call cap_set_proc (the launcher's
+# drop sequence was restructured after the BETA.2
+# review at ed3b784 so the bounding drop runs BEFORE
+# setresuid when E still has CAP_SETPCAP; post-
+# setresuid E is empty even with KEEPCAPS=1 so any
+# cap_set_proc call after the uid transition would
+# EPERM). CAP_SYS_ADMIN is INTENTIONALLY present in
+# the launcher's Bnd (it stays out of the FRR child's
+# process because the launcher does NOT exec FRR with
+# CAP_SYS_ADMIN in its file caps — see the FRR setcap
+# above — and the FRR child inherits CAP_SYS_ADMIN
+# ONLY via the FRR file caps, never from the
+# launcher). See the BETA.2 architectural review's
+# verdict for the rationale.
 if command -v setcap >/dev/null 2>&1; then
-  setcap cap_setuid,cap_setgid,cap_setpcap,cap_net_admin,cap_net_raw,cap_net_bind_service,cap_sys_admin+ep /usr/libexec/duckos/duck-frr-launcher || fail 'setcap on /usr/libexec/duckos/duck-frr-launcher failed; the FRR privilege-drop model cannot work.'
+  setcap cap_setuid,cap_setgid,cap_setpcap+ep /usr/libexec/duckos/duck-frr-launcher || fail 'setcap on /usr/libexec/duckos/duck-frr-launcher failed; the FRR privilege-drop model cannot work.'
 fi
 # /etc/frr ships in the Debian FRR package with mode
 # 0700 frr:frr — only the frr user can read or traverse
