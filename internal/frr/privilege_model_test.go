@@ -366,6 +366,93 @@ func TestLauncherServiceUnitDeclaresCaps(t *testing.T) {
 	}
 }
 
+// TestLauncherDropsCapsBeforeSetresuid guards the architectural
+// invariant established by the BETA.2 review at ed3b784:
+// the launcher's PR_CAPBSET_DROP call MUST run BEFORE
+// setresuid. Linux clears the effective set on the
+// root->non-root uid transition regardless of PR_SET_KEEPCAPS,
+// so PR_CAPBSET_DROP would EPERM if run after setresuid (it
+// needs CAP_SETPCAP in E). A regression to the post-setresuid
+// order is the bug that caused the dd8c4ea debug commit and
+// the repeated applyCaps EPERM on live VM B. This test reads
+// the launcher source and asserts the ordering.
+func TestLauncherDropsCapsBeforeSetresuid(t *testing.T) {
+	candidates := []string{
+		"../../cmd/duck-frr-launcher/main.go",
+		"../../../cmd/duck-frr-launcher/main.go",
+	}
+	var data []byte
+	var err error
+	for _, p := range candidates {
+		data, err = os.ReadFile(p)
+		if err == nil {
+			break
+		}
+	}
+	if err != nil {
+		t.Skipf("duck-frr-launcher main.go not readable from this layout: %v", err)
+	}
+	src := string(data)
+	dropIdx := strings.Index(src, "dropCapsFromBounding")
+	setresuidIdx := strings.Index(src, "unix.Setresuid(")
+	if dropIdx < 0 {
+		t.Fatalf("duck-frr-launcher/main.go must call dropCapsFromBounding somewhere")
+	}
+	if setresuidIdx < 0 {
+		t.Fatalf("duck-frr-launcher/main.go must call unix.Setresuid for the privilege drop")
+	}
+	if dropIdx > setresuidIdx {
+		t.Fatalf("duck-frr-launcher/main.go must call dropCapsFromBounding BEFORE unix.Setresuid; Linux clears E on uid transition so post-setresuid PR_CAPBSET_DROP EPERMs")
+	}
+	// The launcher must NOT call cap_set_proc itself; kernel
+	// exec semantics hand the FRR child the right cap set
+	// without any launcher-level cap_set_proc.
+	if strings.Contains(src, "unix.SYS_CAPSET") {
+		t.Fatalf("duck-frr-launcher/main.go must NOT call cap_set_proc (SYS_CAPSET); after setresuid E is empty even with KEEPCAPS=1 so cap_set_proc would EPERM. FRR's own privs_init calls cap_set_proc after exec.")
+	}
+}
+
+// TestFRRFileCapsIncludeCapSetpcap guards the architectural
+// invariant established by the BETA.2 review: the FRR file
+// caps installed by install.sh MUST include cap_setpcap so
+// FRR's privs_init (which calls cap_set_proc) has CAP_SETPCAP
+// in its own effective set after the launcher's exec.
+// Without cap_setpcap in the file caps, FRR's privs_init
+// would fail with EPERM.
+func TestFRRFileCapsIncludeCapSetpcap(t *testing.T) {
+	candidates := []string{
+		"../../scripts/install.sh",
+		"../../../scripts/install.sh",
+	}
+	var data []byte
+	var err error
+	for _, p := range candidates {
+		data, err = os.ReadFile(p)
+		if err == nil {
+			break
+		}
+	}
+	if err != nil {
+		t.Skipf("scripts/install.sh not readable from this layout: %v", err)
+	}
+	src := string(data)
+	for _, binary := range []string{"zebra", "bgpd"} {
+		needle := "setcap cap_net_admin,cap_net_raw,cap_net_bind_service,cap_sys_admin,cap_setpcap+ep /usr/lib/frr/" + binary
+		if !strings.Contains(src, needle) {
+			t.Fatalf("install.sh must setcap cap_net_admin,cap_net_raw,cap_net_bind_service,cap_sys_admin,cap_setpcap+ep on /usr/lib/frr/%s so FRR's privs_init cap_set_proc has CAP_SETPCAP in E", binary)
+		}
+	}
+	// The launcher's own file caps must be just
+	// {SETUID, SETGID, SETPCAP}. The FRR caps propagate via
+	// the launcher service unit's CapabilityBoundingSet, NOT
+	// via launcher file caps (the launcher doesn't need them
+	// for anything; adding them invites future drift).
+	launcherNeedle := "setcap cap_setuid,cap_setgid,cap_setpcap+ep /usr/libexec/duckos/duck-frr-launcher"
+	if !strings.Contains(src, launcherNeedle) {
+		t.Fatalf("install.sh must setcap cap_setuid,cap_setgid,cap_setpcap+ep on /usr/libexec/duckos/duck-frr-launcher (FRR caps propagate via the service unit Bnd)")
+	}
+}
+
 // TestFRRDaemonsRunAsFRRUser is a static-source guard. It
 // asserts the daemon launch args include `-u frr -g frr`.
 // The armv7 failure mode relied on `-u root`, which forced

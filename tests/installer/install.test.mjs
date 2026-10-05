@@ -295,9 +295,12 @@ test('launcher binary is in the artifact, runs as a daemon, and serves the FRR l
   // The install must wire both the launcher's file caps
   // and the FRR binaries' file caps. Without these, the
   // launcher's privilege drop and FRR's netlink /
-  // TCP-bind-service work do not survive exec.
+  // TCP-bind-service work do not survive exec. The FRR
+  // file caps also include cap_setpcap so FRR's privs_init
+  // (which calls cap_set_proc) has CAP_SETPCAP in its
+  // own effective set after the launcher's exec.
   assert.match(installer, /setcap cap_setuid,cap_setgid,cap_setpcap\+ep.*\/usr\/libexec\/duckos\/duck-frr-launcher/);
-  assert.match(installer, /setcap cap_net_admin,cap_net_raw,cap_net_bind_service,cap_sys_admin\+ep.*\/usr\/lib\/frr\/(zebra|bgpd)/);
+  assert.match(installer, /setcap cap_net_admin,cap_net_raw,cap_net_bind_service,cap_sys_admin,cap_setpcap\+ep.*\/usr\/lib\/frr\/(zebra|bgpd)/);
   // The launcher service is installed, started, and
   // enabled so the daemon is running before any FRR
   // pathspace apply.
