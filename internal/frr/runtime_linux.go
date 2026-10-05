@@ -216,9 +216,9 @@ func NewRuntime(netns, pathspace string, manager *Manager) (*Runtime, error) {
 		_ = r.cleanupOnFailure()
 		return nil, ErrConfig
 	}
-	if err := r.runVTYSH(ctx, "-d", "bgpd", "-c", "show bgp ipv4 unicast"); err != nil {
+	if stdout, stderr, err := r.runVTYSHFull(ctx, "-d", "bgpd", "-c", "show bgp ipv4 unicast"); err != nil {
 		_ = r.cleanupOnFailure()
-		return nil, errors.New("frr: startup BGP readiness failed")
+		return nil, fmt.Errorf("frr: startup BGP readiness failed: %v: stderr=%q stdout=%q", err, strings.TrimSpace(stderr), strings.TrimSpace(stdout))
 	}
 	return r, nil
 }
