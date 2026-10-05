@@ -432,6 +432,26 @@ func (r *Runtime) daemonsAlive() bool {
 // runtime's netns (or host netns when netns == ""),
 // daemonized (-d), with the canonical -N pathspace.
 //
+// Implementation note: duck-agent holds no capabilities.
+// The FRR daemons need netlink (zebra), raw sockets, and
+// bgpd needs to bind TCP/179 — but FRR 10.x's privs_init
+// unconditionally requests CAP_SYS_ADMIN which is NOT
+// granted to either the agent or the launcher. We exec
+// the FRR daemons through /usr/libexec/duckos/duck-frr-launcher,
+// which:
+//
+//   1. holds CAP_SETUID+CAP_SETGID+CAP_SETPCAP via file caps,
+//   2. PR_SET_KEEPCAPS=1, setuid(frr), setgid(frr),
+//      setgroups([]),
+//   3. cap_set_proc({NET_ADMIN, NET_RAW, NET_BIND_SERVICE})
+//      via the 64-bit cap_set syscall,
+//   4. exec the FRR binary with `-S` (--skip_runas) so FRR
+//      does not call cap_set_proc and does not change uid/gid.
+//
+// The FRR binary's file caps cap_net_admin,cap_net_raw,
+// cap_net_bind_service+ep are set by install.sh so the
+// caps survive exec regardless of parent caps.
+//
 // Returns the zebra / bgpd PIDs on success. Failure
 // tears down any half-started daemons before
 // returning.
@@ -441,27 +461,35 @@ func (r *Runtime) startDaemons() error {
 	bgpdPIDFile := filepath.Join(r.sockDir, "bgpd.pid")
 	zebraLog := filepath.Join(r.sockDir, "zebra.log")
 	bgpdLog := filepath.Join(r.sockDir, "bgpd.log")
-	zebraBin := frrBinary("zebra")
-	bgpdBin := frrBinary("bgpd")
-	// -d daemonizes; without it the test process
-	// would block forever. -N is mandatory on FRR 10+
-	// to isolate from any host-wide FRR instance; -N
-	// auto-creates the pathspace's own /run/frr/<ps>/
-	// zebra socket, so -z must NOT be passed (the FRR
-	// log otherwise complains "-N option overridden
-	// by -z for zebra named socket path").
-	zebraArgs := []string{"-d", "-f", conf, "-i", zebraPIDFile,
-		"-s", "90000000", "-A", "127.0.0.1", "-N", r.pathspace,
-		"-u", FRRRunUser, "-g", FRRRunGroup}
-	bgpdArgs := []string{"-d", "-f", conf, "-i", bgpdPIDFile,
-		"-A", "127.0.0.1", "-N", r.pathspace,
-		"-u", FRRRunUser, "-g", FRRRunGroup}
-	if err := r.execInNetns(zebraBin, zebraArgs, zebraLog); err != nil {
-		return fmt.Errorf("start zebra: %w", err)
+	launcherBin := frrLauncherBinary()
+	// argv for the launcher, which then exec's the FRR
+	// binary. The launcher owns the privilege drop and
+	// the `-S` flag.
+	zebraLauncherArgs := []string{
+		"--pathspace=" + r.pathspace,
+		"--binary=zebra",
+		"--config=" + conf,
+		"--zebra-addr=127.0.0.1",
+		"--log=" + zebraLog,
+		// -s 90000000 / -i zebraPIDFile are the FRR-side
+		// flags; the launcher passes them through.
+		"--=-s", "90000000", "-i", zebraPIDFile,
 	}
-	if err := r.execInNetns(bgpdBin, bgpdArgs, bgpdLog); err != nil {
+	bgpdLauncherArgs := []string{
+		"--pathspace=" + r.pathspace,
+		"--binary=bgpd",
+		"--config=" + conf,
+		"--zebra-addr=127.0.0.1",
+		"--log=" + bgpdLog,
+		// bgpd doesn't need -s.
+		"--=-i", bgpdPIDFile,
+	}
+	if err := r.execInNetns(launcherBin, zebraLauncherArgs, zebraLog); err != nil {
+		return fmt.Errorf("start zebra (launcher): %w", err)
+	}
+	if err := r.execInNetns(launcherBin, bgpdLauncherArgs, bgpdLog); err != nil {
 		_ = r.killPIDFromFile(zebraPIDFile)
-		return fmt.Errorf("start bgpd: %w", err)
+		return fmt.Errorf("start bgpd (launcher): %w", err)
 	}
 	// Reap the daemons' PIDs from their pidfiles so
 	// the runtime can signal / kill them deterministically.
@@ -473,6 +501,16 @@ func (r *Runtime) startDaemons() error {
 	// vtysh can talk to them.
 	time.Sleep(800 * time.Millisecond)
 	return nil
+}
+
+// frrLauncherBinary is the path to the narrow launcher
+// binary installed by install.sh at
+// /usr/libexec/duckos/duck-frr-launcher. The launcher is
+// the only place that holds CAP_SETUID/CAP_SETGID/CAP_SETPCAP,
+// and it drops to the frr service user before exec'ing the
+// FRR daemons. See cmd/duck-frr-launcher/main.go.
+func frrLauncherBinary() string {
+	return "/usr/libexec/duckos/duck-frr-launcher"
 }
 
 // killPidsLocked sends SIGTERM to the recorded

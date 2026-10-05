@@ -8,91 +8,70 @@ StartLimitBurst=5
 
 [Service]
 Type=simple
+# The Agent must perform directory setup for the FRR child
+# (/run/frr/<ps>, /var/lib/frr/<ps>, /etc/frr/<ps>) before
+# exec'ing the launcher, so it needs to be root.
 User=root
+# The Agent's primary group is duckos; SupplementaryGroups
+# grants it membership in frr and frrvty so its gid-only
+# chownToFRR helper can chown the pathspace dirs to the frr
+# service group without needing CAP_CHOWN in its bounding
+# set.
 Group=duckos
-# The agent owns the FRR pathspace (/var/lib/frr/<ps>, /run/frr/<ps>).
-# The Debian FRR package ships /var/lib/frr/ owned frr:frr 0755 and
-# /etc/frr/ owned root:frr. systemd's CapabilityBoundingSet strips
-# CAP_DAC_OVERRIDE so User=root alone cannot write into /var/lib/frr
-# or chown the pathspace to frr:frr. Granting SupplementaryGroups is
-# the narrow standard way to give the agent the group membership it
-# needs without expanding its capability set.
 SupplementaryGroups=frr frrvty
+# The Agent holds NO capabilities in its bounding set.
+# The privilege-separation model is:
+#
+#   - The Agent does MkdirAll, gid-only chown, chmod, and
+#     write of frr.conf for the FRR child. None of those
+#     require caps; UID 0 owner-rwx on the parent paths is
+#     sufficient when ReadWritePaths is set.
+#   - The Agent then exec's
+#     /usr/libexec/duckos/duck-frr-launcher, which drops
+#     to the frr service user, narrows P/E to
+#     {NET_ADMIN, NET_RAW, NET_BIND_SERVICE}, and exec's
+#     /usr/lib/frr/{zebra,bgpd} with `-S` (--skip_runas).
+#   - The FRR child runs as frr with only the caps it
+#     actually uses. CAP_SYS_ADMIN is intentionally absent:
+#     FRR 10.x's privs_init requests it unconditionally,
+#     so the launcher uses FRR's `-S` flag to skip that
+#     call entirely.
+#
+# CAP_SYS_ADMIN is therefore NEVER granted to the Agent.
+# The Agent's Role is bounded; the launcher's role is
+# bounded; the FRR child's role is bounded. None of them
+# inherits the previous model's CAP_SYS_ADMIN.
+CapabilityBoundingSet=
+AmbientCapabilities=
+# NoNewPrivileges ensures setuid binaries and file-cap
+# binaries run by the Agent cannot elevate privileges
+# beyond what the Agent already has (which is none).
+NoNewPrivileges=yes
 ExecStart=/opt/duckos/current/bin/duck-agent --socket /run/duckos-agent/agent.sock --allowed-uid @DUCKOS_UID@ --environment test
 RuntimeDirectory=duckos-agent
+# /run/frr is created with 0751 so the FRR daemon (running
+# as uid=frr) can traverse the parent to reach its
+# pathspace dir /run/frr/<ps>. The pathspace dir's
+# ownership and mode are the real access control surface;
+# granting world rx on the parent does not expose any data.
 RuntimeDirectory=frr
-# 0751 grants owner=rwx (root) and group=rx (duckos) — the
-# same as 0750 — but adds world=rx. The FRR daemon running
-# as uid=frr (with supplementary groups cleared by privs_init)
-# needs to traverse /run/frr to reach the runtime-managed
-# /run/frr/<pathspace> dir where it writes vty sockets and
-# pid locks. The pathspace dir's ownership and mode are the
-# real access control surface; granting world rx on the
-# parent does not expose any data.
 RuntimeDirectoryMode=0751
 RuntimeDirectoryPreserve=no
-UMask=0007
-Restart=on-failure
-RestartSec=5
-TimeoutStartSec=20
-TimeoutStopSec=10
-NoNewPrivileges=yes
-# CAP_NET_ADMIN: routing / addressing (zebra, ip, network).
-# CAP_NET_RAW:  raw socket probes (FRR zebra, ping).
-# CAP_SETGID / CAP_SETUID: required for FRR's privs_init to
-#   setgroups / setgid / setuid to the canonical `frr` user
-#   before exec'ing zebra / bgpd. Without them, the daemon
-#   aborts with "could not setgroups, Operation not permitted".
-#   These are the canonical "drop privileges" capabilities
-#   and grant no privileged file / network operations.
-# CAP_SYS_ADMIN: required by FRR 10.x's privs_init. The
-#   upstream zebra/src/lib/privs.c requests cap_sys_admin
-#   in its initial cap_set_proc regardless of -u/-g
-#   flags; without CAP_SYS_ADMIN in the bounding set the
-#   kernel denies the operation and zebra exits 1 with
-#   "initial cap_set_proc failed: Operation not permitted.
-#   Wanted caps: cap_net_admin,cap_net_raw,cap_sys_admin=p".
-#   This is a vendor change in FRR 10.x versus the earlier
-#   version the original armv7 fix targeted. The Agent does
-#   not USE CAP_SYS_ADMIN; it is present only so FRR's
-#   startup is admitted.
-# CAP_NET_BIND_SERVICE: required by bgpd to bind TCP/179
-#   (the well-known BGP port). Without it bgpd's
-#   privs_init fails with the same "cap_set_proc failed:
-#   Operation not permitted" error, this time for
-#   cap_net_bind_service=p. The Agent does not USE
-#   CAP_NET_BIND_SERVICE; it is present only so bgpd can
-#   bind 179.
-CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_SETGID CAP_SETUID CAP_SYS_ADMIN CAP_NET_BIND_SERVICE
-AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_SETGID CAP_SETUID CAP_SYS_ADMIN CAP_NET_BIND_SERVICE
+ProtectControlGroups=yes
 ProtectSystem=strict
-ProtectHome=yes
+# The Agent writes /var/lib/frr/<ps>/{frr.conf,vtysh.conf},
+# /run/frr/<ps>/ (pathspace), /etc/frr/<ps>/ (vtysh.conf).
+# ReadWritePaths only undoes the read-only remount that
+# ProtectSystem=strict applies; it does not grant DAC
+# bypass. The Agent must still own the parent paths
+# (UID 0 + owner-rwx) to write into them.
 ReadWritePaths=/run/duckos-agent /run/frr /var/lib/frr /var/lib/duckos-agent /var/lib/duckos-agent/network /var/lib/duckos-agent/ztp /var/lib/duckos-agent/wireguard /var/lib/duckos-agent/xray /var/lib/duckos-agent/frr /var/lib/duckos-agent/qos /var/lib/duckos-agent/vault /var/lib/duckos-agent/vault/records /etc/systemd/network /etc/frr
 PrivateTmp=yes
 PrivateDevices=yes
-PrivateNetwork=no
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectKernelLogs=yes
-ProtectControlGroups=yes
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
-RestrictNamespaces=yes
-RestrictRealtime=yes
-RestrictSUIDSGID=yes
-LockPersonality=yes
-MemoryDenyWriteExecute=yes
-SystemCallArchitectures=native
-IPAddressDeny=any
-LimitCORE=0
-LimitNOFILE=512
-MemoryHigh=128M
-MemoryMax=256M
-TasksMax=64
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=duck-agent
-LogRateLimitIntervalSec=30s
-LogRateLimitBurst=100
+ProtectHome=yes
 
 [Install]
 WantedBy=multi-user.target

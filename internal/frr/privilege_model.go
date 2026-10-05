@@ -1,52 +1,47 @@
 // frr/privilege_model.go: cross-platform declarations of
 // the narrow FRR privilege model.
 //
-// The armv7 / ODROID XU4 failure mode observed in the
-// physical beta.1 image was:
+// Architecture (corrected from the post-f881412 repair
+// chain after the live BETA.2 review at ed3b784):
 //
-//   failed to mkdir "/var/lib/frr/duckos": Permission denied
-//   privs_init: initial cap_set_proc failed: Operation not permitted
-//   Wanted caps: cap_net_admin,cap_net_raw,cap_sys_admin=p
-//   Have caps:    cap_net_admin,cap_net_raw=eip
+//   - duck-agent has CapabilityBoundingSet= (empty). It
+//     does NOT hold CAP_NET_ADMIN, CAP_NET_RAW, CAP_SETUID,
+//     CAP_SETGID, CAP_SETPCAP, CAP_NET_BIND_SERVICE, or
+//     CAP_SYS_ADMIN. The Agent's operations are
+//     MkdirAll, gid-only chown, chmod, write of frr.conf,
+//     and exec of the launcher. None require caps; UID 0
+//     with owner-rwx on the parent path is sufficient.
 //
-// Two root causes:
+//   - /usr/libexec/duckos/duck-frr-launcher is a separate
+//     small Go binary that holds ONLY CAP_SETUID +
+//     CAP_SETGID + CAP_SETPCAP via file caps. Its only job
+//     is to drop to the frr service user, narrow the P/E
+//     caps to {NET_ADMIN, NET_RAW, NET_BIND_SERVICE}, and
+//     exec the FRR binary with `-S` (--skip_runas).
 //
-//   1. The Debian FRR package ships /var/lib/frr/ owned by
-//      frr:frr. FRR's daemon (run via the Agent's child
-//      process) tried to lazily mkdir the pathspace state
-//      dir as the running uid (root, in the legacy code),
-//      which is NOT the FRR package owner. The Agent kept
-//      `-u root -g frrvty`, so the pathspace dir's frr:frr
-//      ownership blocked the daemon's mkdir.
+//   - /usr/lib/frr/zebra and /usr/lib/frr/bgpd have file
+//     caps cap_net_admin,cap_net_raw,cap_net_bind_service+ep
+//     installed by install.sh so the launcher can exec them
+//     and the FRR child picks up only the caps it actually
+//     uses for netlink routes, raw socket probes, and TCP/179
+//     bind.
 //
-//   2. With `-u root`, FRR's privs_init still calls
-//      cap_set_proc asking for cap_net_admin + cap_net_raw
-//      + cap_sys_admin (the working set FRR wants). The
-//      systemd unit grants only CAP_NET_ADMIN CAP_NET_RAW.
-//      cap_set_proc refuses because cap_sys_admin is not
-//      in the permitted set, so the daemon aborts with
-//      "Operation not permitted".
+//   - The FRR child runs as uid=frr, gid=frr, no
+//     supplementary groups, with P/E = {NET_ADMIN, NET_RAW,
+//     NET_BIND_SERVICE}. CAP_SYS_ADMIN is INTENTIONALLY
+//     ABSENT — FRR 10.x's privs_init would request it
+//     unconditionally (Wanted caps: cap_sys_admin=p),
+//     so we use `-S` to skip that call entirely.
 //
-// The narrow fix:
+// The armv7 failure modes observed in the physical beta.1
+// image and during live BETA.2 amd64 qualification were all
+// caused by an earlier, more privileged Agent. This file
+// captures the narrow, correct model.
 //
-//   - The Agent (running as root) pre-creates
-//     /var/lib/frr/<pathspace> with frr:frr ownership
-//     before exec'ing zebra / bgpd. FRR's own mkdir never
-//     fires as the running uid.
-//   - chownToFRR refuses any path that does not live under
-//     StateBase (/var/lib/frr) or PathspaceBase (/run/frr)
-//     — the Agent cannot chown arbitrary user-controlled
-//     paths.
-//   - FRR daemons are exec'd with `-u frr -g frr` instead
-//     of `-u root -g frrvty`. FRR's privs_init drops ALL
-//     caps from the working set (because the daemon is no
-//     longer root), so it never asks for cap_sys_admin.
-//   - duck-agent stays at CAP_NET_ADMIN CAP_NET_RAW only
-//     — CAP_SYS_ADMIN is NEVER added.
-//
-// Live armv7 execution is LIVE-ARMV7-PENDING; the property
-// tests in privilege_model_test.go run on every build
-// target so a future regression is caught immediately.
+// Live armv7 execution remains LIVE-ARMV7-PENDING; the
+// property tests in privilege_model_test.go run on every
+// build target so a future regression is caught
+// immediately.
 package frr
 
 import (

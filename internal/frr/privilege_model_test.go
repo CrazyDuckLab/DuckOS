@@ -1,31 +1,28 @@
 // frr/privilege_model_test.go: regression tests for the
-// narrow FRR privilege model that fixes the armv7 failure
-// mode observed on the physical ODROID XU4:
+// narrow FRR privilege model.
 //
-//   failed to mkdir "/var/lib/frr/duckos": Permission denied
-//   privs_init: initial cap_set_proc failed: Operation not permitted
-//   Wanted caps: cap_net_admin,cap_net_raw,cap_sys_admin=p
-//   Have caps:    cap_net_admin,cap_net_raw=eip
+// See privilege_model.go for the architecture. The
+// invariants enforced here:
 //
-// The fix is deliberately narrow:
-//   1. The Agent pre-creates /var/lib/frr/<pathspace> with
-//      frr:frr ownership before exec'ing zebra / bgpd so
-//      FRR's own mkdir never fires as the running uid.
-//   2. chownToFRR refuses any path that does not live
-//      under StateBase (/var/lib/frr) or PathspaceBase
-//      (/run/frr). The Agent cannot chown arbitrary
-//      user-controlled paths even if the pathspace name
-//      comes from the public API.
-//   3. FRR daemons are exec'd with `-u frr -g frr` so they
-//      drop ALL caps from the working set instead of
-//      asking the kernel for cap_sys_admin. duck-agent
-//      keeps the narrow CAP_NET_ADMIN CAP_NET_RAW set.
-//   4. duck-agent stays at CAP_NET_ADMIN CAP_NET_RAW
-//      only — CAP_SYS_ADMIN is NEVER added.
+//   1. StateBase / PathspaceBase are the canonical Debian
+//      FRR paths; FRRRunUser / FRRRunGroup are "frr".
+//   2. chownToFRR refuses any path that is not under
+//      StateBase or PathspaceBase. The runtime cannot
+//      chown arbitrary user-controlled paths.
+//   3. duck-agent's CapabilityBoundingSet is empty. NO cap
+//      of any kind appears in CapabilityBoundingSet /
+//      AmbientCapabilities — including CAP_NET_ADMIN,
+//      CAP_NET_RAW, CAP_NET_BIND_SERVICE, CAP_SETUID,
+//      CAP_SETGID, CAP_SETPCAP, and CAP_SYS_ADMIN.
+//   4. duck-agent has ReadWritePaths for /run/frr and
+//      /var/lib/frr and /etc/frr so the pathspace setup
+//      works without DAC bypass.
+//   5. The launcher binary path is wired through the
+//      runtime so the live BETA.2 review's mandate
+//      ("isolate FRR-only caps to the FRR process") is
+//      enforced by static source.
 //
-// These tests run on every build target (the privilege
-// model is platform-independent). Live armv7 execution
-// remains LIVE-ARMV7-PENDING.
+// Live armv7 execution remains LIVE-ARMV7-PENDING.
 package frr
 
 import (
@@ -184,13 +181,17 @@ func TestNewRuntime_PreCreatesStateDirWithFRROwnership(t *testing.T) {
 	}
 }
 
-// TestSystemdCapsRemainNarrow is a static-source guard. It
-// scans packaging/systemd/duck-agent.service and refuses
-// to ship if any CAP_SYS_ADMIN ever appears in the
-// bounding / ambient / permitted sets. The fix for armv7
-// specifically required NOT granting CAP_SYS_ADMIN to
-// duck-agent.
-func TestSystemdCapsRemainNarrow(t *testing.T) {
+// TestAgentHasNoCapabilities is a static-source guard.
+// duck-agent must hold NO capabilities in its bounding or
+// ambient set. The post-BETA.2-review architecture isolates
+// FRR-only capabilities to the launcher / FRR child
+// process via file caps, not via the agent.
+//
+// The CapabilityBoundingSet= and AmbientCapabilities=
+// directives in the unit file MUST be present but EMPTY.
+// We assert that the line exists, and that no
+// "CAP_<NAME>" token follows it (other than in comments).
+func TestAgentHasNoCapabilities(t *testing.T) {
 	candidates := []string{
 		"../../packaging/systemd/duck-agent.service",
 		"../../../packaging/systemd/duck-agent.service",
@@ -207,52 +208,70 @@ func TestSystemdCapsRemainNarrow(t *testing.T) {
 		t.Skipf("duck-agent.service not readable from this layout: %v", err)
 	}
 	src := string(data)
-	// Note: CAP_SYS_ADMIN IS present in the live unit because
-	// FRR 10.x's privs_init unconditionally requests it.
-	// CAP_NET_BIND_SERVICE IS present because bgpd binds
-	// TCP/179. The Agent does not USE either; both are
-	// present only so FRR's startup is admitted. Any
-	// capability BEYOND {NET_ADMIN, NET_RAW, SETGID, SETUID,
-	// SYS_ADMIN, NET_BIND_SERVICE} is a regression and must
-	// be refused here. Scan only the CapabilityBoundingSet /
-	// AmbientCapabilities directive lines so that the test
-	// does not match capability names mentioned in
-	// explanatory comments.
+	// The directives must exist and be empty (no cap
+	// tokens follow them on the same line).
 	for _, directive := range []string{
 		"CapabilityBoundingSet=",
 		"AmbientCapabilities=",
 	} {
-		for _, m := range []string{
-			"CAP_DAC_OVERRIDE", "CAP_DAC_READ_SEARCH",
-			"CAP_SYS_MODULE", "CAP_SYS_RAWIO", "CAP_SYS_PTRACE",
-			"CAP_SYS_RESOURCE", "CAP_SYS_TIME", "CAP_SYS_TTY_CONFIG",
-			"CAP_SYS_BOOT", "CAP_SYS_CHROOT", "CAP_SYS_PACCT",
-			"CAP_SYS_NICE",
-			"CAP_NET_BROADCAST",
-			"CAP_MKNOD", "CAP_LEASE",
-			"CAP_AUDIT_WRITE", "CAP_AUDIT_CONTROL",
-			"CAP_LINUX_IMMUTABLE",
-			"CAP_FOWNER", "CAP_FSETID",
-			"CAP_KILL",
-			"CAP_SETFCAP", "CAP_SETPCAP",
-			"CAP_CHOWN",
-			"CAP_IPC_LOCK", "CAP_IPC_OWNER",
-			"CAP_MAC_OVERRIDE",
-		} {
-			if strings.Contains(src, directive+" "+m) ||
-				strings.Contains(src, directive+m) {
-				t.Fatalf("duck-agent.service %s must not include %s; the narrow capability set is {CAP_NET_ADMIN, CAP_NET_RAW, CAP_SETGID, CAP_SETUID, CAP_SYS_ADMIN, CAP_NET_BIND_SERVICE}", directive, m)
+		// We require the directive line to be exactly the
+		// directive followed by nothing (or whitespace and
+		// a comment). Anything other than that — including
+		// trailing CAP_* — is a regression.
+		if !strings.Contains(src, directive+"\n") && !strings.Contains(src, directive+" ") && !strings.Contains(src, directive+"#") {
+			t.Fatalf("duck-agent.service must declare %s (empty)", directive)
+		}
+		// Make sure no CAP_* token appears on the SAME line
+		// as the directive. Scan each line.
+		for _, line := range strings.Split(src, "\n") {
+			if !strings.HasPrefix(strings.TrimSpace(line), directive) {
+				continue
+			}
+			// The line is a CapabilityBoundingSet=/AmbientCapabilities=
+			// directive. Strip the directive prefix, the rest
+			// must be empty / whitespace / comment only.
+			rest := strings.TrimPrefix(strings.TrimSpace(line), directive)
+			for _, tok := range strings.Fields(rest) {
+				if strings.HasPrefix(tok, "#") {
+					break // comment
+				}
+				if strings.HasPrefix(tok, "CAP_") {
+					t.Fatalf("duck-agent.service %s must be empty; found capability %q", directive, tok)
+				}
 			}
 		}
 	}
-	if !strings.Contains(src, "CAP_NET_ADMIN") {
-		t.Fatalf("duck-agent.service must keep CAP_NET_ADMIN for zebra route mgmt")
+}
+
+// TestLauncherIsTheOnlyCapableProcess asserts the runtime
+// exec's the launcher binary instead of /usr/lib/frr/zebra
+// or /usr/lib/frr/bgpd directly. This is the static-source
+// guard against regressions that re-introduce direct
+// /usr/lib/frr/* exec, which would propagate the agent's
+// privileges to the FRR child via fork+exec inheritance.
+func TestLauncherIsTheOnlyCapableProcess(t *testing.T) {
+	candidates := []string{
+		"../../internal/frr/runtime_linux.go",
+		"../../../internal/frr/runtime_linux.go",
 	}
-	if !strings.Contains(src, "CAP_NET_RAW") {
-		t.Fatalf("duck-agent.service must keep CAP_NET_RAW for raw socket probes")
+	var data []byte
+	var err error
+	for _, p := range candidates {
+		data, err = os.ReadFile(p)
+		if err == nil {
+			break
+		}
 	}
-	if !strings.Contains(src, "CAP_SETGID") || !strings.Contains(src, "CAP_SETUID") {
-		t.Fatalf("duck-agent.service must grant CAP_SETGID and CAP_SETUID so FRR's privs_init can setgroups / setgid / setuid to the canonical frr user")
+	if err != nil {
+		t.Skipf("runtime_linux.go not readable from this layout: %v", err)
+	}
+	src := string(data)
+	if !strings.Contains(src, "/usr/libexec/duckos/duck-frr-launcher") {
+		t.Fatalf("runtime_linux.go must exec /usr/libexec/duckos/duck-frr-launcher, not /usr/lib/frr/* directly")
+	}
+	if strings.Contains(src, `exec.Command("/usr/lib/frr/zebra"`) ||
+		strings.Contains(src, `exec.Command("/usr/lib/frr/bgpd"`) {
+		t.Fatalf("runtime_linux.go must NOT call exec.Command(\"/usr/lib/frr/...\") directly; the launcher owns the privilege drop")
 	}
 }
 

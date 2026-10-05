@@ -18,7 +18,7 @@ for ARCH in "${TARGETS[@]}"; do
   mkdir -p "$TASK_BUILD/bin" "$TASK_BUILD/web" "$TASK_BUILD/systemd"
   GOARCH=$ARCH
   [[ "$ARCH" != armv7 ]] || GOARCH=arm
-  for PROGRAM in duck-api duck-agent duck-updater duck-restore; do
+  for PROGRAM in duck-api duck-agent duck-updater duck-restore duck-frr-launcher; do
     CGO_ENABLED=0 GOOS=linux GOARCH="$GOARCH" GOARM=7 go build -trimpath -buildvcs=false \
       -ldflags "-s -w -buildid= -X github.com/CrazyDuckLab/DuckOS/pkg/buildinfo.Version=$VERSION -X github.com/CrazyDuckLab/DuckOS/pkg/buildinfo.Commit=$COMMIT" \
       -o "$TASK_BUILD/bin/$PROGRAM" "./cmd/$PROGRAM"

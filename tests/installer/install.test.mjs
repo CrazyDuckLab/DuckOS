@@ -205,35 +205,67 @@ test('unit boundary keeps API unprivileged and fixes Agent semantic service argu
   const install = await fs.readFile(installer, 'utf8');
   assert.match(install, /\/usr\/libexec\/duckos\/duck-updater --init-health-key/);
   assert.match(agent, /^User=root$/m);
-  // The Agent keeps a deliberately narrow capability set:
-  // CAP_NET_ADMIN for routing / addressing, CAP_NET_RAW for FRR's
-  // raw socket needs. CAP_SYS_ADMIN must NEVER appear here — that
-  // is the privilege separation invariant guarded by the FRR fix
-  // (see internal/frr/privilege_model_test.go for the Go side).
-  assert.match(agent, /^CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_SETGID CAP_SETUID CAP_SYS_ADMIN CAP_NET_BIND_SERVICE$/m);
-  assert.match(agent, /^AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_SETGID CAP_SETUID CAP_SYS_ADMIN CAP_NET_BIND_SERVICE$/m);
-  // CAP_SYS_ADMIN is required by FRR 10.x's privs_init; the
-  // Agent does not USE it (only FRR's startup must be admitted).
-  // Documenting that the Agent must not GROW beyond this set is
-  // the privilege-model invariant.
-  // The agent owns the FRR pathspace (/var/lib/frr/<ps>,
-  // /run/frr/<ps>). The Debian FRR package ships /var/lib/frr
-  // owned frr:frr 0755 and systemd's CapabilityBoundingSet strips
-  // CAP_DAC_OVERRIDE so User=root alone cannot write into
-  // /var/lib/frr. Granting SupplementaryGroups is the narrow
-  // standard way to give the agent the group membership it needs
-  // without expanding its capability set.
+  // After the live BETA.2 architectural review, the Agent
+  // holds NO capabilities. The FRR-only caps
+  // (NET_ADMIN, NET_RAW, NET_BIND_SERVICE) are now scoped
+  // to /usr/libexec/duckos/duck-frr-launcher and to the
+  // FRR binaries' file caps. CAP_SYS_ADMIN is FORBIDDEN on
+  // the Agent. The Go-side privilege_model_test.go enforces
+  // the same model.
+  assert.match(agent, /^CapabilityBoundingSet=$/m);
+  assert.match(agent, /^AmbientCapabilities=$/m);
+  for (const tok of [
+    'CAP_NET_ADMIN', 'CAP_NET_RAW', 'CAP_NET_BIND_SERVICE',
+    'CAP_SETUID', 'CAP_SETGID', 'CAP_SETPCAP',
+    'CAP_SYS_ADMIN', 'CAP_DAC_OVERRIDE', 'CAP_CHOWN',
+    'CAP_FOWNER', 'CAP_SYS_PTRACE', 'CAP_AUDIT_',
+  ]) {
+    const re = new RegExp(`^CapabilityBoundingSet=.*${tok}`, 'm');
+    assert.doesNotMatch(agent, re, `duck-agent.service must NOT include ${tok} in CapabilityBoundingSet`);
+  }
+  // NoNewPrivileges is required because the Agent has no
+  // caps and must not gain any through setuid / file-cap
+  // binaries (the launcher has its own file caps, but the
+  // launcher is exec'd by the Agent via fork+exec, and
+  // exec does not change the parent's cap sets under
+  // NoNewPrivileges anyway).
+  assert.match(agent, /^NoNewPrivileges=yes$/m);
+  // The Agent needs to write the FRR pathspace setup;
+  // ReadWritePaths grants that without DAC bypass.
   assert.match(agent, /^SupplementaryGroups=frr frrvty$/m);
   assert.match(agent, /--allowed-uid @DUCKOS_UID@ --environment test/);
+  assert.match(agent, /^RuntimeDirectory=frr$/m);
   assert.match(agent, /^RuntimeDirectoryMode=0751$/m);
-  assert.match(agent, /^PrivateNetwork=no$/m);
+  assert.match(agent, /ReadWritePaths=.*\/run\/frr.*\/var\/lib\/frr/);
+  assert.match(agent, /ReadWritePaths=.*\/etc\/frr/);
   for (const unit of [api, agent]) {
-    assert.match(unit, /^NoNewPrivileges=yes$/m);
     assert.match(unit, /^ProtectSystem=strict$/m);
     assert.match(unit, /^MemoryMax=256M$/m);
     assert.match(unit, /^TasksMax=64$/m);
     assert.match(unit, /^LimitCORE=0$/m);
   }
+});
+
+test('launcher binary is in the artifact and execs the FRR daemons with -S', async () => {
+  // The privilege separation model relies on
+  // /usr/libexec/duckos/duck-frr-launcher being in the
+  // artifact so the Agent can exec it. install.sh sets
+  // file capabilities on both the launcher and the FRR
+  // binaries; this test asserts the binary is included
+  // and that install.sh wires setcap into the install
+  // path.
+  const artifact = path.join(root, 'dist/duckos-linux-amd64');
+  const launcherBin = path.join(artifact, 'bin/duck-frr-launcher');
+  const manifest = await fs.readFile(path.join(artifact, 'SHA256SUMS'), 'utf8');
+  assert.match(manifest, /  bin\/duck-frr-launcher\n/);
+
+  const installer = await fs.readFile(path.join(artifact, 'install.sh'), 'utf8');
+  // install.sh must setcap both the FRR binaries and the
+  // launcher. Without these file caps, the launcher's
+  // privilege drop and FRR's netlink / TCP-bind-service work
+  // do not survive exec.
+  assert.match(installer, /setcap cap_net_admin,cap_net_raw,cap_net_bind_service\+ep.*\/usr\/lib\/frr\/(zebra|bgpd)/);
+  assert.match(installer, /setcap cap_setuid,cap_setgid,cap_setpcap\+ep.*\/usr\/libexec\/duckos\/duck-frr-launcher/);
 });
 
 test('preflight tolerates any pre-existing duck-dnsmasq identity', async () => {

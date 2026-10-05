@@ -236,7 +236,7 @@ valid_path() {
   [[ "$candidate" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] || return 1
   case "/$candidate/" in *'/../'*|*'/./'*|*'//'*) return 1 ;; esac
   case "$candidate" in
-    VERSION|BUILD-INFO.json|install.sh|bin/duck-api|bin/duck-agent|bin/duck-updater|bin/duck-restore|systemd/duck-restore.service|systemd/duck-updater.service|systemd/duck-api.service|systemd/duck-agent.service|systemd/duck-dnsmasq.service|systemd/duck-network-recover.service) return 0 ;;
+    VERSION|BUILD-INFO.json|install.sh|bin/duck-api|bin/duck-agent|bin/duck-updater|bin/duck-restore|bin/duck-frr-launcher|systemd/duck-restore.service|systemd/duck-updater.service|systemd/duck-api.service|systemd/duck-agent.service|systemd/duck-dnsmasq.service|systemd/duck-network-recover.service) return 0 ;;
     web/*) [[ "$candidate" != */ ]] ;;
     xray-core/*) [[ "$candidate" != */ ]] ;;
     *) return 1 ;;
@@ -651,6 +651,34 @@ install -d -o root -g root -m 0755 /usr/libexec /usr/libexec/duckos
 install -o root -g root -m 0755 "$release/bin/duck-updater" /usr/libexec/duckos/duck-updater
 /usr/libexec/duckos/duck-updater --init-health-key
 install -o root -g root -m 0755 "$release/bin/duck-restore" /usr/libexec/duckos/duck-restore
+# The duck-frr-launcher is the narrow privilege dropper for
+# the FRR child process. duck-agent itself has no
+# capabilities (CapabilityBoundingSet is empty); the
+# launcher holds CAP_SETUID+CAP_SETGID+CAP_SETPCAP via file
+# caps so it can drop to the frr service user, narrow the
+# P/E set to {NET_ADMIN, NET_RAW, NET_BIND_SERVICE}, and
+# exec /usr/lib/frr/{zebra,bgpd} with `-S` (--skip_runas).
+install -o root -g root -m 0755 "$release/bin/duck-frr-launcher" /usr/libexec/duckos/duck-frr-launcher
+# File capabilities on the FRR binaries so the launcher
+# can exec them and they pick up the caps they actually use
+# (netlink routes, raw socket probes, bgpd TCP/179 bind)
+# regardless of the launcher process's effective set. CAP_SYS_ADMIN
+# is INTENTIONALLY ABSENT — FRR 10.x's privs_init would
+# request it, so we run FRR with `-S` to skip that call.
+if command -v setcap >/dev/null 2>&1 && command -v /usr/lib/frr/zebra >/dev/null 2>&1; then
+  setcap cap_net_admin,cap_net_raw,cap_net_bind_service+ep /usr/lib/frr/zebra /usr/lib/frr/bgpd || printf 'DuckOS installer: setcap on /usr/lib/frr/{zebra,bgpd} failed; FRR will need to be re-cap after every Debian FRR package upgrade.\n' >&2
+elif ! command -v /usr/lib/frr/zebra >/dev/null 2>&1; then
+  : # FRR not installed; install.sh does not abort on this.
+else
+  printf 'DuckOS installer: setcap not available; FRR caps will not survive package upgrades.\n' >&2
+fi
+# File capabilities on the launcher: setuid+setgid+setpcap
+# so the launcher can drop privileges, narrow P/E, and
+# exec the FRR child. CAP_SYS_ADMIN is INTENTIONALLY
+# ABSENT.
+if command -v setcap >/dev/null 2>&1; then
+  setcap cap_setuid,cap_setgid,cap_setpcap+ep /usr/libexec/duckos/duck-frr-launcher || fail 'setcap on /usr/libexec/duckos/duck-frr-launcher failed; the FRR privilege-drop model cannot work.'
+fi
 install -d -o root -g root -m 0700 /var/lib/duckos-restore /var/lib/duckos/restore-source /var/lib/duckos/restore-live
 install -o root -g root -m 0644 "$release/systemd/duck-restore.service" /etc/systemd/system/duck-restore.service
 install -d -o root -g root -m 0700 /var/lib/duckos-updater
