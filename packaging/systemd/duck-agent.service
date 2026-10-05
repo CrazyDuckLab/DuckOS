@@ -2,6 +2,15 @@
 Description=DuckOS privileged read-only system Agent (internal TEST build)
 Documentation=file:/opt/duckos/current/BUILD-INFO.json
 After=local-fs.target
+# The Agent starts the FRR child through the
+# duck-frr-launcher daemon. The daemon MUST be listening
+# on /run/duckos-agent/frr-launcher.sock before the
+# Agent's startup-time FRR init runs, otherwise the
+# Agent's first FRR dial returns ENOENT and the FRR
+# service is permanently marked unavailable until the
+# Agent is restarted.
+After=duck-frr-launcher.service
+Wants=duck-frr-launcher.service
 Before=duck-api.service
 StartLimitIntervalSec=60
 StartLimitBurst=5
