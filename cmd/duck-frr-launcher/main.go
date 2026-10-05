@@ -282,26 +282,18 @@ func execFRR(args []string, frrUid, frrGid int) (int, error) {
 	}
 
 	// Stage the log file + pidfile as the launcher
-	// user (root). FRR will append to / truncate the
-	// log itself as frr.
+	// user (root). The re-exec'd child (running as
+	// uid=frr after its privilege drop) will create the
+	// file itself with O_CREATE and own it from the
+	// start; pre-creating it here as root:duckos with a
+	// restrictive mode was the cause of an EACCES loop
+	// (chown to frr was also blocked by the service
+	// unit's missing CAP_CHOWN).
 	if logPath != "" {
-		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o664)
-		if err != nil {
-			return 0, fmt.Errorf("open log %s: %w", logPath, err)
+		if err := os.MkdirAll(filepath.Dir(logPath), 0o775); err != nil {
+			return 0, fmt.Errorf("mkdir %s: %w", filepath.Dir(logPath), err)
 		}
-		_ = f.Close()
-		// Re-own the log file to frr:frr so the
-		// re-exec'd child (which becomes uid=frr after
-		// its privilege drop) can append to it. Without
-		// this, systemd's default umask 0022 strips the
-		// requested mode to 0644 and the file is owned
-		// root:duckos — uid=frr falls into "other" with
-		// r-- and gets EACCES on the next O_WRONLY open.
-		if u, g, lerr := lookupFrrIds(); lerr == nil {
-			if err := os.Chown(logPath, u, g); err != nil {
-				fmt.Fprintf(os.Stderr, "frr-launcher: chown log %s: %v\n", logPath, err)
-			}
-		}
+		_ = os.WriteFile(logPath, []byte{}, 0o664)
 	}
 	if pidFile != "" {
 		_ = os.WriteFile(pidFile, []byte{}, 0o644)
