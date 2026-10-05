@@ -6,9 +6,12 @@
 // Architecture (see internal/frr/privilege_model.go):
 //
 //   duck-agent holds NO capabilities in its bounding
-//   set. The agent pre-creates /run/frr/<ps>,
-//   /var/lib/frr/<ps>, /etc/frr/<ps>, chowns the gid to
-//   frr, chmods 0775, then exec's THIS launcher.
+//   set. The agent pre-creates /run/frr/<ps> and
+//   /var/lib/frr/<ps>, chowns the gid to frr, chmods
+//   0775, then exec's THIS launcher. The agent CANNOT
+//   pre-create /etc/frr/<ps> because /etc/frr is owned
+//   frr:frr 0700 and the agent has no caps; the launcher
+//   does that step below AFTER dropping to uid=frr.
 //
 //   The launcher is a small Go binary that:
 //     1. holds CAP_SETUID + CAP_SETGID + CAP_SETPCAP via
@@ -16,11 +19,18 @@
 //     2. PR_SET_KEEPCAPS = 1,
 //     3. setuid(frr) / setgid(frr) / setgroups([]) — drop
 //        to the canonical `frr` service user,
-//     4. cap_set_proc({NET_ADMIN, NET_RAW, NET_BIND_SERVICE})
+//     4. mkdir /etc/frr/<ps>/ 0755 and write a stub
+//        vtysh.conf so vtysh's pathspace configuration
+//        load does not abort with "No such file or
+//        directory". This is the path the Agent cannot
+//        write because /etc/frr's owner is uid=frr and
+//        mode 0700. The launcher, now uid=frr, matches
+//        the owner and can write.
+//     5. cap_set_proc({NET_ADMIN, NET_RAW, NET_BIND_SERVICE})
 //        — narrow P/E/I to what FRR actually uses
 //        (netlink, raw sockets, TCP/179 bind). CAP_SYS_ADMIN
 //        is intentionally absent.
-//     5. exec /usr/lib/frr/{zebra,bgpd} with `-S`
+//     6. exec /usr/lib/frr/{zebra,bgpd} with `-S`
 //        (--skip_runas) so FRR's privs_init does NOT call
 //        cap_set_proc.
 //
@@ -131,6 +141,36 @@ func main() {
 	}
 	if err := unix.Setresuid(uid, uid, uid); err != nil {
 		die(fmt.Sprintf("frr-launcher: setresuid(%d): %v", uid, err))
+	}
+
+	// Step 2.5: create /etc/frr/<pathspace>/vtysh.conf.
+	// /etc/frr is owned frr:frr 0700 in the Debian
+	// package, so only the frr user can write into it.
+	// The Agent cannot do this; we do it here, now that
+	// we ARE uid=frr. The dir is created 0755 so vtysh
+	// (which runs as the same frr user) can re-open
+	// vtysh.conf on every invocation. The file is a
+	// stub ("!\n") — vtysh.conf controls interactive
+	// shell behaviour, and the absence of a config is
+	// not an error; only the absence of the file is.
+	etcDir := "/etc/frr/" + *pathspace
+	if err := os.MkdirAll(etcDir, 0o755); err != nil {
+		// Do NOT die here: a read-only host (eg a
+		// container without /etc/frr) should still let
+		// the FRR child attempt startup. vtysh will log
+		// one warning line, but zebra/bgpd do not depend
+		// on /etc/frr/<ps>/vtysh.conf.
+		fmt.Fprintf(os.Stderr, "frr-launcher: mkdir %s: %v; vtysh may warn\n", etcDir, err)
+	} else {
+		vtyshConf := etcDir + "/vtysh.conf"
+		// Idempotent write — never overwrite a real
+		// operator-managed vtysh.conf. We only seed it
+		// when the file does not already exist.
+		if _, err := os.Stat(vtyshConf); os.IsNotExist(err) {
+			if err := os.WriteFile(vtyshConf, []byte("!\n"), 0o644); err != nil {
+				fmt.Fprintf(os.Stderr, "frr-launcher: write %s: %v; vtysh may warn\n", vtyshConf, err)
+			}
+		}
 	}
 
 	// Step 3: narrow P/E/I to capsToKeep. CAP_SYS_ADMIN

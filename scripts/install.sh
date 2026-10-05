@@ -665,9 +665,10 @@ install -o root -g root -m 0755 "$release/bin/duck-frr-launcher" /usr/libexec/du
 # regardless of the launcher process's effective set. CAP_SYS_ADMIN
 # is INTENTIONALLY ABSENT — FRR 10.x's privs_init would
 # request it, so we run FRR with `-S` to skip that call.
-if command -v setcap >/dev/null 2>&1 && command -v /usr/lib/frr/zebra >/dev/null 2>&1; then
-  setcap cap_net_admin,cap_net_raw,cap_net_bind_service+ep /usr/lib/frr/zebra /usr/lib/frr/bgpd || printf 'DuckOS installer: setcap on /usr/lib/frr/{zebra,bgpd} failed; FRR will need to be re-cap after every Debian FRR package upgrade.\n' >&2
-elif ! command -v /usr/lib/frr/zebra >/dev/null 2>&1; then
+if command -v setcap >/dev/null 2>&1 && [[ -x /usr/lib/frr/zebra ]]; then
+  setcap cap_net_admin,cap_net_raw,cap_net_bind_service+ep /usr/lib/frr/zebra || printf 'DuckOS installer: setcap on /usr/lib/frr/zebra failed; FRR will need to be re-cap after every Debian FRR package upgrade.\n' >&2
+  [[ -x /usr/lib/frr/bgpd ]] && setcap cap_net_admin,cap_net_raw,cap_net_bind_service+ep /usr/lib/frr/bgpd || true
+elif ! [[ -x /usr/lib/frr/zebra ]]; then
   : # FRR not installed; install.sh does not abort on this.
 else
   printf 'DuckOS installer: setcap not available; FRR caps will not survive package upgrades.\n' >&2

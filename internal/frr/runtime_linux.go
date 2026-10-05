@@ -150,32 +150,37 @@ func NewRuntime(netns, pathspace string, manager *Manager) (*Runtime, error) {
 	} else if err := chownToFRR(stateDir); err != nil {
 		log.Printf("frr: chown %s: %v; daemon will own its own creation", stateDir, err)
 	}
-	// FRR's pathspace (-N) requires the matching
-	// /etc/frr/<ps>/vtysh.conf to exist; otherwise
-	// vtysh aborts with "Can't open configuration
-	// file ... due to 'No such file or directory'"
-	// before parsing the runtime's frr.conf. An
-	// empty file is sufficient; the daemon vty
-	// sockets are under /run/frr/<ps>/, not
-	// /etc/frr/<ps>/. The dir must be owned by frr:frr
-	// because the daemon opens it after dropping privs.
-	// Best-effort: if the Agent's restricted capability
-	// set refuses to mkdir /etc/frr/<ps>, we log and
-	// continue; vtysh will then emit its warning
-	// without affecting the daemons.
+	// FRR's pathspace (-N) requires /etc/frr/<ps>/vtysh.conf
+	// to exist; otherwise vtysh aborts with "Can't open
+	// configuration file ... due to 'No such file or
+	// directory'". The daemon's vty socket itself lives
+	// under /run/frr/<ps>/, so /etc/frr/<ps>/ is a
+	// configuration-only path.
+//
+// /etc/frr is owned by frr:frr 0700 in the Debian
+// package. The Agent has no caps and UID 0 does not
+// match the file owner; gid=frr IS in SupplementaryGroups
+// but mode 0700 has no group bits. The Agent cannot
+// write into /etc/frr without a privilege expansion.
+//
+// Solution: the launcher creates /etc/frr/<ps>/vtysh.conf
+	// AFTER dropping privileges to the frr service user.
+	// The frr user matches /etc/frr's owner, so the
+	// mkdir + write succeed. The runtime does NOT try
+	// to pre-create /etc/frr/<ps>; it accepts that
+	// vtysh will emit a single warning line until the
+	// launcher has run. After the launcher's first
+	// invocation, subsequent restarts see the existing
+	// dir.
 	etcDir := filepath.Join("/etc/frr", pathspace)
 	if err := os.MkdirAll(etcDir, 0o755); err != nil {
-		log.Printf("frr: pre-create %s: %v; vtysh will warn", etcDir, err)
-	} else {
-		_ = os.WriteFile(filepath.Join(etcDir, "vtysh.conf"), []byte("!\n"), 0o644)
-		// chownToFRR refuses paths outside StateBase and
-		// PathspaceBase. /etc/frr/<ps> is not in that set,
-		// so we deliberately skip chown here: the FRR
-		// Debian package already ships /etc/frr owned by
-		// root:frr and the runtime does not need to mutate
-		// it. If the package is missing, the daemons will
-		// surface a clear error on startup, which is the
-		// right time for the operator to fix the install.
+		// Best-effort: this fails on every install because
+		// /etc/frr is 0700 frr:frr and the Agent has no
+		// caps. The launcher, running as uid=frr, will
+		// create the dir + vtysh.conf after its privilege
+		// drop. We log once so the operator can see what
+		// happened; this is the documented architecture.
+		log.Printf("frr: Agent cannot create %s (mode 0700 frr:frr); launcher will create it after privilege drop", etcDir)
 	}
 	if netns != "" {
 		if err := runIPNetnsAdd(netns); err != nil {
@@ -464,16 +469,19 @@ func (r *Runtime) startDaemons() error {
 	launcherBin := frrLauncherBinary()
 	// argv for the launcher, which then exec's the FRR
 	// binary. The launcher owns the privilege drop and
-	// the `-S` flag.
+	// the `-S` flag. Args after `--` are passed through
+	// to /usr/lib/frr/<binary> by the launcher (Go's flag
+	// package stops parsing at `--`).
 	zebraLauncherArgs := []string{
 		"--pathspace=" + r.pathspace,
 		"--binary=zebra",
 		"--config=" + conf,
 		"--zebra-addr=127.0.0.1",
 		"--log=" + zebraLog,
-		// -s 90000000 / -i zebraPIDFile are the FRR-side
-		// flags; the launcher passes them through.
-		"--=-s", "90000000", "-i", zebraPIDFile,
+		"--",
+		// FRR-side flags:
+		"-s", "90000000",
+		"-i", zebraPIDFile,
 	}
 	bgpdLauncherArgs := []string{
 		"--pathspace=" + r.pathspace,
@@ -481,8 +489,9 @@ func (r *Runtime) startDaemons() error {
 		"--config=" + conf,
 		"--zebra-addr=127.0.0.1",
 		"--log=" + bgpdLog,
-		// bgpd doesn't need -s.
-		"--=-i", bgpdPIDFile,
+		"--",
+		// FRR-side flags:
+		"-i", bgpdPIDFile,
 	}
 	if err := r.execInNetns(launcherBin, zebraLauncherArgs, zebraLog); err != nil {
 		return fmt.Errorf("start zebra (launcher): %w", err)
