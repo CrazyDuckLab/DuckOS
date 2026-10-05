@@ -278,7 +278,7 @@ func execFRR(args []string, frrUid, frrGid int) (int, error) {
 	// user (root). FRR will append to / truncate the
 	// log itself as frr.
 	if logPath != "" {
-		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o640)
+		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o664)
 		if err != nil {
 			return 0, fmt.Errorf("open log %s: %w", logPath, err)
 		}
@@ -356,7 +356,7 @@ func execFRR(args []string, frrUid, frrGid int) (int, error) {
 		// drop-time errors land in the FRR log.
 		var stderr *os.File
 		if logPath != "" {
-			f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o640)
+			f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o664)
 			if err != nil {
 				resCh <- forkResult{0, err}
 				return
@@ -495,7 +495,7 @@ func execOneShot(binary, pathspace, conf, zServAddr, logPath string, uid, gid in
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	if logPath != "" {
-		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o640)
+		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o664)
 		if err != nil {
 			die("frr-launcher: open log %s: %v", logPath, err)
 		}
@@ -538,7 +538,7 @@ func dropAndExecFRR(binary, pathspace, conf, logPath, pidFile string, passthroug
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	if logPath != "" {
-		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o640)
+		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o664)
 		if err != nil {
 			die("frr-launcher re-exec: open log %s: %v", logPath, err)
 		}
