@@ -236,7 +236,7 @@ valid_path() {
   [[ "$candidate" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] || return 1
   case "/$candidate/" in *'/../'*|*'/./'*|*'//'*) return 1 ;; esac
   case "$candidate" in
-    VERSION|BUILD-INFO.json|install.sh|bin/duck-api|bin/duck-agent|bin/duck-updater|bin/duck-restore|bin/duck-frr-launcher|systemd/duck-restore.service|systemd/duck-updater.service|systemd/duck-api.service|systemd/duck-agent.service|systemd/duck-dnsmasq.service|systemd/duck-network-recover.service) return 0 ;;
+    VERSION|BUILD-INFO.json|install.sh|bin/duck-api|bin/duck-agent|bin/duck-updater|bin/duck-restore|bin/duck-frr-launcher|systemd/duck-restore.service|systemd/duck-updater.service|systemd/duck-api.service|systemd/duck-agent.service|systemd/duck-dnsmasq.service|systemd/duck-network-recover.service|systemd/duck-frr-launcher.service) return 0 ;;
     web/*) [[ "$candidate" != */ ]] ;;
     xray-core/*) [[ "$candidate" != */ ]] ;;
     *) return 1 ;;
