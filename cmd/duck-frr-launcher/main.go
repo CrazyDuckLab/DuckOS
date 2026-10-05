@@ -62,11 +62,14 @@
 //   install.sh sets:
 //     setcap cap_net_admin,cap_net_raw,cap_net_bind_service,cap_sys_admin,cap_setpcap+ep
 //         /usr/lib/frr/{zebra,bgpd}
-//     setcap cap_setuid,cap_setgid,cap_setpcap,cap_net_admin,cap_net_raw,cap_net_bind_service,cap_sys_admin+ep
+//     setcap cap_setuid,cap_setgid,cap_setpcap+ep
 //         /usr/libexec/duckos/duck-frr-launcher
-//   The launcher file caps are belt-and-braces in case
-//   the service unit is ever overridden; the unit's
-//   CapabilityBoundingSet is the canonical grant.
+//   The launcher file caps are minimal; the FRR caps
+//   propagate to the FRR child via the launcher service
+//   unit's CapabilityBoundingSet (the canonical grant).
+//   The FRR file caps include cap_setpcap so FRR's own
+//   privs_init can narrow the cap set further without
+//   EPERM.
 //
 //   This binary stays as small as possible so its
 //   attack surface matches its narrow job.
@@ -280,23 +283,28 @@ func execFRR(args []string, frrUid, frrGid int) (int, error) {
 		return 0, fmt.Errorf("stat %s: %w", binPath, err)
 	}
 
-	// Stage the log file + pidfile as the launcher
-	// user (root). The re-exec'd child (running as
-	// uid=frr after its privilege drop) will create the
-	// file itself with O_CREATE and own it from the
-	// start; pre-creating it here as root:duckos with a
-	// restrictive mode was the cause of an EACCES loop
-	// (chown to frr was also blocked by the service
-	// unit's missing CAP_CHOWN).
+	// Ensure the parent dir for the FRR log file
+	// exists. The re-exec'd child (running as uid=frr
+	// after its privilege drop) creates the log file
+	// itself with O_CREATE and owns it as frr:frr.
+	// Pre-creating the file here as root:duckos was the
+	// cause of an EACCES loop: uid=frr is not in the
+	// duckos supplementary group, so an O_WRONLY open
+	// of a root:duckos 0664 file as uid=frr hits the
+	// kernel "not in group with write bit" rejection.
+	// Letting the re-exec'd child create the file as
+	// frr:frr 0664 sidesteps the ownership mismatch.
 	if logPath != "" {
 		if err := os.MkdirAll(filepath.Dir(logPath), 0o775); err != nil {
 			return 0, fmt.Errorf("mkdir %s: %w", filepath.Dir(logPath), err)
 		}
-		_ = os.WriteFile(logPath, []byte{}, 0o664)
 	}
-	if pidFile != "" {
-		_ = os.WriteFile(pidFile, []byte{}, 0o644)
-	}
+	// Pidfile: the re-exec'd child (uid=frr) creates
+	// this lazily with O_CREATE as frr:frr; we do NOT
+	// pre-stage the pidfile here because that would
+	// leave it root:duckos 0644 and FRR (uid=frr) would
+	// fail to write its PID into it.
+	_ = pidFile
 
 	// The fork happens BEFORE the privilege drop, so
 	// the parent remains uid=0 with full caps — it
@@ -495,7 +503,6 @@ func execOneShot(binary, pathspace, conf, zServAddr, logPath string, uid, gid in
 		"-N", pathspace,
 		"-u", frrRunUser,
 		"-g", frrRunGroup,
-		"-S",
 	}
 	args = append(args, passthrough...)
 	cmd := exec.Command(binPath, args[1:]...)
@@ -538,7 +545,6 @@ func dropAndExecFRR(binary, pathspace, conf, logPath, pidFile string, passthroug
 		"-N", pathspace,
 		"-u", frrRunUser,
 		"-g", frrRunGroup,
-		"-S",
 	}
 	args = append(args, passthrough...)
 	cmd := exec.Command(binPath, args[1:]...)
