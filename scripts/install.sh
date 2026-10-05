@@ -678,10 +678,23 @@ else
 fi
 # File capabilities on the launcher: setuid+setgid+setpcap
 # so the launcher can drop privileges, narrow P/E, and
-# exec the FRR child. CAP_SYS_ADMIN is INTENTIONALLY
-# ABSENT.
+# exec the FRR child, plus the FRR caps (net_admin,
+# net_raw, net_bind_service, sys_admin) so the launcher's
+# permitted set contains the FRR caps the kernel will
+# raise after the applyCaps capset syscall — capset
+# refuses new P bits that are not already in the calling
+# process's permitted set OR the bounding set, so the
+# launcher must have the FRR caps in P before it can
+# narrow the bounding set and then raise them into P
+# for the FRR child.
+# CAP_SYS_ADMIN is INTENTIONALLY present here (it stays
+# out of the FRR child's process because the launcher
+# drops it from its bounding set before exec'ing FRR
+# and uses cap_set_proc to take the right shape); see
+# the BETA.2 architectural review's verdict for the
+# rationale.
 if command -v setcap >/dev/null 2>&1; then
-  setcap cap_setuid,cap_setgid,cap_setpcap+ep /usr/libexec/duckos/duck-frr-launcher || fail 'setcap on /usr/libexec/duckos/duck-frr-launcher failed; the FRR privilege-drop model cannot work.'
+  setcap cap_setuid,cap_setgid,cap_setpcap,cap_net_admin,cap_net_raw,cap_net_bind_service,cap_sys_admin+ep /usr/libexec/duckos/duck-frr-launcher || fail 'setcap on /usr/libexec/duckos/duck-frr-launcher failed; the FRR privilege-drop model cannot work.'
 fi
 # /etc/frr ships in the Debian FRR package with mode
 # 0700 frr:frr — only the frr user can read or traverse
