@@ -672,17 +672,27 @@ func applyCaps(names []string) error {
 		Pid     int32
 	}
 	type dataT struct {
-		effective0, effective1   uint32
-		permitted0, permitted1   uint32
-		inheritable0, inheritable1 uint32
+		// The kernel's __user_cap_data_struct is
+		// (effective, permitted, inheritable) per
+		// 32-bit slot. For V3 (64-bit caps) the
+		// kernel reads two of these back-to-back,
+		// so the memory layout must be:
+		//   effective0, permitted0, inheritable0,
+		//   effective1, permitted1, inheritable1.
+		// The bug had these in a different order —
+		// the kernel saw permitted as the hi32 of
+		// effective (always 0), rejected the
+		// not-a-subset check, and returned EPERM.
+		effective0, permitted0, inheritable0 uint32
+		effective1, permitted1, inheritable1 uint32
 	}
 	hdr := hdrT{Version: 0x20080522, Pid: 0}
 	data := dataT{
 		effective0:   lo,
-		effective1:   hi,
 		permitted0:   lo,
-		permitted1:   hi,
 		inheritable0: lo,
+		effective1:   hi,
+		permitted1:   hi,
 		inheritable1: hi,
 	}
 	_, _, errno := unix.Syscall(
