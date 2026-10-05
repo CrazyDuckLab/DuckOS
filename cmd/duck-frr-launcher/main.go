@@ -750,9 +750,9 @@ func capMask(names []string) (uint32, uint32, error) {
 // from the re-exec'd child fail silently. We use
 // /dev/null for stdout so the re-exec'd launcher
 // does not spam the journal with its own debug
-// output. stderr carries the operator-relevant errors
-// when nil is passed for stderr; the child inherits
-// the daemon's stderr (journal).
+// output. stderr carries the operator-relevant
+// errors; pass nil to inherit the daemon's stderr
+// (journal), or pass a file to redirect.
 func forkExecWithFds(argv0 string, argv, envv []string, stdin, stderr *os.File) (int, error) {
 	argv0Dir, err := filepath.Abs(argv0)
 	if err != nil {
@@ -766,7 +766,8 @@ func forkExecWithFds(argv0 string, argv, envv []string, stdin, stderr *os.File) 
 	defer null.Close()
 
 	// Files[0] = stdin, Files[1] = stdout (devnull),
-	// Files[2] = stderr (log file or daemon's stderr).
+	// Files[2] = stderr (provided file, or daemon's
+	// inherited stderr, or devnull).
 	var files []uintptr
 	if stdin != nil {
 		files = append(files, stdin.Fd())
@@ -774,9 +775,12 @@ func forkExecWithFds(argv0 string, argv, envv []string, stdin, stderr *os.File) 
 		files = append(files, null.Fd())
 	}
 	files = append(files, null.Fd()) // stdout
-	if stderr != nil {
+	switch {
+	case stderr != nil:
 		files = append(files, stderr.Fd())
-	} else {
+	case os.Stderr != nil:
+		files = append(files, os.Stderr.Fd())
+	default:
 		files = append(files, null.Fd())
 	}
 
