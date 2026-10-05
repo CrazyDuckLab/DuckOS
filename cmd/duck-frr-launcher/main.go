@@ -283,6 +283,18 @@ func execFRR(args []string, frrUid, frrGid int) (int, error) {
 			return 0, fmt.Errorf("open log %s: %w", logPath, err)
 		}
 		_ = f.Close()
+		// Re-own the log file to frr:frr so the
+		// re-exec'd child (which becomes uid=frr after
+		// its privilege drop) can append to it. Without
+		// this, systemd's default umask 0022 strips the
+		// requested mode to 0644 and the file is owned
+		// root:duckos — uid=frr falls into "other" with
+		// r-- and gets EACCES on the next O_WRONLY open.
+		if u, g, lerr := lookupFrrIds(); lerr == nil {
+			if err := os.Chown(logPath, u, g); err != nil {
+				fmt.Fprintf(os.Stderr, "frr-launcher: chown log %s: %v\n", logPath, err)
+			}
+		}
 	}
 	if pidFile != "" {
 		_ = os.WriteFile(pidFile, []byte{}, 0o644)
