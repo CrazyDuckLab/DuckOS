@@ -702,6 +702,8 @@ func applyCaps(names []string) error {
 		0,
 	)
 	if errno != 0 {
+		fmt.Fprintf(os.Stderr, "frr-launcher: applyCaps(%v) failed: errno=%d lo=0x%x hi=0x%x hdr.version=0x%x hdr.pid=%d\n",
+			names, errno, lo, hi, hdr.Version, hdr.Pid)
 		return errno
 	}
 	return nil
