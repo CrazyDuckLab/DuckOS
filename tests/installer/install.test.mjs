@@ -277,13 +277,19 @@ test('launcher binary is in the artifact, runs as a daemon, and serves the FRR l
   assert.match(manifest, /  systemd\/duck-frr-launcher\.service\n/);
 
   const launcherService = await fs.readFile(path.join(artifact, 'systemd/duck-frr-launcher.service'), 'utf8');
-  assert.match(launcherService, /^CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_SETPCAP$/m);
+  assert.match(launcherService, /^CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_SETPCAP CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_SYS_ADMIN$/m);
   assert.match(launcherService, /^NoNewPrivileges=no$/m);
   assert.match(launcherService, /--daemon --listen=\/run\/duckos-agent\/frr-launcher\.sock/);
-  for (const banned of ['CAP_SYS_ADMIN', 'CAP_NET_ADMIN', 'CAP_NET_RAW', 'CAP_NET_BIND_SERVICE']) {
-    const re = new RegExp(`CapabilityBoundingSet=.*${banned}`);
-    assert.doesNotMatch(launcherService, re, `duck-frr-launcher.service must NOT include ${banned} in its bounding set`);
-  }
+  // CAP_SYS_ADMIN is included in the launcher's bounding
+  // set because Debian FRR 10.3's zebra binary
+  // unconditionally calls cap_set_proc with CAP_SYS_ADMIN
+  // and the Debian zebra build does NOT expose the
+  // upstream -S / --skip_runas flag (only bgpd does).
+  // The launcher drops CAP_SETUID/SETGID/SETPCAP from its
+  // own bounding before exec'ing FRR, so those do not
+  // reach the FRR child; only the FRR caps (and
+  // CAP_SYS_ADMIN) do. CAP_SYS_ADMIN MUST NOT reach
+  // duck-agent (the agent's bounding set stays empty).
 
   const installer = await fs.readFile(path.join(artifact, 'install.sh'), 'utf8');
   // The install must wire both the launcher's file caps
@@ -291,7 +297,7 @@ test('launcher binary is in the artifact, runs as a daemon, and serves the FRR l
   // launcher's privilege drop and FRR's netlink /
   // TCP-bind-service work do not survive exec.
   assert.match(installer, /setcap cap_setuid,cap_setgid,cap_setpcap\+ep.*\/usr\/libexec\/duckos\/duck-frr-launcher/);
-  assert.match(installer, /setcap cap_net_admin,cap_net_raw,cap_net_bind_service\+ep.*\/usr\/lib\/frr\/(zebra|bgpd)/);
+  assert.match(installer, /setcap cap_net_admin,cap_net_raw,cap_net_bind_service,cap_sys_admin\+ep.*\/usr\/lib\/frr\/(zebra|bgpd)/);
   // The launcher service is installed, started, and
   // enabled so the daemon is running before any FRR
   // pathspace apply.

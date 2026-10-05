@@ -351,19 +351,18 @@ func TestLauncherServiceUnitDeclaresCaps(t *testing.T) {
 	if !strings.Contains(src, "NoNewPrivileges=no") {
 		t.Fatalf("duck-frr-launcher.service must declare NoNewPrivileges=no so the launcher's exec of FRR honours file caps")
 	}
-	// Walk the directive lines. A banned cap on a
-	// non-directive (eg comment) line is OK; on a
-	// directive line it is a regression.
-	for _, banned := range []string{"CAP_SYS_ADMIN", "CAP_NET_ADMIN", "CAP_NET_RAW", "CAP_NET_BIND_SERVICE"} {
-		for _, line := range strings.Split(src, "\n") {
-			trimmed := strings.TrimSpace(line)
-			if strings.HasPrefix(trimmed, "#") || trimmed == "" {
-				continue
-			}
-			if strings.Contains(trimmed, banned) {
-				t.Fatalf("duck-frr-launcher.service directive %q must NOT include %s; FRR-only caps are scoped to FRR via file caps", trimmed, banned)
-			}
-		}
+	// CAP_SYS_ADMIN must reach the FRR child because
+	// Debian FRR 10.3's zebra unconditionally calls
+	// cap_set_proc with CAP_SYS_ADMIN and Debian's
+	// zebra build does NOT expose the upstream
+	// -S / --skip_runas flag (only bgpd does). Per
+	// the BETA.2 architectural review, CAP_SYS_ADMIN
+	// on the FRR-only child is acceptable because the
+	// FRR process genuinely needs it; CAP_SYS_ADMIN
+	// MUST NOT reach duck-agent (the agent's bounding
+	// set stays empty).
+	if !strings.Contains(src, "CAP_SYS_ADMIN") {
+		t.Fatalf("duck-frr-launcher.service must include CAP_SYS_ADMIN in CapabilityBoundingSet so Debian zebra's cap_set_proc succeeds")
 	}
 }
 

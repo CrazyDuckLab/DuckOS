@@ -95,9 +95,19 @@ const (
 	frrRunGroup = "frr"
 )
 
-// capsToKeep is the narrow capability set we hand to the
-// FRR child. CAP_SYS_ADMIN is intentionally absent.
-var capsToKeep = []string{"net_admin", "net_raw", "net_bind_service"}
+// capsToKeep is the capability set we hand to the
+// FRR child. The Debian FRR 10.3 package's zebra
+// binary declares CAP_NET_ADMIN, CAP_NET_RAW, AND
+// CAP_SYS_ADMIN in its cap_set_proc call and DOES
+// NOT support upstream's -S / --skip_runas flag
+// (only bgpd supports it in the Debian build), so
+// zebra's privs_init would fail without CAP_SYS_ADMIN
+// in P. Per the BETA.2 architectural review, CAP_SYS_ADMIN
+// on a FRR-only child is acceptable because the FRR
+// process genuinely needs it. CAP_SYS_ADMIN MUST NOT
+// reach duck-agent itself; the agent's bounding set
+// stays empty.
+var capsToKeep = []string{"net_admin", "net_raw", "net_bind_service", "sys_admin"}
 
 // capSetByName maps the launcher's-own caps (CAP_SETUID,
 // CAP_SETGID, CAP_SETPCAP) — these are the only caps

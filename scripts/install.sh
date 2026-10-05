@@ -661,13 +661,16 @@ install -o root -g root -m 0755 "$release/bin/duck-restore" /usr/libexec/duckos/
 install -o root -g root -m 0755 "$release/bin/duck-frr-launcher" /usr/libexec/duckos/duck-frr-launcher
 # File capabilities on the FRR binaries so the launcher
 # can exec them and they pick up the caps they actually use
-# (netlink routes, raw socket probes, bgpd TCP/179 bind)
-# regardless of the launcher process's effective set. CAP_SYS_ADMIN
-# is INTENTIONALLY ABSENT — FRR 10.x's privs_init would
-# request it, so we run FRR with `-S` to skip that call.
+# (netlink routes, raw socket probes, bgpd TCP/179 bind,
+# and CAP_SYS_ADMIN which Debian's FRR 10.3 zebra
+# unconditionally requests via cap_set_proc because the
+# Debian build does NOT expose the upstream -S /
+# --skip_runas flag for zebra — only for bgpd). CAP_SYS_ADMIN
+# is scoped to FRR only; it MUST NOT reach duck-agent
+# (the agent's bounding set stays empty).
 if command -v setcap >/dev/null 2>&1 && [[ -x /usr/lib/frr/zebra ]]; then
-  setcap cap_net_admin,cap_net_raw,cap_net_bind_service+ep /usr/lib/frr/zebra || printf 'DuckOS installer: setcap on /usr/lib/frr/zebra failed; FRR will need to be re-cap after every Debian FRR package upgrade.\n' >&2
-  [[ -x /usr/lib/frr/bgpd ]] && setcap cap_net_admin,cap_net_raw,cap_net_bind_service+ep /usr/lib/frr/bgpd || true
+  setcap cap_net_admin,cap_net_raw,cap_net_bind_service,cap_sys_admin+ep /usr/lib/frr/zebra || printf 'DuckOS installer: setcap on /usr/lib/frr/zebra failed; FRR will need to be re-cap after every Debian FRR package upgrade.\n' >&2
+  [[ -x /usr/lib/frr/bgpd ]] && setcap cap_net_admin,cap_net_raw,cap_net_bind_service,cap_sys_admin+ep /usr/lib/frr/bgpd || true
 elif ! [[ -x /usr/lib/frr/zebra ]]; then
   : # FRR not installed; install.sh does not abort on this.
 else
