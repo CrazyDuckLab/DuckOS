@@ -680,6 +680,28 @@ fi
 if command -v setcap >/dev/null 2>&1; then
   setcap cap_setuid,cap_setgid,cap_setpcap+ep /usr/libexec/duckos/duck-frr-launcher || fail 'setcap on /usr/libexec/duckos/duck-frr-launcher failed; the FRR privilege-drop model cannot work.'
 fi
+# /etc/frr ships in the Debian FRR package with mode
+# 0700 frr:frr — only the frr user can read or traverse
+# it. duck-agent runs as root with no caps; root cannot
+# traverse a 0700 dir owned by another uid (root has no
+# group membership in frr that grants x), and the
+# supplementary-group DAC check still fails because
+# mode 0700 has no group bits. The agent's vtysh probe
+# therefore cannot open /etc/frr/<ps>/vtysh.conf and
+# the runtime's startup BGP readiness aborts.
+#
+# Solution: open /etc/frr to 0751. owner=frr keeps rwx;
+# group=frr keeps r-x (so the frr daemon and any frr
+# tools still work); other=r-x lets root traverse
+# without granting read of <ps>/ contents to non-frr
+# users (the dir listing is still owner-only). The
+# FRR daemon continues to own and write its <ps>/ dir
+# and the daemons' conf files; install.sh does not
+# weaken file-level permissions on those.
+if [[ -d /etc/frr ]]; then
+  chown frr:frr /etc/frr
+  chmod 0751 /etc/frr
+fi
 # The launcher runs as a long-running privileged daemon
 # (duck-frr-launcher.service). duck-agent cannot exec
 # the launcher directly because the agent has
