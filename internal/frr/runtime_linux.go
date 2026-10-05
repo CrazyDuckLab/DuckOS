@@ -31,12 +31,14 @@
 package frr
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -437,25 +439,23 @@ func (r *Runtime) daemonsAlive() bool {
 // runtime's netns (or host netns when netns == ""),
 // daemonized (-d), with the canonical -N pathspace.
 //
-// Implementation note: duck-agent holds no capabilities.
-// The FRR daemons need netlink (zebra), raw sockets, and
-// bgpd needs to bind TCP/179 — but FRR 10.x's privs_init
-// unconditionally requests CAP_SYS_ADMIN which is NOT
-// granted to either the agent or the launcher. We exec
-// the FRR daemons through /usr/libexec/duckos/duck-frr-launcher,
-// which:
+// Implementation note: duck-agent holds no capabilities
+// AND NoNewPrivileges=yes. The combination means the
+// agent cannot exec /usr/libexec/duckos/duck-frr-launcher
+// and have the launcher's file caps granted. Instead,
+// the launcher runs as a long-running daemon
+// (duck-frr-launcher.service) with its own
+// CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_SETPCAP
+// and NoNewPrivileges=no, listening on
+// /run/duckos-agent/frr-launcher.sock.
 //
-//   1. holds CAP_SETUID+CAP_SETGID+CAP_SETPCAP via file caps,
-//   2. PR_SET_KEEPCAPS=1, setuid(frr), setgid(frr),
-//      setgroups([]),
-//   3. cap_set_proc({NET_ADMIN, NET_RAW, NET_BIND_SERVICE})
-//      via the 64-bit cap_set syscall,
-//   4. exec the FRR binary with `-S` (--skip_runas) so FRR
-//      does not call cap_set_proc and does not change uid/gid.
-//
-// The FRR binary's file caps cap_net_admin,cap_net_raw,
-// cap_net_bind_service+ep are set by install.sh so the
-// caps survive exec regardless of parent caps.
+// For each EXEC, the launcher forks; the child does the
+// privilege drop, drops CAP_SETUID/SETGID/SETPCAP from
+// its bounding set, narrows P/E/I to {NET_ADMIN, NET_RAW,
+// NET_BIND_SERVICE}, and exec's /usr/lib/frr/<binary>
+// with `-S` (--skip_runas). The parent (launcher daemon)
+// returns the FRR child's PID to the agent over the
+// socket. CAP_SYS_ADMIN is INTENTIONALLY ABSENT.
 //
 // Returns the zebra / bgpd PIDs on success. Failure
 // tears down any half-started daemons before
@@ -466,37 +466,10 @@ func (r *Runtime) startDaemons() error {
 	bgpdPIDFile := filepath.Join(r.sockDir, "bgpd.pid")
 	zebraLog := filepath.Join(r.sockDir, "zebra.log")
 	bgpdLog := filepath.Join(r.sockDir, "bgpd.log")
-	launcherBin := frrLauncherBinary()
-	// argv for the launcher, which then exec's the FRR
-	// binary. The launcher owns the privilege drop and
-	// the `-S` flag. Args after `--` are passed through
-	// to /usr/lib/frr/<binary> by the launcher (Go's flag
-	// package stops parsing at `--`).
-	zebraLauncherArgs := []string{
-		"--pathspace=" + r.pathspace,
-		"--binary=zebra",
-		"--config=" + conf,
-		"--zebra-addr=127.0.0.1",
-		"--log=" + zebraLog,
-		"--",
-		// FRR-side flags:
-		"-s", "90000000",
-		"-i", zebraPIDFile,
-	}
-	bgpdLauncherArgs := []string{
-		"--pathspace=" + r.pathspace,
-		"--binary=bgpd",
-		"--config=" + conf,
-		"--zebra-addr=127.0.0.1",
-		"--log=" + bgpdLog,
-		"--",
-		// FRR-side flags:
-		"-i", bgpdPIDFile,
-	}
-	if err := r.execInNetns(launcherBin, zebraLauncherArgs, zebraLog); err != nil {
+	if err := r.launcherExec("zebra", r.pathspace, conf, zebraLog, zebraPIDFile, []string{"-s", "90000000", "-i", zebraPIDFile}); err != nil {
 		return fmt.Errorf("start zebra (launcher): %w", err)
 	}
-	if err := r.execInNetns(launcherBin, bgpdLauncherArgs, bgpdLog); err != nil {
+	if err := r.launcherExec("bgpd", r.pathspace, conf, bgpdLog, bgpdPIDFile, []string{"-i", bgpdPIDFile}); err != nil {
 		_ = r.killPIDFromFile(zebraPIDFile)
 		return fmt.Errorf("start bgpd (launcher): %w", err)
 	}
@@ -512,12 +485,59 @@ func (r *Runtime) startDaemons() error {
 	return nil
 }
 
-// frrLauncherBinary is the path to the narrow launcher
-// binary installed by install.sh at
-// /usr/libexec/duckos/duck-frr-launcher. The launcher is
-// the only place that holds CAP_SETUID/CAP_SETGID/CAP_SETPCAP,
-// and it drops to the frr service user before exec'ing the
-// FRR daemons. See cmd/duck-frr-launcher/main.go.
+// launcherExec asks the running duck-frr-launcher
+// daemon to start an FRR child (zebra or bgpd). The
+// daemon listens on frrLauncherSocket and replies with
+// `OK <pid>\n` or `ERR <message>\n`. We do not exec
+// the launcher directly: see startDaemons' comment
+// for why NoNewPrivileges=yes on the agent blocks
+// file caps on a directly-exec'd launcher.
+func (r *Runtime) launcherExec(binary, pathspace, conf, logPath, pidFile string, passthrough []string) error {
+	sock := frrLauncherSocket()
+	c, err := net.DialTimeout("unix", sock, 5*time.Second)
+	if err != nil {
+		return fmt.Errorf("dial %s: %w", sock, err)
+	}
+	defer c.Close()
+	_ = c.SetDeadline(time.Now().Add(15 * time.Second))
+	// EXEC <binary> <pathspace> <config> <log> <pidfile> [args...]
+	line := "EXEC " + binary + " " + pathspace + " " + conf + " " + logPath + " " + pidFile
+	for _, p := range passthrough {
+		line += " " + p
+	}
+	line += "\n"
+	if _, err := c.Write([]byte(line)); err != nil {
+		return fmt.Errorf("write EXEC: %w", err)
+	}
+	br := bufio.NewReader(c)
+	resp, err := br.ReadString('\n')
+	if err != nil {
+		return fmt.Errorf("read reply: %w", err)
+	}
+	resp = strings.TrimRight(resp, "\r\n")
+	if !strings.HasPrefix(resp, "OK ") {
+		return fmt.Errorf("launcher: %s", resp)
+	}
+	return nil
+}
+
+// frrLauncherSocket is the Unix socket the
+// duck-frr-launcher daemon listens on. The socket is
+// owned root:duckos 0660 so the agent (running as
+// root) and the duck-api user (duckos) can both
+// dispatch commands.
+func frrLauncherSocket() string {
+	return "/run/duckos-agent/frr-launcher.sock"
+}
+
+// frrLauncherBinary is kept as a stable symbol so
+// downstream code (and tests) can refer to the launcher
+// install path even though the runtime no longer exec's
+// it directly. The runtime talks to the running
+// duck-frr-launcher daemon over frrLauncherSocket().
+// The launcher itself is started by
+// duck-frr-launcher.service which holds
+// CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_SETPCAP.
 func frrLauncherBinary() string {
 	return "/usr/libexec/duckos/duck-frr-launcher"
 }
@@ -619,6 +639,17 @@ func (r *Runtime) runVTYSHFull(ctx context.Context, args ...string) (string, str
 // netns (or host netns when netns == ""), redirecting
 // stdout / stderr to logPath. Returns the combined
 // stderr on failure.
+//
+// As of the post-BETA.2-review privilege model, the
+// runtime no longer exec's anything that needs netns
+// isolation directly: FRR is started via the
+// duck-frr-launcher daemon over a Unix socket, and the
+// launcher handles netns via the runtime's pathspace
+// argument. This helper is retained for callers that
+// need a generic in-netns exec (e.g. `vtysh -f
+// <conf>`); netns-aware invocations should use
+// /sbin/ip netns exec explicitly to keep the path
+// self-documenting.
 func (r *Runtime) execInNetns(prog string, args []string, logPath string) error {
 	cmd := exec.Command(prog, args...)
 	cmd.Env = []string{"PATH=/sbin:/usr/sbin:/usr/bin:/bin", "LANG=C", "LC_ALL=C"}

@@ -244,11 +244,18 @@ func TestAgentHasNoCapabilities(t *testing.T) {
 }
 
 // TestLauncherIsTheOnlyCapableProcess asserts the runtime
-// exec's the launcher binary instead of /usr/lib/frr/zebra
-// or /usr/lib/frr/bgpd directly. This is the static-source
+// talks to the duck-frr-launcher daemon over its Unix
+// socket instead of exec'ing /usr/lib/frr/{zebra,bgpd}
+// directly. The launcher daemon runs as a separate
+// systemd service (duck-frr-launcher.service) with its
+// own CapabilityBoundingSet=CAP_SETUID CAP_SETGID
+// CAP_SETPCAP; the agent has empty bounding + no_new_privs
+// so a direct exec of the launcher would receive zero
+// caps and EPERM at setgroups. This is the static-source
 // guard against regressions that re-introduce direct
-// /usr/lib/frr/* exec, which would propagate the agent's
-// privileges to the FRR child via fork+exec inheritance.
+// /usr/lib/frr/* exec, which would propagate the
+// agent's privileges to the FRR child via fork+exec
+// inheritance.
 func TestLauncherIsTheOnlyCapableProcess(t *testing.T) {
 	candidates := []string{
 		"../../internal/frr/runtime_linux.go",
@@ -266,12 +273,97 @@ func TestLauncherIsTheOnlyCapableProcess(t *testing.T) {
 		t.Skipf("runtime_linux.go not readable from this layout: %v", err)
 	}
 	src := string(data)
-	if !strings.Contains(src, "/usr/libexec/duckos/duck-frr-launcher") {
-		t.Fatalf("runtime_linux.go must exec /usr/libexec/duckos/duck-frr-launcher, not /usr/lib/frr/* directly")
+	// The runtime must NOT exec the launcher binary
+	// directly anymore — it talks to the daemon over
+	// a Unix socket. The launcher path may still
+	// appear as a comment / function-name constant,
+	// but we want to assert there is no live exec
+	// path that bypasses the daemon.
+	if strings.Contains(src, `exec.Command("/usr/libexec/duckos/duck-frr-launcher"`) {
+		t.Fatalf("runtime_linux.go must NOT exec the launcher binary directly; it talks to the duck-frr-launcher daemon over a Unix socket")
 	}
 	if strings.Contains(src, `exec.Command("/usr/lib/frr/zebra"`) ||
 		strings.Contains(src, `exec.Command("/usr/lib/frr/bgpd"`) {
 		t.Fatalf("runtime_linux.go must NOT call exec.Command(\"/usr/lib/frr/...\") directly; the launcher owns the privilege drop")
+	}
+	// The runtime MUST use the launcher's socket.
+	if !strings.Contains(src, "/run/duckos-agent/frr-launcher.sock") {
+		t.Fatalf("runtime_linux.go must talk to the duck-frr-launcher daemon at /run/duckos-agent/frr-launcher.sock")
+	}
+}
+
+// TestLauncherSocketIsTheControlPlane ensures the
+// runtime uses a Unix-domain control channel and not a
+// remote/network endpoint to drive the launcher
+// daemon. A regression to a TCP socket would expose
+// the privileged launcher broker to network attackers.
+func TestLauncherSocketIsTheControlPlane(t *testing.T) {
+	candidates := []string{
+		"../../internal/frr/runtime_linux.go",
+		"../../../internal/frr/runtime_linux.go",
+	}
+	var data []byte
+	var err error
+	for _, p := range candidates {
+		data, err = os.ReadFile(p)
+		if err == nil {
+			break
+		}
+	}
+	if err != nil {
+		t.Skipf("runtime_linux.go not readable from this layout: %v", err)
+	}
+	src := string(data)
+	if !strings.Contains(src, `net.DialTimeout("unix"`) {
+		t.Fatalf("runtime_linux.go must dial the launcher daemon over a Unix-domain socket (net.DialTimeout \"unix\" ...)")
+	}
+}
+
+// TestLauncherServiceUnitDeclaresCaps asserts the
+// duck-frr-launcher.service unit grants the launcher
+// daemon CAP_SETUID + CAP_SETGID + CAP_SETPCAP in its
+// bounding set, with NoNewPrivileges=no so the
+// launcher's exec of /usr/lib/frr/{zebra,bgpd} honours
+// the file caps. CAP_SYS_ADMIN and the FRR-only caps
+// are INTENTIONALLY ABSENT from the unit's directives
+// (comments may reference them as "intentionally
+// absent"; only directive lines count).
+func TestLauncherServiceUnitDeclaresCaps(t *testing.T) {
+	candidates := []string{
+		"../../packaging/systemd/duck-frr-launcher.service",
+		"../../../packaging/systemd/duck-frr-launcher.service",
+	}
+	var data []byte
+	var err error
+	for _, p := range candidates {
+		data, err = os.ReadFile(p)
+		if err == nil {
+			break
+		}
+	}
+	if err != nil {
+		t.Skipf("duck-frr-launcher.service not readable from this layout: %v", err)
+	}
+	src := string(data)
+	if !strings.Contains(src, "CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_SETPCAP") {
+		t.Fatalf("duck-frr-launcher.service must declare CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_SETPCAP")
+	}
+	if !strings.Contains(src, "NoNewPrivileges=no") {
+		t.Fatalf("duck-frr-launcher.service must declare NoNewPrivileges=no so the launcher's exec of FRR honours file caps")
+	}
+	// Walk the directive lines. A banned cap on a
+	// non-directive (eg comment) line is OK; on a
+	// directive line it is a regression.
+	for _, banned := range []string{"CAP_SYS_ADMIN", "CAP_NET_ADMIN", "CAP_NET_RAW", "CAP_NET_BIND_SERVICE"} {
+		for _, line := range strings.Split(src, "\n") {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "#") || trimmed == "" {
+				continue
+			}
+			if strings.Contains(trimmed, banned) {
+				t.Fatalf("duck-frr-launcher.service directive %q must NOT include %s; FRR-only caps are scoped to FRR via file caps", trimmed, banned)
+			}
+		}
 	}
 }
 

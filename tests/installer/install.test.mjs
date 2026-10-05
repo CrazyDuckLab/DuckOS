@@ -249,26 +249,55 @@ test('unit boundary keeps API unprivileged and fixes Agent semantic service argu
   assert.match(agent, /^LimitCORE=0$/m);
 });
 
-test('launcher binary is in the artifact and execs the FRR daemons with -S', async () => {
-  // The privilege separation model relies on
-  // /usr/libexec/duckos/duck-frr-launcher being in the
-  // artifact so the Agent can exec it. install.sh sets
-  // file capabilities on both the launcher and the FRR
-  // binaries; this test asserts the binary is included
-  // and that install.sh wires setcap into the install
-  // path.
+test('launcher binary is in the artifact, runs as a daemon, and serves the FRR launch contract', async () => {
+  // The privilege-separation model (post BETA.2
+  // architectural review) requires:
+  //   1. /usr/libexec/duckos/duck-frr-launcher is in
+  //      the artifact and has its file caps wired by
+  //      install.sh.
+  //   2. duck-frr-launcher.service is in the artifact
+  //      and is installed + enabled by install.sh.
+  //   3. The service unit grants CAP_SETUID +
+  //      CAP_SETGID + CAP_SETPCAP (so the launcher can
+  //      drop privileges to frr) and turns off
+  //      NoNewPrivileges so the launcher's exec of
+  //      /usr/lib/frr/{zebra,bgpd} honours the FRR
+  //      binaries' file caps.
+  //   4. CAP_SYS_ADMIN is FORBIDDEN on the launcher
+  //      service — it stays out of every DuckOS
+  //      process.
+  //   5. install.sh sets the file caps on the FRR
+  //      binaries too (per-binary +ep), so FRR's
+  //      netlink / TCP-bind-service work survives
+  //      exec.
   const artifact = path.join(root, 'dist/duckos-linux-amd64');
   const launcherBin = path.join(artifact, 'bin/duck-frr-launcher');
   const manifest = await fs.readFile(path.join(artifact, 'SHA256SUMS'), 'utf8');
   assert.match(manifest, /  bin\/duck-frr-launcher\n/);
+  assert.match(manifest, /  systemd\/duck-frr-launcher\.service\n/);
+
+  const launcherService = await fs.readFile(path.join(artifact, 'systemd/duck-frr-launcher.service'), 'utf8');
+  assert.match(launcherService, /^CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_SETPCAP$/m);
+  assert.match(launcherService, /^NoNewPrivileges=no$/m);
+  assert.match(launcherService, /--daemon --listen=\/run\/duckos-agent\/frr-launcher\.sock/);
+  for (const banned of ['CAP_SYS_ADMIN', 'CAP_NET_ADMIN', 'CAP_NET_RAW', 'CAP_NET_BIND_SERVICE']) {
+    const re = new RegExp(`CapabilityBoundingSet=.*${banned}`);
+    assert.doesNotMatch(launcherService, re, `duck-frr-launcher.service must NOT include ${banned} in its bounding set`);
+  }
 
   const installer = await fs.readFile(path.join(artifact, 'install.sh'), 'utf8');
-  // install.sh must setcap both the FRR binaries and the
-  // launcher. Without these file caps, the launcher's
-  // privilege drop and FRR's netlink / TCP-bind-service work
-  // do not survive exec.
-  assert.match(installer, /setcap cap_net_admin,cap_net_raw,cap_net_bind_service\+ep.*\/usr\/lib\/frr\/(zebra|bgpd)/);
+  // The install must wire both the launcher's file caps
+  // and the FRR binaries' file caps. Without these, the
+  // launcher's privilege drop and FRR's netlink /
+  // TCP-bind-service work do not survive exec.
   assert.match(installer, /setcap cap_setuid,cap_setgid,cap_setpcap\+ep.*\/usr\/libexec\/duckos\/duck-frr-launcher/);
+  assert.match(installer, /setcap cap_net_admin,cap_net_raw,cap_net_bind_service\+ep.*\/usr\/lib\/frr\/(zebra|bgpd)/);
+  // The launcher service is installed, started, and
+  // enabled so the daemon is running before any FRR
+  // pathspace apply.
+  assert.match(installer, /install -o root -g root -m 0644.*systemd\/duck-frr-launcher\.service/);
+  assert.match(installer, /systemctl start duck-restore\.service duck-frr-launcher\.service duck-agent\.service/);
+  assert.match(installer, /systemctl enable duck-agent\.service duck-api\.service duck-restore\.service duck-frr-launcher\.service/);
 });
 
 test('preflight tolerates any pre-existing duck-dnsmasq identity', async () => {

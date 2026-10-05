@@ -680,6 +680,17 @@ fi
 if command -v setcap >/dev/null 2>&1; then
   setcap cap_setuid,cap_setgid,cap_setpcap+ep /usr/libexec/duckos/duck-frr-launcher || fail 'setcap on /usr/libexec/duckos/duck-frr-launcher failed; the FRR privilege-drop model cannot work.'
 fi
+# The launcher runs as a long-running privileged daemon
+# (duck-frr-launcher.service). duck-agent cannot exec
+# the launcher directly because the agent has
+# NoNewPrivileges=yes — that flag blocks file caps from
+# being honored at exec, so a direct exec would leave
+# the launcher with zero caps and EPERM at setgroups.
+# Instead, systemd spawns the launcher in its own
+# service with CapabilityBoundingSet=CAP_SETUID
+# CAP_SETGID CAP_SETPCAP and NoNewPrivileges=no; the
+# agent talks to it over /run/duckos-agent/frr-launcher.sock.
+install -o root -g root -m 0644 "$release/systemd/duck-frr-launcher.service" /etc/systemd/system/duck-frr-launcher.service
 install -d -o root -g root -m 0700 /var/lib/duckos-restore /var/lib/duckos/restore-source /var/lib/duckos/restore-live
 install -o root -g root -m 0644 "$release/systemd/duck-restore.service" /etc/systemd/system/duck-restore.service
 install -d -o root -g root -m 0700 /var/lib/duckos-updater
@@ -739,7 +750,7 @@ else
   systemctl start systemd-networkd.service >/dev/null 2>&1 || printf 'Could not start systemd-networkd; networkd inventory will be unavailable until next boot.\n' >&2
 fi
 agent_attempted=true
-systemctl start duck-restore.service duck-agent.service
+systemctl start duck-restore.service duck-frr-launcher.service duck-agent.service
 api_attempted=true
 systemctl start duck-api.service
 
@@ -757,7 +768,7 @@ done
 unset token
 $ready || fail 'Authenticated Agent-backed readiness/overview did not pass before the deadline.'
 enable_attempted=true
-systemctl enable duck-agent.service duck-api.service duck-restore.service
+systemctl enable duck-agent.service duck-api.service duck-restore.service duck-frr-launcher.service
 printf 'ready %s\n' "$version" > /var/lib/duckos/install-status
 trap - EXIT
 printf 'Installed %s as an internal TEST build. Authenticated readiness and overview passed.\n' "$version"

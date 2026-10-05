@@ -1,0 +1,62 @@
+[Unit]
+Description=DuckOS FRR privileged launcher daemon (internal TEST build)
+Documentation=file:/opt/duckos/current/BUILD-INFO.json
+# The launcher must be ready before any FRR-runtime
+# pathspace starts, but it does NOT need to be ready
+# before the API or Agent — those come up
+# independently. We After=duck-agent.service so the
+# agent's socket dir (/run/duckos-agent) exists by
+# the time we try to listen on the launcher's socket.
+After=duck-agent.service
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+# The launcher is a long-running privileged broker.
+# It holds CAP_SETUID + CAP_SETGID + CAP_SETPCAP so
+# that, when the Agent asks it to start an FRR
+# daemon, the launcher can:
+#
+#   - setgroups([]) / setresgid / setresuid to drop
+#     to the frr service user,
+#   - drop CAP_SETUID/SETGID/SETPCAP from its
+#     bounding set so the FRR child does not
+#     inherit them,
+#   - cap_set_proc({NET_ADMIN, NET_RAW,
+#     NET_BIND_SERVICE}) to narrow P/E/I to what FRR
+#     actually uses.
+#
+# The FRR child then runs as uid=frr with P/E =
+# {NET_ADMIN, NET_RAW, NET_BIND_SERVICE}. NO
+# CAP_SYS_ADMIN. NO CAP_SETUID/SETGID/SETPCAP.
+#
+# CAP_SYS_ADMIN, CAP_NET_ADMIN, CAP_NET_RAW, and
+# CAP_NET_BIND_SERVICE are INTENTIONALLY ABSENT from
+# this unit. They are scoped to the FRR child only,
+# via file caps on /usr/lib/frr/{zebra,bgpd}
+# (cap_net_admin,cap_net_raw,cap_net_bind_service+ep)
+# installed by install.sh.
+CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_SETPCAP
+AmbientCapabilities=
+# Allow exec'ing FRR with file caps: the file caps
+# on /usr/lib/frr/{zebra,bgpd} are honored only when
+# the calling process has NoNewPrivileges=no. This
+# is the only place in the DuckOS stack that turns
+# no_new_privs off; the agent itself keeps it on.
+NoNewPrivileges=no
+User=root
+Group=duckos
+SupplementaryGroups=frr frrvty
+ExecStart=/usr/libexec/duckos/duck-frr-launcher --daemon --listen=/run/duckos-agent/frr-launcher.sock --socket-mode=0660 --socket-group=duckos
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=10
+# The launcher writes a single line per command to
+# stderr; cap it to avoid a hostile caller producing
+# unbounded growth.
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
