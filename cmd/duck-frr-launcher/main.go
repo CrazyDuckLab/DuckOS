@@ -110,12 +110,19 @@ const (
 var capsToKeep = []string{"net_admin", "net_raw", "net_bind_service", "sys_admin"}
 
 // capSetByName maps the launcher's-own caps (CAP_SETUID,
-// CAP_SETGID, CAP_SETPCAP) — these are the only caps
-// the launcher process itself needs to perform the
-// privilege drop. They are dropped from the bounding set
-// after the drop so the FRR child exec'd from this
-// launcher never inherits them.
-var launcherOnlyCaps = []string{"setuid", "setgid", "setpcap"}
+// CAP_SETGID) — these are the caps the launcher process
+// itself needs to perform the privilege drop. They are
+// dropped from the bounding set after the drop so the
+// FRR child exec'd from this launcher never inherits them.
+//
+// CAP_SETPCAP is INTENTIONALLY NOT dropped. Debian FRR's
+// privs_init calls cap_set_proc and the kernel requires
+// CAP_SETPCAP in the calling process's effective set for
+// that call to succeed. The launcher's own drop is done
+// before the bounding drop so the launcher's applyCaps
+// (which masks P/E/I to capsToKeep) doesn't drop SETPCAP
+// from the bounding set the FRR child inherits.
+var launcherOnlyCaps = []string{"setuid", "setgid"}
 
 func main() {
 	// We use a hand-rolled parser so the daemon mode
