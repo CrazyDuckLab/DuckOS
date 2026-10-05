@@ -72,6 +72,9 @@ ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectKernelLogs=yes
 ProtectHome=yes
+MemoryMax=256M
+TasksMax=64
+LimitCORE=0
 
 [Install]
 WantedBy=multi-user.target

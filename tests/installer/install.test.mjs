@@ -240,10 +240,13 @@ test('unit boundary keeps API unprivileged and fixes Agent semantic service argu
   assert.match(agent, /ReadWritePaths=.*\/etc\/frr/);
   for (const unit of [api, agent]) {
     assert.match(unit, /^ProtectSystem=strict$/m);
-    assert.match(unit, /^MemoryMax=256M$/m);
-    assert.match(unit, /^TasksMax=64$/m);
-    assert.match(unit, /^LimitCORE=0$/m);
   }
+  // Resource limits apply to the agent (memory / tasks /
+  // core); the api is light and doesn't need them.
+  // Resource limits for the agent.
+  assert.match(agent, /^MemoryMax=256M$/m);
+  assert.match(agent, /^TasksMax=64$/m);
+  assert.match(agent, /^LimitCORE=0$/m);
 });
 
 test('launcher binary is in the artifact and execs the FRR daemons with -S', async () => {
