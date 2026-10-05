@@ -695,13 +695,15 @@ func applyCaps(names []string) error {
 		permitted1:   hi,
 		inheritable1: hi,
 	}
-	_, _, errno := unix.Syscall(
+	r1, _, errno := unix.Syscall(
 		unix.SYS_CAPSET,
 		uintptr(unsafe.Pointer(&hdr)),
 		uintptr(unsafe.Pointer(&data)),
 		0,
 	)
 	if errno != 0 {
+		fmt.Fprintf(os.Stderr, "frr-launcher: applyCaps(%v) failed: errno=%d r1=%d hdr.version=0x%x hdr.pid=%d\n",
+			names, errno, r1, hdr.Version, hdr.Pid)
 		return errno
 	}
 	return nil
