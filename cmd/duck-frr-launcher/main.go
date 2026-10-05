@@ -137,6 +137,28 @@ func runDaemon(args []string) {
 		die("frr-launcher daemon: %v", err)
 	}
 
+	// Ensure the parent directory for the socket
+	// exists. The agent normally creates /run/duckos-agent
+	// via its own RuntimeDirectory=duckos-agent directive,
+	// but if the launcher boots first (which is what the
+	// unit ordering in duck-agent.service wants so the
+	// agent's FRR startup can dial the socket), the
+	// directory may not exist yet. The launcher owns the
+	// directory's ownership: root:duckos 0751 (the agent
+	// creates the dir at 0751 in its unit; we mirror that
+	// here so the launcher is consistent regardless of
+	// boot order).
+	if dir := filepath.Dir(*listenAddr); dir != "" {
+		if err := os.MkdirAll(dir, 0o751); err != nil {
+			die("frr-launcher daemon: mkdir %s: %v", dir, err)
+		}
+		if gid, err := lookupGroupId(*socketGroup); err == nil {
+			if err := os.Chown(dir, -1, gid); err != nil {
+				fmt.Fprintf(os.Stderr, "frr-launcher daemon: chown %s: %v\n", dir, err)
+			}
+		}
+	}
+
 	// Remove a stale socket from a previous run, if any.
 	// This is safe because the daemon is single-instance;
 	// systemd's Restart=on-failure means at most one
