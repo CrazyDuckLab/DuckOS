@@ -363,19 +363,16 @@ func execFRR(args []string, frrUid, frrGid int) (int, error) {
 		argv = append(argv, "--")
 		argv = append(argv, passthrough...)
 
-		// Redirect child stderr to logPath so any
-		// drop-time errors land in the FRR log.
-		var stderr *os.File
-		if logPath != "" {
-			f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o664)
-			if err != nil {
-				resCh <- forkResult{0, err}
-				return
-			}
-			stderr = f
-		}
 		envv := []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin"}
-		pid, err := forkExecWithFds(selfPath, argv, envv, w, stderr)
+		// Pass nil for stderr so the re-exec'd child's
+// os.Stderr writes (die(), log lines from the
+// re-exec'd launcher's drop time) land in the
+// daemon's stderr (journal) instead of the FRR
+// log file that gets cleaned up by the runtime on
+// failure. w is the pipe write-end used by the
+// re-exec'd child to ack its drop result; the
+// daemon ignores it for now.
+pid, err := forkExecWithFds(selfPath, argv, envv, w, nil)
 		_ = w.Close()
 		if err != nil {
 			resCh <- forkResult{0, err}
@@ -753,7 +750,9 @@ func capMask(names []string) (uint32, uint32, error) {
 // from the re-exec'd child fail silently. We use
 // /dev/null for stdout so the re-exec'd launcher
 // does not spam the journal with its own debug
-// output; stderr carries the operator-relevant errors.
+// output. stderr carries the operator-relevant errors
+// when nil is passed for stderr; the child inherits
+// the daemon's stderr (journal).
 func forkExecWithFds(argv0 string, argv, envv []string, stdin, stderr *os.File) (int, error) {
 	argv0Dir, err := filepath.Abs(argv0)
 	if err != nil {
@@ -767,7 +766,7 @@ func forkExecWithFds(argv0 string, argv, envv []string, stdin, stderr *os.File) 
 	defer null.Close()
 
 	// Files[0] = stdin, Files[1] = stdout (devnull),
-	// Files[2] = stderr (log file or null).
+	// Files[2] = stderr (log file or daemon's stderr).
 	var files []uintptr
 	if stdin != nil {
 		files = append(files, stdin.Fd())
