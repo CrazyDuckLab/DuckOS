@@ -411,14 +411,33 @@ func runOneShot(args []string) {
 	configPath := fs.String("config", "", "frr.conf path (default /var/lib/frr/<ps>/frr.conf)")
 	zServAddr := fs.String("zebra-addr", "127.0.0.1", "zserv API bind address (-A)")
 	logPath := fs.String("log", "", "redirect stderr to this file; empty = inherit")
+	// The fork-and-re-exec path passes these flags
+	// back into a fresh launcher process; they MUST be
+	// registered with the re-exec's FlagSet so
+	// fs.Parse accepts them. (The package-level
+	// frrUidFlag / frrGidFlag below are registered
+	// with the global flag.CommandLine and would NOT
+	// be visible to this FlagSet.)
 	execBinary := fs.String("exec-binary", "", "internal: re-exec entry for fork-time drop")
 	execPathspace := fs.String("exec-pathspace", "", "internal: re-exec pathspace")
 	execConfig := fs.String("exec-config", "", "internal: re-exec config path")
 	execLog := fs.String("exec-log", "", "internal: re-exec log path")
 	execPidFile := fs.String("exec-pidfile", "", "internal: re-exec pid file path")
+	// Bind package-level uid/gid flags to the same
+	// backing variables that fs populates below so
+	// dropAndExecFRR sees the values the daemon passed
+	// in via --exec-frr-uid / --exec-frr-gid.
+	var execFrrUid int
+	var execFrrGid int
+	fs.IntVar(&execFrrUid, "exec-frr-uid", 0, "internal: re-exec frr uid")
+	fs.IntVar(&execFrrGid, "exec-frr-gid", 0, "internal: re-exec frr gid")
 	if err := fs.Parse(args); err != nil {
 		die("frr-launcher: %v", err)
 	}
+	// Bridge the re-exec-passed uid/gid into the
+	// package-level vars dropAndExecFRR reads.
+	*frrUidFlag = execFrrUid
+	*frrGidFlag = execFrrGid
 
 	// Re-exec'd child: do the drop and exec the FRR
 	// binary. The agent never invokes this mode
