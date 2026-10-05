@@ -739,26 +739,47 @@ func capMask(names []string) (uint32, uint32, error) {
 }
 
 // forkExecWithFds does a controlled fork+exec. The
-// child runs argv[0] with argv[1:], envv, and the given
-// stdin / stderr fds. The child gets its own session
-// (setsid) so the FRR daemon can outlive the launcher
-// daemon if the latter restarts. The caller (daemon)
-// does NOT wait — the child runs independently.
+// child runs argv[0] with argv[1:], envv, and the
+// given stdin / stderr fds. The child gets its own
+// session (setsid) so the FRR daemon can outlive
+// the launcher daemon if the latter restarts. The
+// caller (daemon) does NOT wait — the child runs
+// independently.
+//
+// IMPORTANT: Go's syscall.ForkExec maps the Files
+// slice directly to child fds 0, 1, 2, ... in order.
+// We MUST include entries for fd 1 (stdout) even if
+// we just want stderr — otherwise the child's fd 2
+// (stderr) is left closed and any os.Stderr writes
+// from the re-exec'd child fail silently. We use
+// /dev/null for stdout so the re-exec'd launcher
+// does not spam the journal with its own debug
+// output; stderr carries the operator-relevant errors.
 func forkExecWithFds(argv0 string, argv, envv []string, stdin, stderr *os.File) (int, error) {
 	argv0Dir, err := filepath.Abs(argv0)
 	if err != nil {
 		return 0, err
 	}
 
-	// Pass stdin / stderr fds to the child as
-	// ExtraFiles-equivalent. Go's syscall.ForkExec
-	// accepts a []uintptr{fd, fd, fd} for files.
+	null, err := os.Open(os.DevNull)
+	if err != nil {
+		return 0, fmt.Errorf("open %s: %w", os.DevNull, err)
+	}
+	defer null.Close()
+
+	// Files[0] = stdin, Files[1] = stdout (devnull),
+	// Files[2] = stderr (log file or null).
 	var files []uintptr
 	if stdin != nil {
 		files = append(files, stdin.Fd())
+	} else {
+		files = append(files, null.Fd())
 	}
+	files = append(files, null.Fd()) // stdout
 	if stderr != nil {
 		files = append(files, stderr.Fd())
+	} else {
+		files = append(files, null.Fd())
 	}
 
 	pid, err := syscall.ForkExec(
