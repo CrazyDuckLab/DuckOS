@@ -243,7 +243,13 @@ func executeOp(op Op, ownedMu *sync.RWMutex, owned map[string]struct{},
 		if err := runExec(ipPath, "link", "add", op.Ifname, "type", "wireguard"); err != nil {
 			return err
 		}
-		markOwned(ownedMu, owned, stateDir, op.Ifname)
+		if err := markOwned(ownedMu, owned, stateDir, op.Ifname); err != nil {
+			// Roll back the kernel side so the
+			// catalogue and the kernel do not
+			// disagree.
+			_ = runExec(ipPath, "link", "del", "dev", op.Ifname)
+			return err
+		}
 		return nil
 	case VerbLinkDel:
 		if _, ok := owned[op.Ifname]; !ok {
@@ -252,7 +258,9 @@ func executeOp(op Op, ownedMu *sync.RWMutex, owned map[string]struct{},
 		if err := runExec(ipPath, "link", "del", "dev", op.Ifname); err != nil {
 			return err
 		}
-		dropOwned(ownedMu, owned, stateDir, op.Ifname)
+		if err := dropOwned(ownedMu, owned, stateDir, op.Ifname); err != nil {
+			return err
+		}
 		return nil
 	case VerbAddrAdd:
 		return runExec(ipPath, "address", "add", op.Address, "dev", op.Ifname)
@@ -357,19 +365,19 @@ func runExecCapture(bin string, args ...string) (string, error) {
 // markOwned records that the launcher just created
 // op.Ifname. The set is persisted on every change so a
 // reboot does not leak ownership state.
-func markOwned(mu *sync.RWMutex, owned map[string]struct{}, stateDir, ifname string) {
+func markOwned(mu *sync.RWMutex, owned map[string]struct{}, stateDir, ifname string) error {
 	mu.Lock()
 	defer mu.Unlock()
 	owned[ifname] = struct{}{}
-	saveOwned(mu, owned, stateDir)
+	return saveOwned(mu, owned, stateDir)
 }
 
 // dropOwned is the inverse of markOwned.
-func dropOwned(mu *sync.RWMutex, owned map[string]struct{}, stateDir, ifname string) {
+func dropOwned(mu *sync.RWMutex, owned map[string]struct{}, stateDir, ifname string) error {
 	mu.Lock()
 	defer mu.Unlock()
 	delete(owned, ifname)
-	saveOwned(mu, owned, stateDir)
+	return saveOwned(mu, owned, stateDir)
 }
 
 // loadOwned reads /var/lib/duckos/wireguard/owned.json
@@ -395,21 +403,24 @@ func loadOwned(stateDir string) (*sync.RWMutex, map[string]struct{}) {
 
 // saveOwned writes the owned set atomically. The caller
 // MUST hold the write lock.
-func saveOwned(mu *sync.RWMutex, owned map[string]struct{}, stateDir string) {
+func saveOwned(mu *sync.RWMutex, owned map[string]struct{}, stateDir string) error {
 	list := make([]string, 0, len(owned))
 	for k := range owned {
 		list = append(list, k)
 	}
 	b, err := json.MarshalIndent(list, "", "  ")
 	if err != nil {
-		return
+		return fmt.Errorf("encode owned set: %w", err)
 	}
 	path := filepath.Join(stateDir, "owned.json")
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, append(b, '\n'), ownedFileMode); err != nil {
-		return
+		return fmt.Errorf("stage owned set: %w", err)
 	}
-	os.Rename(tmp, path)
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("commit owned set: %w", err)
+	}
+	return nil
 }
 
 // classifyExecError maps a returned error to a status

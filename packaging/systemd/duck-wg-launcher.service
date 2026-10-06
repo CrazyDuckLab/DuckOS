@@ -30,6 +30,14 @@ Group=root
 RuntimeDirectory=duckos-agent
 RuntimeDirectoryMode=0770
 RuntimeDirectoryPreserve=yes
+# owned.json (DuckOS-owned interface tracking) lives
+# under /var/lib/duckos/wireguard; ProtectSystem=strict
+# makes the rest of / read-only so we MUST list it
+# explicitly in ReadWritePaths, otherwise the launcher's
+# atomic saveOwned() would fail silently. This is the
+# B-005 live-once fix landed via the BETA.2 pre-live
+# corrective round.
+ReadWritePaths=/var/lib/duckos/wireguard /run/duckos-agent/secret
 
 # CapabilityBoundingSet: CAP_NET_ADMIN. The launcher
 # is responsible for ip link add type wireguard,
