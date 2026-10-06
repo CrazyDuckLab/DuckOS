@@ -236,7 +236,7 @@ valid_path() {
   [[ "$candidate" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] || return 1
   case "/$candidate/" in *'/../'*|*'/./'*|*'//'*) return 1 ;; esac
   case "$candidate" in
-    VERSION|BUILD-INFO.json|install.sh|bin/duck-api|bin/duck-agent|bin/duck-updater|bin/duck-restore|bin/duck-frr-launcher|systemd/duck-restore.service|systemd/duck-updater.service|systemd/duck-api.service|systemd/duck-agent.service|systemd/duck-dnsmasq.service|systemd/duck-network-recover.service|systemd/duck-frr-launcher.service) return 0 ;;
+    VERSION|BUILD-INFO.json|install.sh|bin/duck-api|bin/duck-agent|bin/duck-updater|bin/duck-restore|bin/duck-frr-launcher|bin/duck-wg-launcher|systemd/duck-restore.service|systemd/duck-updater.service|systemd/duck-api.service|systemd/duck-agent.service|systemd/duck-dnsmasq.service|systemd/duck-network-recover.service|systemd/duck-frr-launcher.service|systemd/duck-wg-launcher.service) return 0 ;;
     web/*) [[ "$candidate" != */ ]] ;;
     xray-core/*) [[ "$candidate" != */ ]] ;;
     *) return 1 ;;
@@ -808,6 +808,15 @@ fi
 # CAP_SETGID CAP_SETPCAP and NoNewPrivileges=no; the
 # agent talks to it over /run/duckos-agent/frr-launcher.sock.
 install -o root -g root -m 0644 "$release/systemd/duck-frr-launcher.service" /etc/systemd/system/duck-frr-launcher.service
+
+# B-005 (BETA.2): install the dedicated duck-wg-launcher
+# privileged service. The launcher holds CAP_NET_ADMIN
+# only (no SETUID/SETGID/SETPCAP — see
+# packaging/systemd/duck-wg-launcher.service for the
+# justification). The agent has zero capabilities and
+# talks to the launcher over
+# /run/duckos-agent/wg-launcher.sock.
+install -o root -g root -m 0644 "$release/systemd/duck-wg-launcher.service" /etc/systemd/system/duck-wg-launcher.service
 install -d -o root -g root -m 0700 /var/lib/duckos-restore /var/lib/duckos/restore-source /var/lib/duckos/restore-live
 install -o root -g root -m 0644 "$release/systemd/duck-restore.service" /etc/systemd/system/duck-restore.service
 install -d -o root -g root -m 0700 /var/lib/duckos-updater
@@ -867,7 +876,7 @@ else
   systemctl start systemd-networkd.service >/dev/null 2>&1 || printf 'Could not start systemd-networkd; networkd inventory will be unavailable until next boot.\n' >&2
 fi
 agent_attempted=true
-systemctl start duck-restore.service duck-frr-launcher.service duck-agent.service
+systemctl start duck-restore.service duck-frr-launcher.service duck-wg-launcher.service duck-agent.service
 api_attempted=true
 systemctl start duck-api.service
 
@@ -885,7 +894,7 @@ done
 unset token
 $ready || fail 'Authenticated Agent-backed readiness/overview did not pass before the deadline.'
 enable_attempted=true
-systemctl enable duck-agent.service duck-api.service duck-restore.service duck-frr-launcher.service
+systemctl enable duck-agent.service duck-api.service duck-restore.service duck-frr-launcher.service duck-wg-launcher.service
 printf 'ready %s\n' "$version" > /var/lib/duckos/install-status
 trap - EXIT
 printf 'Installed %s as an internal TEST build. Authenticated readiness and overview passed.\n' "$version"
