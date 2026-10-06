@@ -800,9 +800,16 @@ func enableWireguardService(catalogDir, configDir string, access identityAccess,
 	}
 	adapter := &wireguard.KernelAdapter{
 		Resolver: secrets.WireguardResolver(),
-		Runner:   wireguard.IPRouteRunner{Binary: "/sbin/ip"},
-		Files:    wireguard.LocalFilesystem{Dir: configDir},
-		Catalog:  cat,
+		// B-005 (BETA.2): the agent runs with empty
+		// CapabilityBoundingSet and NoNewPrivileges=yes.
+		// Runner is kept for the (test-only) Runner-based
+		// code path; the production path goes through
+		// Typer which talks to the duck-wg-launcher
+		// privileged service.
+		Runner:  wireguard.IPRouteRunner{Binary: "/sbin/ip"},
+		Typer:   wireguard.NewLauncherClient(),
+		Files:   wireguard.LocalFilesystem{Dir: configDir},
+		Catalog: cat,
 	}
 	api := &wireguard.API{
 		Access:  access,

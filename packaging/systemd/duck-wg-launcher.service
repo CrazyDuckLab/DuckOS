@@ -1,0 +1,61 @@
+[Unit]
+Description=DuckOS WireGuard privileged launcher daemon (internal TEST build)
+Documentation=file:/opt/duckos/current/BUILD-INFO.json
+# B-005 (BETA.2): duck-agent correctly runs with
+# CapabilityBoundingSet= empty and NoNewPrivileges=yes.
+# It cannot exec /sbin/ip or /usr/bin/wg without losing
+# the privilege boundary. The launcher is the dedicated
+# privilege holder for every DuckOS WireGuard verb
+# (ip link add type wireguard, ip address add/del, ip
+# link set up/down, ip link del, wg setconf, wg show).
+# CAP_NET_ADMIN is the ONLY capability DuckOS requires for
+# WG. CAP_SYS_ADMIN, CAP_NET_RAW, CAP_SETUID, CAP_SETGID
+# and CAP_SETPCAP are NOT required and MUST NOT be added
+# unless a future operation independently needs them.
+# Conflicts= (B-005) keeps the launcher in step with the
+# FRR launcher's belt-and-braces policy: a competing
+# WG runtime cannot start against an enabled launcher.
+After=syslog.target network-online.target
+After=duck-network-recover.service
+Before=duck-agent.service
+Conflicts=wg-quick@.service wg-quick@*.service
+
+[Service]
+Type=simple
+ExecStart=/opt/duckos/current/bin/duck-wg-launcher --listen=/run/duckos-agent/wg-launcher.sock --state=/var/lib/duckos/wireguard --secret=/run/duckos-agent/secret --ip=/sbin/ip --wg=/usr/bin/wg
+Restart=on-failure
+RestartSec=2s
+User=root
+Group=root
+RuntimeDirectory=duckos-agent
+RuntimeDirectoryMode=0770
+RuntimeDirectoryPreserve=yes
+
+# CapabilityBoundingSet: CAP_NET_ADMIN. The launcher
+# is responsible for ip link add type wireguard,
+# ip address add/del, ip link set up/down, ip link del,
+# ip route add/del (if applicable), wg setconf / wg show.
+# NO other caps. SETUID / SETGID are forbidden (the
+# launcher runs as root, drops nothing — it does not
+# change uid because WG operations do not require a
+# different uid; only the capability grants access).
+# SETPCAP / NET_RAW are forbidden (no use).
+CapabilityBoundingSet=CAP_NET_ADMIN
+AmbientCapabilities=CAP_NET_ADMIN
+NoNewPrivileges=no
+
+# Hardening
+LockPersonality=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+PrivateTmp=true
+PrivateDevices=false
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectSystem=strict
+ProtectHome=true
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

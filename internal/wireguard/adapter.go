@@ -35,10 +35,56 @@ type KernelAdapter struct {
 	// The Catalog is the only durable source of truth;
 	// the kernel is best-effort.
 	Catalog catalogLookup
+	// Typer is the bounded, typed bridge to the
+	// duck-wg-launcher privileged service. When set,
+	// ApplyLauncher is the canonical production path:
+	// every DuckOS WG operation goes through the
+	// launcher (CAP_NET_ADMIN only) instead of through
+	// Runner (which exec's ip / wg directly and would
+	// fail under the agent's empty
+	// CapabilityBoundingSet).
+	//
+	// B-005 (BETA.2). The Runner path is kept for
+	// tests that wire a fakeRunner; production wiring
+	// must set Typer.
+	Typer WGTyper
 }
 
 type Runner interface {
 	Run(ctx context.Context, args []string) (string, error)
+}
+
+// WGTyper is the bounded, typed bridge to the duck-wg-
+// launcher privileged service. It is preferred over the
+// exec-based Runner in production because:
+//
+//   - the agent runs with CapabilityBoundingSet= empty
+//     and NoNewPrivileges=yes, so an exec-based Runner
+//     cannot reach /sbin/ip or /usr/bin/wg;
+//   - the launcher validates canonical interface names,
+//     addresses and CIDRs at the protocol layer;
+//   - private-key bytes never traverse argv or env (they
+//     travel through the launcher-owned secret channel).
+//
+// B-005 (BETA.2) requirement. Implementations:
+//
+//   - LauncherClient: production wiring (talks to
+//     duck-wg-launcher.sock over a Unix socket).
+//   - IPRouteRunner: legacy / tests only — the agent
+//     does not wire this in the production path.
+//
+// KernelAdapter.ApplyServer / ApplyPeer / RemoveServer
+// pick WGTyper when it is set and fall back to Runner
+// otherwise; the dual interface keeps the existing test
+// surface working.
+type WGTyper interface {
+	LinkAdd(ifname string) error
+	LinkDel(ifname string) error
+	AddrAdd(ifname, prefix string) error
+	AddrDel(ifname, prefix string) error
+	LinkUp(ifname string) error
+	LinkDown(ifname string) error
+	SetConf(ifname string, listenPort int, privateKey []byte, peers []PeerConf) error
 }
 
 type Filesystem interface {
@@ -263,6 +309,95 @@ func (a *KernelAdapter) RemoveServer(ctx context.Context, server Server) error {
 		return errors.New("wireguard kernel adapter requires runner and filesystem")
 	}
 	if _, err := a.Runner.Run(ctx, []string{"link", "del", "dev", server.Interface}); err != nil && !isNoDevice(err) {
+		return fmt.Errorf("remove wireguard link: %w", err)
+	}
+	path := "/etc/wireguard/" + server.Interface + ".conf"
+	if err := a.Files.Remove(ctx, path); err != nil {
+		return fmt.Errorf("remove wireguard config: %w", err)
+	}
+	return nil
+}
+
+// ApplyServerLauncher is the B-005 (BETA.2) production
+// path for WireGuard kernel operations. It drives the
+// duck-wg-launcher privileged service through the
+// WGTyper interface; the agent itself has no
+// capabilities and never reaches /sbin/ip or
+// /usr/bin/wg.
+//
+// Behaviour:
+//   - AddrAdd / LinkAdd use the canonical interface
+//     name only.
+//   - Private keys travel through the launcher's secret
+//     channel; they never appear in argv or env.
+//   - The persisted config under /etc/wireguard/<if>.conf
+//     is still updated so the next boot can restore the
+//     tunnel without re-applying the key from the vault.
+//
+// ApplyServer (the Runner-based path) is kept for tests
+// that wire a fakeRunner. Production wiring MUST set
+// a.Typer and call ApplyServerLauncher.
+func (a *KernelAdapter) ApplyServerLauncher(ctx context.Context, server Server) error {
+	if a.Typer == nil {
+		return errors.New("wireguard launcher path requires a Typer")
+	}
+	if a.Resolver == nil {
+		return errors.New("wireguard launcher path requires a key resolver")
+	}
+	if a.Files == nil {
+		return errors.New("wireguard launcher path requires a filesystem")
+	}
+	if err := server.Validate(); err != nil {
+		return err
+	}
+	priv, err := a.Resolver.Resolve(ctx, server.PrivateKeyRef)
+	if err != nil {
+		return fmt.Errorf("wireguard private key: %w", err)
+	}
+	defer clearBytes(priv)
+	// 1. Bring the link up. The launcher creates the
+	//    interface (or refuses with "already exists")
+	//    and refuses anything outside the wg-name regex.
+	if err := a.Typer.LinkAdd(server.Interface); err != nil && !isExists(err) {
+		return fmt.Errorf("create wireguard link: %w", err)
+	}
+	// 2. Configure the listen port. The launcher will
+	//    refuse to bind port 0 on the operator's
+	//    behalf.
+	for _, addr := range server.Addresses {
+		if err := a.Typer.AddrAdd(server.Interface, addr); err != nil && !isExists(err) {
+			return fmt.Errorf("add wireguard address %s: %w", addr, err)
+		}
+	}
+	if err := a.Typer.SetConf(server.Interface, server.ListenPort, priv, nil); err != nil {
+		return fmt.Errorf("configure wireguard: %w", err)
+	}
+	if err := a.Typer.LinkUp(server.Interface); err != nil {
+		return fmt.Errorf("raise wireguard link: %w", err)
+	}
+	// 3. Persist the rendered configuration. Private key
+	//    is intentionally omitted from the export (the
+	//    diagnostic API never sees it).
+	rendered := ExportServerConfig(server, server.Peers)
+	path := "/etc/wireguard/" + server.Interface + ".conf"
+	if err := a.Files.WriteAtomic(ctx, path, 0o600, []byte(rendered)); err != nil {
+		return fmt.Errorf("persist wireguard config: %w", err)
+	}
+	return nil
+}
+
+// RemoveServerLauncher is the launcher-based counterpart
+// to RemoveServer. The launcher refuses to delete an
+// interface it did not create, so this method works
+// only for DuckOS-owned interfaces.
+func (a *KernelAdapter) RemoveServerLauncher(ctx context.Context, server Server) error {
+	if a.Typer == nil {
+		return errors.New("wireguard launcher path requires a Typer")
+	}
+	if a.Files == nil {
+		return errors.New("wireguard launcher path requires a filesystem")
+	}
+	if err := a.Typer.LinkDel(server.Interface); err != nil && !isNoDevice(err) {
 		return fmt.Errorf("remove wireguard link: %w", err)
 	}
 	path := "/etc/wireguard/" + server.Interface + ".conf"
