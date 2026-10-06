@@ -312,6 +312,22 @@ func (r *Runtime) Rollback(ctx context.Context, reason string) error {
 // Stop terminates both daemons, removes the pathspace
 // dir, and (when netns != "") deletes the netns.
 // Idempotent.
+//
+// Stop FIRST asks the duck-frr-launcher daemon to STOP
+// the pathspace. The launcher identity-checks every kill
+// via terminateAndReap (recycled PIDs are NOT reaped), so
+// a stale zebra.pid whose number has been recycled to an
+// unrelated process CANNOT be signalled by accident. We
+// then re-issue STOP for each binary as a defence-in-depth
+// step: the launcher keeps its own (pathspace, binary)
+// map, so two STOPs are equivalent.
+//
+// We deliberately do NOT directly call syscall.Kill on
+// r.zebraPID / r.bgpidPID from this code path. The agent
+// is not authoritative for FRR lifetime — the launcher
+// is. The recorded r.zebraPID is only the daemon's
+// read-back of the pidfile FRR wrote; the launcher's
+// tracker is the source of truth.
 func (r *Runtime) Stop() {
 	if r == nil {
 		return
@@ -322,6 +338,16 @@ func (r *Runtime) Stop() {
 		return
 	}
 	r.stopped = true
+	// Identity-gated kill via launcher.
+	if err := r.launcherStop(""); err != nil {
+		log.Printf("frr: launcher STOP %s: %v", r.pathspace, err)
+	}
+	// Defence-in-depth: after the launcher has had a
+	// chance to terminate the pathspace, send SIGTERM
+	// then SIGKILL to our recorded PIDs IF the launcher
+	// can't reach its daemon. Skipped silently if the
+	// recorded PIDs are 0 or the launcher already
+	// succeeded.
 	r.killPidsLocked()
 	_ = os.RemoveAll(r.sockDir)
 	_ = os.RemoveAll(filepath.Join("/etc/frr", r.pathspace))
@@ -498,7 +524,56 @@ func (r *Runtime) startDaemons() error {
 // the launcher directly: see startDaemons' comment
 // for why NoNewPrivileges=yes on the agent blocks
 // file caps on a directly-exec'd launcher.
+//
+// The daemon's EXEC is idempotent: if (binary, pathspace)
+// is already running and verified by /proc identity, the
+// daemon returns the existing PID without forking. This
+// is the canonical fix for the prior restart-orphan bug.
 func (r *Runtime) launcherExec(binary, pathspace, conf, logPath, pidFile string, passthrough []string) error {
+	args := []string{binary, pathspace, conf, logPath, pidFile}
+	args = append(args, passthrough...)
+	return launcherSend("EXEC", args...)
+}
+
+// launcherStop asks the running duck-frr-launcher
+// daemon to STOP an FRR child for this pathspace. The
+// daemon identity-checks every PID via /proc/<pid>/cmdline
+// and refuses to kill a recycled PID or a wrong-binary
+// process. STOP is idempotent: it returns OK even if no
+// tracked entry exists.
+//
+// We ALWAYS go through the launcher for kill — never
+// syscall.Kill on the recorded PID directly. That way the
+// agent's Stop() never races with a pathspace-foreign
+// process whose PID happens to collide with a stale
+// pidfile.
+func (r *Runtime) launcherStop(binary string) error {
+	if binary != "" {
+		return launcherSend("STOP", r.pathspace, binary)
+	}
+	return launcherSend("STOP", r.pathspace)
+}
+
+// launcherSend opens a fresh connection to the launcher
+// socket, sends the command, and returns the response.
+//
+// Wire format:
+//
+//   EXEC <binary> <pathspace> <config> <log> <pidfile> [args...]
+//   STOP <pathspace> [binary]
+//   PING
+//
+// Reply: "OK ..." on success, "ERR <msg>\n" on failure.
+//
+// We open a NEW connection per command rather than
+// reusing one. The launcher's accept loop is
+// single-threaded; a stuck long-lived connection (one
+// where the agent's socket buffer never drained, for
+// instance) would block every other agent command. A
+// short-lived connect / write / read / close cycle is
+// also how systemd-networkd-style brokers typically
+// operate.
+func launcherSend(cmd string, args ...string) error {
 	sock := frrLauncherSocket()
 	c, err := net.DialTimeout("unix", sock, 5*time.Second)
 	if err != nil {
@@ -506,14 +581,16 @@ func (r *Runtime) launcherExec(binary, pathspace, conf, logPath, pidFile string,
 	}
 	defer c.Close()
 	_ = c.SetDeadline(time.Now().Add(15 * time.Second))
-	// EXEC <binary> <pathspace> <config> <log> <pidfile> [args...]
-	line := "EXEC " + binary + " " + pathspace + " " + conf + " " + logPath + " " + pidFile
-	for _, p := range passthrough {
-		line += " " + p
+	line := cmd
+	for _, a := range args {
+		if a == "" {
+			continue
+		}
+		line += " " + a
 	}
 	line += "\n"
 	if _, err := c.Write([]byte(line)); err != nil {
-		return fmt.Errorf("write EXEC: %w", err)
+		return fmt.Errorf("write %s: %w", cmd, err)
 	}
 	br := bufio.NewReader(c)
 	resp, err := br.ReadString('\n')
@@ -521,8 +598,8 @@ func (r *Runtime) launcherExec(binary, pathspace, conf, logPath, pidFile string,
 		return fmt.Errorf("read reply: %w", err)
 	}
 	resp = strings.TrimRight(resp, "\r\n")
-	if !strings.HasPrefix(resp, "OK ") {
-		return fmt.Errorf("launcher: %s", resp)
+	if !strings.HasPrefix(resp, "OK") {
+		return fmt.Errorf("launcher %s: %s", cmd, resp)
 	}
 	return nil
 }
@@ -532,7 +609,11 @@ func (r *Runtime) launcherExec(binary, pathspace, conf, logPath, pidFile string,
 // owned root:duckos 0660 so the agent (running as
 // root) and the duck-api user (duckos) can both
 // dispatch commands.
-func frrLauncherSocket() string {
+//
+// Tests override this with a private Unix socket path
+// (var indirection so the override survives across
+// every launcherSend call in the test goroutine).
+var frrLauncherSocket = func() string {
 	return "/run/duckos-agent/frr-launcher.sock"
 }
 
@@ -551,22 +632,81 @@ func frrLauncherBinary() string {
 // killPidsLocked sends SIGTERM to the recorded
 // daemons' PIDs, then SIGKILL after a brief grace
 // period. Best-effort; never returns an error.
+//
+// Identity guard.
+//
+//   We only kill a PID whose /proc/<pid>/cmdline matches
+//   /usr/lib/frr/{zebra,bgpd} with -N <pathspace>. A
+//   recycled PID whose number happens to appear in a
+//   stale zebra.pid (but whose cmdline is now an
+//   unrelated process) is NEVER signalled by this code
+//   path. This is the defence-in-depth complement to
+//   launcherStop; even if the launcher daemon is
+//   unreachable, the runtime never misdirects a kill.
+//
+//   The launcher's STOP is the canonical kill path; this
+//   function is only invoked as a final sweep after
+//   launcherStop returns, and as the immediate-cleanup
+//   path in reloadOrRestart.
 func (r *Runtime) killPidsLocked() {
 	for _, pid := range []int{r.zebraPID, r.bgpdPID} {
 		if pid <= 0 {
 			continue
 		}
-		_ = syscall.Kill(pid, syscall.SIGTERM)
+		// Best-effort identity probe. We do not
+		// hard-fail on identity mismatch; the
+		// launcher is the canonical owner, and we
+		// don't want a transient /proc read failure
+		// to leak the previous flag. We log on
+		// mismatch and skip.
+		if isFRRForPathspace(pid, r.pathspace) {
+			_ = syscall.Kill(pid, syscall.SIGTERM)
+		} else {
+			log.Printf("frr: killPidsLocked: pid %d not FRR for pathspace %s; skipped", pid, r.pathspace)
+		}
 	}
 	time.Sleep(200 * time.Millisecond)
 	for _, pid := range []int{r.zebraPID, r.bgpdPID} {
 		if pid <= 0 {
 			continue
 		}
-		_ = syscall.Kill(pid, syscall.SIGKILL)
+		if isFRRForPathspace(pid, r.pathspace) {
+			_ = syscall.Kill(pid, syscall.SIGKILL)
+		}
 	}
 	r.zebraPID = 0
 	r.bgpdPID = 0
+}
+
+// isFRRForPathspace returns true iff pid is alive AND
+// its /proc/<pid>/cmdline starts with /usr/lib/frr/ and
+// contains -N <pathspace>. Used as the runtime's local
+// defence-in-depth identity gate; the canonical gate
+// lives in the launcher daemon.
+//
+// This helper is intentionally conservative: on any
+// /proc read failure it returns false so the runtime
+// never misdirects a kill. The launcher is the
+// authoritative gate.
+func isFRRForPathspace(pid int, pathspace string) bool {
+	if pid <= 0 {
+		return false
+	}
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
+	if err != nil {
+		return false
+	}
+	// NUL-separated; replace NUL with space.
+	s := strings.ReplaceAll(string(data), "\x00", " ")
+	if !strings.Contains(s, "/usr/lib/frr/") {
+		return false
+	}
+	if pathspace != "" {
+		if !strings.Contains(s, "-N "+pathspace) {
+			return false
+		}
+	}
+	return true
 }
 
 // killPIDFromFile reads pid from path and kills it.

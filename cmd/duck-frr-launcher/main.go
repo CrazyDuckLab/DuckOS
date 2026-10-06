@@ -84,12 +84,14 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"os/signal"
 	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -140,8 +142,16 @@ func main() {
 
 // runDaemon is the long-running privileged broker.
 // systemd starts it via duck-frr-launcher.service. It
-// listens on a Unix socket and serves EXEC / KILL
-// commands from the duck-agent.
+// listens on a Unix socket and serves EXEC / STOP /
+// LIST / PING commands from the duck-agent.
+//
+// The daemon owns the FRR lifetime via the Tracker
+// (see tracker.go). On startup it rehydrates the
+// tracker by scanning existing pidfiles and
+// verifying each candidate via /proc/<pid>/cmdline.
+// On SIGTERM / SIGINT the daemon reaps every
+// tracked FRR process identity-gated (a recycled
+// PID is never killed).
 func runDaemon(args []string) {
 	fs := flag.NewFlagSet("duck-frr-launcher --daemon", flag.ExitOnError)
 	listenAddr := fs.String("listen", "/run/duckos-agent/frr-launcher.sock", "unix socket listen path")
@@ -155,6 +165,31 @@ func runDaemon(args []string) {
 	if err != nil {
 		die("frr-launcher daemon: %v", err)
 	}
+
+	tracker := NewTracker()
+	installTracker(tracker)
+	rehydrated, rejected, rerr := tracker.rehydrateFromPidfiles()
+	if rerr != nil {
+		fmt.Fprintf(os.Stderr, "frr-launcher daemon: rehydrate: %v\n", rerr)
+	}
+	fmt.Fprintf(os.Stderr, "frr-launcher daemon: rehydrated=%d rejected=%d\n", rehydrated, rejected)
+	// Shutdown cleanup: reap every tracked FRR PID,
+	// identity-checked, on SIGTERM / SIGINT. We install
+	// this BEFORE the listen loop so any later signal
+	// triggers deterministic cleanup. The handler is
+	// idempotent; repeated signals are no-ops.
+	stopCh := make(chan os.Signal, 4)
+	signal.Notify(stopCh, syscall.SIGTERM, syscall.SIGINT)
+	go func() {
+		sig := <-stopCh
+		fmt.Fprintf(os.Stderr, "frr-launcher daemon: caught %s; reaping\n", ssigname(sig))
+		reapAll(tracker)
+		// Best-effort: remove the socket so a fresh
+		// launcher (after systemd Restart=on-failure)
+		// does not see a stale listener.
+		_ = os.Remove(*listenAddr)
+		os.Exit(0)
+	}()
 
 	// Ensure the parent directory for the socket
 	// exists. The agent normally creates /run/duckos-agent
@@ -246,22 +281,236 @@ func handleConn(c net.Conn, frrUid, frrGid int) {
 		case "PING":
 			fmt.Fprintln(c, "PONG")
 		case "EXEC":
-			pid, err := execFRR(parts[1:], frrUid, frrGid)
+			pid, err := daemonEXEC(parts[1:], frrUid, frrGid)
 			if err != nil {
 				fmt.Fprintf(c, "ERR %s\n", err)
 				continue
 			}
 			fmt.Fprintf(c, "OK %d\n", pid)
-		case "SIGNAL":
-			if err := signalFRR(parts[1:]); err != nil {
+		case "STOP":
+			if err := daemonSTOP(parts[1:]); err != nil {
 				fmt.Fprintf(c, "ERR %s\n", err)
 				continue
 			}
 			fmt.Fprintln(c, "OK")
+		case "LIST":
+			out := formatList(daemonTracker().Snapshot())
+			if _, err := c.Write(out); err != nil {
+				fmt.Fprintf(os.Stderr, "frr-launcher: LIST write: %v\n", err)
+			}
 		default:
 			fmt.Fprintf(c, "ERR unknown command %q\n", parts[0])
 		}
 	}
+}
+
+// daemonTracker is the launcher's process-global
+// tracker, installed by runDaemon. handleConn reaches
+// it through this getter so the tracker state is shared
+// across every accept-loop connection. We avoid a
+// package-level closure-on-a-var pattern and use a plain
+// pointer instead.
+var globalTracker *Tracker
+
+// installTracker wires the daemon's tracker pointer.
+// Used by runDaemon and by the tracker_test.go
+// fixtures that exercise the EXEC / STOP / LIST
+// dispatch without standing up a real daemon.
+func installTracker(t *Tracker) { globalTracker = t }
+
+func daemonTracker() *Tracker {
+	if globalTracker == nil {
+		panic("frr-launcher: tracker not installed (runDaemon not called)")
+	}
+	return globalTracker
+}
+
+// reapAll identity-gated reaps every tracked entry. Used
+// by SIGTERM/SIGINT cleanup. Errors are logged and
+// ignored: we want to attempt every kill, not to bail on
+// the first identity mismatch (which is informational, not
+// a fault).
+func reapAll(tr *Tracker) {
+	for _, e := range tr.Snapshot() {
+		if err := terminateAndReap(e.PID, e.Binary, e.Pathspace); err != nil {
+			fmt.Fprintf(os.Stderr, "frr-launcher daemon: reap %s/%s pid=%d: %v\n", e.Pathspace, e.Binary, e.PID, err)
+		}
+		// Remove the stale pidfile if FRR did not
+		// remove it itself. Best-effort.
+		if e.PidFile != "" {
+			_ = os.Remove(e.PidFile)
+		}
+		tr.Forget(e.Pathspace, e.Binary)
+	}
+}
+
+// ssigname returns the canonical name of sig for
+// logging. Used by the SIGTERM/SIGINT handler.
+func ssigname(sig os.Signal) string {
+	switch sig {
+	case syscall.SIGTERM:
+		return "SIGTERM"
+	case syscall.SIGINT:
+		return "SIGINT"
+	}
+	return sig.String()
+}
+
+// daemonEXEC is the idempotent entry point for the EXEC
+// command. It reconciles the tracker with the requested
+// (binary, pathspace, sockDir):
+//
+//   1. If the tracker already has an entry for the
+//      (pathspace, binary) AND the PID is still alive AND
+//      the identity matches /usr/lib/frr/<bin> with -N
+//      <pathspace>, return the existing PID. The runtime's
+//      subsequent pidfile poll will confirm; no fork happens.
+//
+//   2. If the tracker has a stale entry (PID exited,
+//      wrong identity, or wrong pathspace), reap it
+//      identity-gated. A stale PID that does NOT match
+//      the recorded (binary, pathspace) is left alone —
+//      a recycled PID may be a legitimate unrelated
+//      process.
+//
+//   3. Else, fork+exec the re-exec launcher, wait for
+//      FRR to write its pidfile, verify identity, and
+//      track. Return the daemon PID.
+//
+// The wire protocol reply is `OK <pid>\n` where pid is
+// the FRR daemon's PID (NOT the re-exec launcher PID).
+// The runtime reads the pidfile to find this PID too;
+// we return the same number from the daemon so the wire
+// contract is consistent regardless of which side the
+// runtime reads first.
+func daemonEXEC(args []string, frrUid, frrGid int) (int, error) {
+	if len(args) < 5 {
+		return 0, fmt.Errorf("usage: EXEC <binary> <pathspace> <config> <log> <pidfile> [args...]")
+	}
+	binary, pathspace, conf, logPath, pidFile := args[0], args[1], args[2], args[3], args[4]
+	passthrough := args[5:]
+	tr := daemonTracker()
+
+	// Idempotent path: existing tracked entry verified alive.
+	if existing := tr.Lookup(pathspace, binary); existing != nil {
+		if err := isFRRProcess(existing.PID, binary, pathspace); err == nil {
+			// Refresh startedAt so the runtime's
+			// state reflects "still alive". Optional.
+			tr.Put(&TrackedFRR{
+				Binary:    existing.Binary,
+				Pathspace: existing.Pathspace,
+				PID:       existing.PID,
+				StartedAt: existing.StartedAt,
+				PidFile:   existing.PidFile,
+				SockDir:   existing.SockDir,
+				Cmdline:   existing.Cmdline,
+			})
+			return existing.PID, nil
+		}
+		// Stale. Reap identity-gated (refuses to kill
+		// a recycled PID), then forget.
+		if err := terminateAndReap(existing.PID, binary, pathspace); err != nil {
+			fmt.Fprintf(os.Stderr, "frr-launcher daemon: stale %s/%s pid=%d: %v (continuing)\n", pathspace, binary, existing.PID, err)
+		}
+		if existing.PidFile != "" {
+			_ = os.Remove(existing.PidFile)
+		}
+		tr.Forget(pathspace, binary)
+	}
+
+	// Cold path: fork+exec the re-exec launcher, then
+	// wait for FRR to write its pidfile.
+	if _, err := execFRR(args, frrUid, frrGid); err != nil {
+		return 0, err
+	}
+	// Poll the pidfile for up to 5s (FRR is fast; the
+	// daemonize() double-fork + privs_init takes well
+	// under 1s on healthy hardware).
+	deadline := time.Now().Add(5 * time.Second)
+	var pid int
+	for time.Now().Before(deadline) {
+		pid = readPIDFile(pidFile)
+		if pid > 0 {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if pid <= 0 {
+		return 0, fmt.Errorf("EXEC %s/%s: pidfile %s not written within 5s", pathspace, binary, pidFile)
+	}
+	// Identity gate. The PID written to the pidfile
+	// MUST be /usr/lib/frr/<bin> with -N <pathspace>.
+	// A pidfile containing the wrong PID (e.g. the
+	// re-exec launcher that exited immediately) is
+	// rejected here, not at kill time.
+	if err := isFRRProcess(pid, binary, pathspace); err != nil {
+		return 0, fmt.Errorf("EXEC %s/%s: pid %d from pidfile not FRR: %v", pathspace, binary, pid, err)
+	}
+	// Track.
+	sockDir := filepath.Dir(pidFile)
+	tr.Put(&TrackedFRR{
+		Binary:    binary,
+		Pathspace: pathspace,
+		PID:       pid,
+		StartedAt: time.Now().UTC(),
+		PidFile:   pidFile,
+		SockDir:   sockDir,
+		Cmdline:   "/usr/lib/frr/" + binary,
+	})
+	_ = conf
+	_ = logPath
+	_ = passthrough
+	return pid, nil
+}
+
+// daemonSTOP handles "STOP <pathspace>" and
+// "STOP <pathspace> <binary>". Every kill is
+// identity-gated via terminateAndReap; a recycled PID
+// that does NOT match (binary, pathspace) is left alone.
+//
+// Returns:
+//   - nil if no tracked entry exists for the request
+//     (STOP is idempotent: it succeeds vacuously)
+//   - nil after a successful reap
+//   - non-nil only on a transient error (e.g. a kill
+//     permission failure that isn't ESRCH)
+func daemonSTOP(args []string) error {
+	pathspace, binSpec, ok := parseSTOPArg(args)
+	if !ok {
+		return fmt.Errorf("usage: STOP <pathspace> [binary]")
+	}
+	if pathspace == "" {
+		return fmt.Errorf("STOP: empty pathspace")
+	}
+	tr := daemonTracker()
+	var entries []*TrackedFRR
+	if binSpec != "" {
+		if e := tr.Lookup(pathspace, binSpec); e != nil {
+			entries = append(entries, e)
+		}
+	} else {
+		// Pathspace.
+		for _, e := range tr.Snapshot() {
+			if e.Pathspace == pathspace {
+				entries = append(entries, e)
+			}
+		}
+	}
+	if len(entries) == 0 {
+		// Idempotent.
+		return nil
+	}
+	for _, e := range entries {
+		if err := terminateAndReap(e.PID, e.Binary, e.Pathspace); err != nil {
+			fmt.Fprintf(os.Stderr, "frr-launcher daemon: STOP %s/%s pid=%d: %v (continuing)\n", e.Pathspace, e.Binary, e.PID, err)
+		}
+		// Best-effort pidfile cleanup.
+		if e.PidFile != "" {
+			_ = os.Remove(e.PidFile)
+		}
+		tr.Forget(e.Pathspace, e.Binary)
+	}
+	return nil
 }
 
 // execFRR is the privileged-broker half of an EXEC
@@ -403,26 +652,6 @@ pid, err := forkExecWithFds(selfPath, argv, envv, w, nil)
 	close(resCh)
 	res := <-resCh
 	return res.pid, res.err
-}
-
-// signalFRR parses SIGNAL <pid> <signal-name|number>.
-// signal-name is SIGTERM, SIGKILL, SIGHUP, etc.
-func signalFRR(args []string) error {
-	if len(args) < 2 {
-		return fmt.Errorf("usage: SIGNAL <pid> <signal>")
-	}
-	pid, err := strconv.Atoi(args[0])
-	if err != nil {
-		return fmt.Errorf("parse pid %q: %w", args[0], err)
-	}
-	sig, err := parseSignal(args[1])
-	if err != nil {
-		return err
-	}
-	if err := unix.Kill(pid, sig); err != nil {
-		return fmt.Errorf("kill %d %s: %w", pid, args[1], err)
-	}
-	return nil
 }
 
 // runOneShot is the legacy single-shot mode. It is

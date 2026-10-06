@@ -41,6 +41,7 @@ web/test-results/
 /duck
 /duck-agent
 /duck-api
+/duck-frr-launcher
 
 # E2E qualification
 e2e/.token
