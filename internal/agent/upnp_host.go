@@ -83,10 +83,16 @@ func (h *UPnPHost) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	tail := r.URL.EscapedPath()
+	// The Engine proxy concatenates agent.UPnPPath + "/upnp/v1/"
+	// (see internal/engine/engine.go UPnPProxy) so the
+	// incoming path can carry both prefixes; strip every
+	// recognised one before dispatch. Without this loop
+	// (or with a `break` after the first match) state /
+	// networks / mappings paths would never resolve and
+	// the public API would 404 every UPnP call.
 	for _, p := range []string{UPnPPath, "/upnp/v1/"} {
 		if len(tail) >= len(p) && tail[:len(p)] == p {
 			tail = tail[len(p):]
-			break
 		}
 	}
 	switch r.Method {
