@@ -15,8 +15,15 @@ import (
 // inbounds, outbounds, routing, and dns. The config is purely
 // declarative; secret bytes are referenced via vault pointers, not
 // embedded.
+//
+// The Version field is a DuckOS-internal marker (the on-disk journal
+// version, NOT the xray-core schema version) and is intentionally
+// hidden from the wire. xray-core rejects numeric values for the
+// top-level `version` key (its own VersionConfig is a structured
+// object) and the empty Xray config that DuckOS uses as its
+// reconciliation baseline parses fine without one.
 type Config struct {
-	Version   int        `json:"version"`
+	Version   int        `json:"-"`
 	Inbounds  []Inbound  `json:"inbounds"`
 	Outbounds []Outbound `json:"outbounds"`
 	Routing   *Routing   `json:"routing,omitempty"`
