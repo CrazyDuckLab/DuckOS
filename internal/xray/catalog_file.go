@@ -186,21 +186,33 @@ func (c *FileCatalog) UpsertUser(_ context.Context, user User) error {
 	if user.ID == "" || user.ServerID == "" {
 		return errors.New("user id and serverId required")
 	}
-	if user.CreatedAt.IsZero() {
-		user.CreatedAt = nowUTC()
-	}
-	user.UpdatedAt = nowUTC()
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	found := false
 	for i, existing := range c.state.Users {
 		if existing.ID == user.ID {
+			// B-006 (BETA.2): preserve CreatedAt from
+			// the existing record. A common failure
+			// mode was callers passing a fresh User
+			// struct (CreatedAt is zero) on update,
+			// which silently destroyed the audit
+			// timestamp. We only stamp CreatedAt when
+			// the record is brand-new; on update we
+			// reuse the existing CreatedAt.
+			if user.CreatedAt.IsZero() {
+				user.CreatedAt = existing.CreatedAt
+			}
+			user.UpdatedAt = nowUTC()
 			c.state.Users[i] = user
 			found = true
 			break
 		}
 	}
 	if !found {
+		if user.CreatedAt.IsZero() {
+			user.CreatedAt = nowUTC()
+		}
+		user.UpdatedAt = nowUTC()
 		c.state.Users = append(c.state.Users, user)
 	}
 	return c.commit(c.state)
