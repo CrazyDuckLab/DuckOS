@@ -78,7 +78,73 @@ var idPattern = regexp.MustCompile(`^(\*|[a-z0-9][a-z0-9._:-]{0,63})$`)
 // RBAC overlay can validate CIDR-style ids for the
 // kinds that need them and stay strict for every
 // other kind.
+//
+// B-009 SAFETY (BETA.2 pre-live gate): the regex
+// permits '.' which on its own is harmless, but in
+// combination with '/' it would admit "foo/../..".
+// The ValidateCIDRBody helper below rejects any id
+// containing ".." (path-traversal signature) AND any
+// id containing a '.' after the first '/' (a CIDR
+// form never has '.' after the slash). The two-step
+// gating is locked in by TestB009_PathTraversalRejectedEverywhere.
 var cidrIDPattern = regexp.MustCompile(`^(\*|[a-z0-9:][a-z0-9._:/%+-]{0,95})$`)
+
+// ValidateCIDRBody enforces the post-regex structural
+// invariants the cidrIDPattern cannot express with
+// RE2 (no lookahead / atomic groups). It is called by
+// ObjectKey.Valid only when the kind is in cidrKinds.
+// Exported for direct unit tests so a regression in the
+// helper does not require a full FilterCollection
+// round-trip.
+func ValidateCIDRBody(id string) error {
+	if id == "*" {
+		return nil
+	}
+	// B-009 SAFETY: a CIDR form never has two
+	// consecutive dots. ".." is the path-traversal
+	// signature; refusing it is sufficient to block
+	// the documented payload classes.
+	if containsPair(id, '.', '.') {
+		return errors.New("cidr id contains path-traversal (..)")
+	}
+	// A CIDR form has '.', '.' only in the IPv4
+	// address portion. After the first '/', the
+	// rest is either a prefix length (1-128) or an
+	// IPv6 zone id; neither forms ever has '.'.
+	slash := indexByte(id, '/')
+	if slash >= 0 {
+		for i := slash + 1; i < len(id); i++ {
+			if id[i] == '.' {
+				return errors.New("cidr id has '.' after the CIDR slash")
+			}
+		}
+	}
+	return nil
+}
+
+// containsPair reports whether the string contains the
+// given byte pair as a substring. Used to detect the
+// path-traversal signature "..".
+func containsPair(s string, a, b byte) bool {
+	for i := 0; i+1 < len(s); i++ {
+		if s[i] == a && s[i+1] == b {
+			return true
+		}
+	}
+	return false
+}
+
+// indexByte is the strings.IndexByte equivalent kept
+// local so the policy.go file's import surface stays
+// small.
+func indexByte(s string, b byte) int {
+	for i := 0; i < len(s); i++ {
+		if s[i] == b {
+			return i
+		}
+	}
+	return -1
+}
 
 // cidrKinds enumerates the kinds whose object id may
 // legitimately contain a CIDR-style value. Adding a kind
@@ -126,12 +192,23 @@ var objectPattern = kindPattern
 // address objects with '/' in the id (10.0.0.0/24,
 // 2001:db8::/64, fe80::1%eth0/64, default) are no
 // longer dropped by the RBAC redactor.
+//
+// For CIDR-bearing kinds, Valid also runs the
+// ValidateCIDRBody structural check so a path-traversal
+// payload ("foo/../../etc/passwd") cannot slip through
+// the regex. The non-CIDR kinds are NOT subject to the
+// structural check (they never reach the cidrIDPattern).
 func (k ObjectKey) Valid() bool {
 	if !kindPattern.MatchString(k.Kind) {
 		return false
 	}
 	if !idPatternForKind(k.Kind).MatchString(k.ID) {
 		return false
+	}
+	if _, ok := cidrKinds[k.Kind]; ok {
+		if err := ValidateCIDRBody(k.ID); err != nil {
+			return false
+		}
 	}
 	return true
 }

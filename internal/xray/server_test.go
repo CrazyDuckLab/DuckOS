@@ -343,11 +343,27 @@ func TestRenderConfigRoutesFromProfiles(t *testing.T) {
 }
 
 func TestRenderConfigJSONIsValid(t *testing.T) {
+	// The internal Version field is intentionally
+	// hidden from the JSON wire format
+	// (json:"-") — see commit be03086 — because
+	// xray-core's loader rejects an unknown top-
+	// level "version" key. The runtime lives in
+	// Config.Version in memory; the wire format
+	// carries only inbounds / outbounds / routing
+	// / dns.
+	//
+	// This regression test therefore asserts the
+	// CURRENT schema: the wire JSON must contain
+	// inbounds + outbounds, and must NOT contain
+	// the internal version field.
 	server := validServerFixture()
 	user := validUserFixture(server.ID)
 	cfg, err := RenderConfig([]Server{server}, []User{user}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if cfg.Version != 1 {
+		t.Fatalf("Config.Version in memory must be 1; got %d", cfg.Version)
 	}
 	data, err := json.Marshal(cfg)
 	if err != nil {
@@ -357,8 +373,16 @@ func TestRenderConfigJSONIsValid(t *testing.T) {
 	if err := json.Unmarshal(data, &roundTrip); err != nil {
 		t.Fatal(err)
 	}
-	if roundTrip["version"] != float64(1) {
-		t.Fatal("version did not round-trip")
+	// Version is internal — it MUST NOT leak to the
+	// xray-core wire format.
+	if _, present := roundTrip["version"]; present {
+		t.Fatalf("Config.Version leaked to the wire format: %s", data)
+	}
+	if _, ok := roundTrip["inbounds"]; !ok {
+		t.Fatalf("wire format must contain inbounds; got %s", data)
+	}
+	if _, ok := roundTrip["outbounds"]; !ok {
+		t.Fatalf("wire format must contain outbounds; got %s", data)
 	}
 }
 
