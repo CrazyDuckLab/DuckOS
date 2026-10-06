@@ -34,8 +34,8 @@ import (
 func TestObjectKey_CIDRKinds_AcceptSlash(t *testing.T) {
 	cases := []struct {
 		kind string
-		id    string
-		note  string
+		id   string
+		note string
 	}{
 		{"network.route", "10.0.0.0/24", "IPv4 route prefix"},
 		{"network.route", "0.0.0.0/0", "default IPv4"},
@@ -65,12 +65,12 @@ func TestObjectKey_CIDRKinds_AcceptSlash(t *testing.T) {
 // reject it.
 func TestObjectKey_NonCIDRKinds_StillRejectSlash(t *testing.T) {
 	cases := []ObjectKey{
-		{Kind: "vlan", ID: "10.0.0.0/24"},                       // vlan id is "vlan-N"
-		{Kind: "wireguard.peer", ID: "peer/with/slash"},         // peer id is opaque
-		{Kind: "xray.server", ID: "xray-server/edge"},           // xray server id is opaque
-		{Kind: "frr.bgp", ID: "65001/2"},                         // ASN form does not contain '/'
-		{Kind: "qos.class", ID: "gold/vip"},                      // qos class id is opaque
-		{Kind: "interface", ID: "eth0/wrong"},                   // interface tags are opaque
+		{Kind: "vlan", ID: "10.0.0.0/24"},               // vlan id is "vlan-N"
+		{Kind: "wireguard.peer", ID: "peer/with/slash"}, // peer id is opaque
+		{Kind: "xray.server", ID: "xray-server/edge"},   // xray server id is opaque
+		{Kind: "frr.bgp", ID: "65001/2"},                // ASN form does not contain '/'
+		{Kind: "qos.class", ID: "gold/vip"},             // qos class id is opaque
+		{Kind: "interface", ID: "eth0/wrong"},           // interface tags are opaque
 	}
 	for _, k := range cases {
 		if k.Valid() {

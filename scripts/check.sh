@@ -13,5 +13,6 @@ npm --prefix web test
 node --test tests/installer/*.test.mjs
 node --test tests/documentation/*.test.mjs
 for SCRIPT in scripts/*.sh; do bash -n "$SCRIPT"; done
+for TEST in tests/installer/*.test.sh; do bash "$TEST"; done
 git diff --check
 printf 'Checks passed on %s/%s. Linux-only tests skip explicitly on non-Linux hosts.\n' "$(uname -s)" "$(uname -m)"

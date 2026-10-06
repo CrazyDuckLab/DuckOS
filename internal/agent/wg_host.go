@@ -8,23 +8,23 @@
 //
 // DV04-WG (production-path contract):
 //
-//   PUBLIC API  -> /api/v1/wireguard/* (proxied)
-//   ENGINE      -> api.Handler routes mutation through
-//                  the canonical loopback proxy
-//   AGENT       -> Handler.EnableWireguard(Host) +
-//                  /agent/v1/wireguard/v1/* (this host)
-//   RUNTIME     -> wireguard.KernelAdapter.ApplyServer/
-//                  ApplyPeer/RemovePeer via /sbin/ip +
-//                  /sbin/wg
-//   ORACLE      -> independent /sbin/wg show <iface>
-//                  peers / allowed-ips / endpoint read
-//                  through wgRuntimeOracle
-//   RESTART     -> durable catalog + reconcile loop
-//                  that re-applies enabled servers/peers
-//                  and tears down disabled ones
-//   NEGATIVE    -> honest typed errors from KernelAdapter
-//                  and from validate() before any
-//                  kernel write
+//	PUBLIC API  -> /api/v1/wireguard/* (proxied)
+//	ENGINE      -> api.Handler routes mutation through
+//	               the canonical loopback proxy
+//	AGENT       -> Handler.EnableWireguard(Host) +
+//	               /agent/v1/wireguard/v1/* (this host)
+//	RUNTIME     -> wireguard.KernelAdapter.ApplyServer/
+//	               ApplyPeer/RemovePeer via /sbin/ip +
+//	               /sbin/wg
+//	ORACLE      -> independent /sbin/wg show <iface>
+//	               peers / allowed-ips / endpoint read
+//	               through wgRuntimeOracle
+//	RESTART     -> durable catalog + reconcile loop
+//	               that re-applies enabled servers/peers
+//	               and tears down disabled ones
+//	NEGATIVE    -> honest typed errors from KernelAdapter
+//	               and from validate() before any
+//	               kernel write
 //
 // The host never logs private key bytes; every IPC
 // failure path returns a problem document that names the

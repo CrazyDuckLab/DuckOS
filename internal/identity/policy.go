@@ -60,6 +60,7 @@ var idPattern = regexp.MustCompile(`^(\*|[a-z0-9][a-z0-9._:-]{0,63})$`)
 //   - lowercase letters, digits, '.', '_', ':' (IPv6),
 //     '/' (CIDR), '%' (IPv6 zone id like eth0%eth0),
 //     '-' and '+'
+//
 // The first byte can be a letter / digit / colon so the
 // compressed IPv6 form (e.g. "::1/128") is admitted
 // without sacrificing the safety net elsewhere: shell

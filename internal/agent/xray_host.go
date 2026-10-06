@@ -7,30 +7,30 @@
 //
 // DV04-XRAY (production-path contract):
 //
-//   PUBLIC API  -> /api/v1/xray/* (proxied)
-//   ENGINE      -> api.Handler routes the mutation through
-//                  the canonical loopback proxy
-//   AGENT       -> Handler.EnableXray(Host) +
-//                  /agent/v1/xray/xray/v1/* (this host)
-//   RUNTIME     -> xray.Runtime.Apply validates the
-//                  rendered config via `xray run -c ...
-//                  -test` (the catalog-driven validator)
-//                  and then starts / signals the real
-//                  xray daemon process
-//   ORACLE      -> independent process oracle:
-//                    * /usr/bin/wg-style "ps" check on
-//                      the xray PID
-//                    * /usr/bin/xray api statsquery
-//                      (returns live inbound counters)
-//                    * /sbin/ss listener probe on the
-//                      configured Listen:Port
-//   RESTART     -> durable catalog + host.Reconcile
-//                  that re-renders + re-applies the
-//                  config and brings the daemon back up
-//   NEGATIVE    -> honest typed errors from Runtime
-//                  (ErrBackend / ErrConfig / ErrActive)
-//                  and from validate() before any
-//                  runtime write
+//	PUBLIC API  -> /api/v1/xray/* (proxied)
+//	ENGINE      -> api.Handler routes the mutation through
+//	               the canonical loopback proxy
+//	AGENT       -> Handler.EnableXray(Host) +
+//	               /agent/v1/xray/xray/v1/* (this host)
+//	RUNTIME     -> xray.Runtime.Apply validates the
+//	               rendered config via `xray run -c ...
+//	               -test` (the catalog-driven validator)
+//	               and then starts / signals the real
+//	               xray daemon process
+//	ORACLE      -> independent process oracle:
+//	                 * /usr/bin/wg-style "ps" check on
+//	                   the xray PID
+//	                 * /usr/bin/xray api statsquery
+//	                   (returns live inbound counters)
+//	                 * /sbin/ss listener probe on the
+//	                   configured Listen:Port
+//	RESTART     -> durable catalog + host.Reconcile
+//	               that re-renders + re-applies the
+//	               config and brings the daemon back up
+//	NEGATIVE    -> honest typed errors from Runtime
+//	               (ErrBackend / ErrConfig / ErrActive)
+//	               and from validate() before any
+//	               runtime write
 //
 // The host never logs credential bytes; every IPC
 // failure path returns a problem document that names

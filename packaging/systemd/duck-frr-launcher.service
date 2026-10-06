@@ -12,6 +12,15 @@ Documentation=file:/opt/duckos/current/BUILD-INFO.json
 # for agent) that systemd silently resolved by dropping
 # one dep; the Agent then started before the launcher and
 # left FRR disabled for the entire boot.
+# B-010 (BETA.2): duck-frr-launcher is the canonical owner
+# of FRR lifecycle. The installer masks every native FRR
+# unit (frr.service / frr-watchfrr.service / per-daemon
+# frr-zebra.service etc.) so a stock package upgrade cannot
+# silently resurrect a competing zebra/bgpd. Conflicts= is
+# belt-and-braces: even if a future package upgrade
+# accidentally re-enables a native unit, systemd refuses
+# to start it alongside duck-frr-launcher.
+Conflicts=frr.service frr-watchfrr.service frr-zebra.service frr-bgpd.service frr-ospfd.service frr-ospf6d.service frr-ripd.service frr-ripngd.service frr-isisd.service frr-pimd.service frr-babeld.service frr-vrrpd.service frr-nhrpd.service frr-eigrpd.service frr-bfdd.service frr-fabricd.service frr-staticd.service
 StartLimitIntervalSec=60
 StartLimitBurst=5
 

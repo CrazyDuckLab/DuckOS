@@ -492,6 +492,75 @@ if [[ -d /var/lib/frr ]]; then
   chmod 0755 /var/lib/frr
 fi
 
+# B-010 (BETA.2): DuckOS owns FRR daemon lifecycle.
+# The Debian FRR package ships /lib/systemd/system/frr.service
+# (and a watchfrr template + per-daemon frr-zebra.service,
+# frr-bgpd.service units). On a stock install, both frr.service
+# and duck-frr-launcher.service can race for /var/run/frr and
+# produce two competing zebra/bgpd instances after every reboot.
+# Resolution:
+#   1. systemctl stop + disable + mask every native FRR unit the
+#      package shipped. Masking survives re-enable and dpkg-
+#      reinstall unless the package postinst explicitly unmasks.
+#   2. duck-frr-launcher.service carries an explicit Conflicts=
+#      on frr.service / frr-watchfrr.service / frr-*.service so
+#      systemd refuses to start both even if a future package
+#      upgrade accidentally re-enables a native unit.
+# The frr binaries under /usr/lib/frr stay installed; DuckOS
+# execs them through the launcher. The /etc/frr/<pathspace>/
+# tree stays owned by frr:frr (0751) so the launcher, which
+# drops to uid=frr via setresuid before launching zebra/bgpd,
+# can still write vtysh.conf and the dynamic routing config.
+duckos_disable_native_frr() {
+  local unit rc=0
+  # The list is the canonical set of units the Debian FRR
+  # package installs. Adding a new unit here is safe; a unit
+  # that does not exist on the host is silently ignored by
+  # systemctl.
+  local units_to_mask=(
+    "frr.service"
+    "frr-watchfrr.service"
+    "frr-zebra.service"
+    "frr-bgpd.service"
+    "frr-ospfd.service"
+    "frr-ospf6d.service"
+    "frr-ripd.service"
+    "frr-ripngd.service"
+    "frr-isisd.service"
+    "frr-pimd.service"
+    "frr-babeld.service"
+    "frr-vrrpd.service"
+    "frr-nhrpd.service"
+    "frr-eigrpd.service"
+    "frr-bfdd.service"
+    "frr-fabricd.service"
+    "frr-staticd.service"
+  )
+  for unit in "${units_to_mask[@]}"; do
+    if systemctl list-unit-files "${unit}" >/dev/null 2>&1; then
+      # Stop is best-effort: a unit that never ran does not
+      # need stopping, and on a fresh install nothing is
+      # running yet. Disable + Mask together prevents the
+      # unit from being started manually OR by a dependency.
+      systemctl stop "${unit}" >/dev/null 2>&1 || true
+      systemctl disable "${unit}" >/dev/null 2>&1 || true
+      systemctl mask "${unit}" >/dev/null 2>&1 || {
+        printf 'DuckOS installer: failed to mask native FRR unit %s; DuckOS FRR may race after reboot. Continuing.\n' "${unit}" >&2
+        rc=1
+      }
+    fi
+  done
+  # systemd reload so a fresh daemon picks up the new unit
+  # state immediately (without waiting for a reboot). On a
+  # system without systemd (container), daemon-reload is a
+  # no-op so we skip it.
+  if command -v systemctl >/dev/null 2>&1 && [[ -d /run/systemd/system ]]; then
+    systemctl daemon-reload >/dev/null 2>&1 || true
+  fi
+  return $rc
+}
+duckos_disable_native_frr || true
+
 # Provision the production network enrollment from real host state.
 # Reads physical NIC MACs via `ip -j link show`, filters out loopback and
 # qualification fixtures (anything starting with ducklab-), and writes a
