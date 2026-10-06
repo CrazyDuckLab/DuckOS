@@ -190,10 +190,10 @@ NEW BUGS FOUND (live-found, fixed)
    no error. Under ProtectSystem=strict without
    ReadWritePaths, /var/lib/duckos/wireguard was
    read-only; the launcher's atomic owned.json write
-   failed silently. Fix in 9978533.
+   failed silently. Fix in 9978531.
 2. packaging/systemd/duck-wg-launcher.service:
    ReadWritePaths did not include the state dir.
-   Fix in 9978533.
+   Fix in 9978531.
 
 ==================================================
 NEW FIXES
