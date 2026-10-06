@@ -89,18 +89,20 @@ type Engine interface {
 	// is the canonical bridge: it owns the Unix socket
 	// client, the size cap and the typed-error envelope.
 	// DV04-WG production-path contract.
-	WireGuardProxy(ctx context.Context, method, path, token string, body io.Reader) (status int, data []byte, contentType string, err error)
+	WireGuardProxy(ctx context.Context, method, path, rawQuery, token string, body io.Reader) (status int, data []byte, contentType string, err error)
 	// XrayProxy proxies the public /api/v1/xray/*
 	// mutation to the privileged Agent
 	// /agent/v1/xray/xray/v1/* IPC. DV04-XRAY
-	// production-path contract.
-	XrayProxy(ctx context.Context, method, path, token string, body io.Reader) (status int, data []byte, contentType string, err error)
+	// production-path contract. rawQuery is the
+	// unparsed query string (e.g. ?server=ID for
+	// /users, ?cursor=VAL for /subscriptions).
+	XrayProxy(ctx context.Context, method, path, rawQuery, token string, body io.Reader) (status int, data []byte, contentType string, err error)
 	// VaultProxy proxies the public /api/v1/vault/*
 	// request to the privileged Agent
 	// /agent/v1/vault/vault/v1/* IPC. DV04-VAULT
 	// production-path contract. The vault never returns
 	// secret bytes.
-	VaultProxy(ctx context.Context, method, path, token string, body io.Reader) (status int, data []byte, contentType string, err error)
+	VaultProxy(ctx context.Context, method, path, rawQuery, token string, body io.Reader) (status int, data []byte, contentType string, err error)
 	// SpeedLabProxy proxies the public /api/v1/speedlab/*
 	// request to the privileged Agent
 	// /agent/v1/speedlab/* IPC. The Speed Lab never opens a
@@ -935,7 +937,7 @@ func (h *Handler) handleWireGuardProxy(w http.ResponseWriter, r *http.Request, t
 	if r.Body != nil {
 		body = io.LimitReader(r.Body, 1<<20)
 	}
-	status, data, contentType, err := h.engine.WireGuardProxy(r.Context(), r.Method, r.URL.Path, token, body)
+	status, data, contentType, err := h.engine.WireGuardProxy(r.Context(), r.Method, r.URL.Path, r.URL.RawQuery, token, body)
 	if err != nil {
 		problem(w, r, 503, errorCategoryFromCode("agent_unavailable"), "agent_unavailable", err.Error())
 		return
@@ -970,7 +972,7 @@ func (h *Handler) handleXrayProxy(w http.ResponseWriter, r *http.Request, token 
 	if r.Body != nil {
 		body = io.LimitReader(r.Body, 1<<20)
 	}
-	status, data, contentType, err := h.engine.XrayProxy(r.Context(), r.Method, r.URL.Path, token, body)
+	status, data, contentType, err := h.engine.XrayProxy(r.Context(), r.Method, r.URL.Path, r.URL.RawQuery, token, body)
 	if err != nil {
 		problem(w, r, 503, errorCategoryFromCode("agent_unavailable"), "agent_unavailable", err.Error())
 		return
@@ -1014,7 +1016,7 @@ func (h *Handler) handleVaultProxy(w http.ResponseWriter, r *http.Request, token
 	if r.Body != nil {
 		body = io.LimitReader(r.Body, 16<<10)
 	}
-	status, data, contentType, err := h.engine.VaultProxy(r.Context(), r.Method, r.URL.Path, token, body)
+	status, data, contentType, err := h.engine.VaultProxy(r.Context(), r.Method, r.URL.Path, r.URL.RawQuery, token, body)
 	if err != nil {
 		problem(w, r, 503, errorCategoryFromCode("agent_unavailable"), "agent_unavailable", err.Error())
 		return

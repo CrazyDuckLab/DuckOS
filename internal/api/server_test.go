@@ -145,17 +145,17 @@ func (e *testEngine) BackupRestore(context.Context, []byte) ([]byte, error) {
 	}
 	return []byte(`{"version":1,"outcome":"applied","entryId":"backup-0001-restored"}`), nil
 }
-func (e *testEngine) WireGuardProxy(_ context.Context, _, _, token string, _ io.Reader) (int, []byte, string, error) {
+func (e *testEngine) WireGuardProxy(_ context.Context, _, _, _, token string, _ io.Reader) (int, []byte, string, error) {
 	e.wgCalls++
 	e.lastWGToken = token
 	return 200, []byte(`{"ok":true}`), "application/json", nil
 }
-func (e *testEngine) XrayProxy(_ context.Context, _, _, token string, _ io.Reader) (int, []byte, string, error) {
+func (e *testEngine) XrayProxy(_ context.Context, _, _, _, token string, _ io.Reader) (int, []byte, string, error) {
 	e.xrayCalls++
 	e.lastXRToken = token
 	return 200, []byte(`{"ok":true}`), "application/json", nil
 }
-func (e *testEngine) VaultProxy(_ context.Context, _, _, token string, _ io.Reader) (int, []byte, string, error) {
+func (e *testEngine) VaultProxy(_ context.Context, _, _, _, token string, _ io.Reader) (int, []byte, string, error) {
 	e.lastToken = token
 	return 200, []byte(`{"ok":true}`), "application/json", nil
 }

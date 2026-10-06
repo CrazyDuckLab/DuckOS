@@ -969,7 +969,7 @@ func (e *Engine) upgradeProxy(ctx context.Context, path string, payload []byte) 
 // loopback. Errors propagate as-is so the public API
 // can surface them in the same envelope shape the Agent
 // returned (no rewriting of code/message).
-func (e *Engine) WireGuardProxy(ctx context.Context, method, path, token string, body io.Reader) (status int, data []byte, contentType string, err error) {
+func (e *Engine) WireGuardProxy(ctx context.Context, method, path, rawQuery, token string, body io.Reader) (status int, data []byte, contentType string, err error) {
 	if e == nil {
 		return 0, nil, "", errors.New("engine not configured")
 	}
@@ -981,6 +981,12 @@ func (e *Engine) WireGuardProxy(ctx context.Context, method, path, token string,
 		tail = path
 	}
 	target := "http://agent" + agent.WireguardPath + "/wireguard/v1/" + strings.TrimPrefix(tail, "/")
+	if err := validateRawQuery(rawQuery); err != nil {
+		return 0, nil, "", err
+	}
+	if rawQuery != "" {
+		target += "?" + rawQuery
+	}
 	req, err := http.NewRequestWithContext(ctx, method, target, body)
 	if err != nil {
 		return 0, nil, "", err
@@ -1032,7 +1038,14 @@ const WakeMaxBytes = 4 << 10
 //	           -> XrayHost -> xray.API ->
 //	           RenderConfig + Runtime.Apply ->
 //	           /tmp/duckos-test/xray/xray run -c <path>
-func (e *Engine) XrayProxy(ctx context.Context, method, path, token string, body io.Reader) (status int, data []byte, contentType string, err error) {
+//
+// rawQuery is the unparsed query string from the public
+// request (e.g. "server=ID&cursor=VAL"). It is forwarded
+// verbatim so Xray listing calls that pin a server or a
+// cursor survive the public→IPC boundary. An unparsable
+// or oversized rawQuery is rejected at this layer so
+// the Agent never sees a malformed envelope.
+func (e *Engine) XrayProxy(ctx context.Context, method, path, rawQuery, token string, body io.Reader) (status int, data []byte, contentType string, err error) {
 	if e == nil {
 		return 0, nil, "", errors.New("engine not configured")
 	}
@@ -1041,6 +1054,12 @@ func (e *Engine) XrayProxy(ctx context.Context, method, path, token string, body
 		tail = path
 	}
 	target := "http://agent" + agent.XrayPath + "/xray/v1/" + strings.TrimPrefix(tail, "/")
+	if err := validateRawQuery(rawQuery); err != nil {
+		return 0, nil, "", err
+	}
+	if rawQuery != "" {
+		target += "?" + rawQuery
+	}
 	req, err := http.NewRequestWithContext(ctx, method, target, body)
 	if err != nil {
 		return 0, nil, "", err
@@ -1073,7 +1092,7 @@ func (e *Engine) XrayProxy(ctx context.Context, method, path, token string, body
 //
 //	PUBLIC API -> Engine.VaultProxy -> Agent IPC
 //	           -> VaultHost -> vault.API -> VaultLifecycle.Put / List / Revoke
-func (e *Engine) VaultProxy(ctx context.Context, method, path, token string, body io.Reader) (status int, data []byte, contentType string, err error) {
+func (e *Engine) VaultProxy(ctx context.Context, method, path, rawQuery, token string, body io.Reader) (status int, data []byte, contentType string, err error) {
 	if e == nil {
 		return 0, nil, "", errors.New("engine not configured")
 	}
@@ -1082,6 +1101,12 @@ func (e *Engine) VaultProxy(ctx context.Context, method, path, token string, bod
 		tail = path
 	}
 	target := "http://agent" + agent.VaultPath + "/vault/v1/" + strings.TrimPrefix(tail, "/")
+	if err := validateRawQuery(rawQuery); err != nil {
+		return 0, nil, "", err
+	}
+	if rawQuery != "" {
+		target += "?" + rawQuery
+	}
 	req, err := http.NewRequestWithContext(ctx, method, target, body)
 	if err != nil {
 		return 0, nil, "", err
@@ -1278,4 +1303,41 @@ func (e *Engine) fetch(ctx context.Context) ([]byte, error) {
 		return nil, errors.New("Agent returned an invalid observation")
 	}
 	return data, nil
+}
+
+// maxRawQueryBytes bounds the URL query string we forward
+// from the public API to the Agent. The query is parsed by
+// net/url at the Agent boundary; 4 KiB is a comfortable
+// ceiling for the legitimate keys the DuckOS API uses
+// (server, cursor, id, token references) and still rejects
+// a hostile client that tries to flood the IPC with junk.
+const maxRawQueryBytes = 4 * 1024
+
+// validateRawQuery is the narrow gate that the engine
+// proxy layer uses to reject a malformed or oversized
+// query before forwarding it to the Agent. The Agent
+// trusts the Engine to have already bounded the envelope;
+// a query that contains CR/LF or NUL would otherwise break
+// the Agent's request line. Returning the typed error lets the
+// handler map it to a stable 400 invalid_request envelope.
+func validateRawQuery(q string) error {
+	if len(q) > maxRawQueryBytes {
+		return errors.New("query string exceeds size limit")
+	}
+	for i := 0; i < len(q); i++ {
+		b := q[i]
+		// Disallow CR/LF (would split the request line
+		// on the Agent HTTP server) and NUL (would
+		// truncate Go strings inconsistently across
+		// the IPC). Allow the URL-safe set used by
+		// the public API (letters, digits, and the
+		// RFC 3986 sub-delims "!" "$" "&" "'" "("
+		// ")" "*" "+" "," ";" "=" ":" "/" "?" "@"
+		// plus ":" "@" ":" "/" "%" "." "-" "_" "~"
+		// — encoded form returns through net/url).
+		if b == '\r' || b == '\n' || b == 0 {
+			return errors.New("query string contains an invalid control byte")
+		}
+	}
+	return nil
 }

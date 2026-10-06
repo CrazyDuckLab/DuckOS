@@ -146,6 +146,15 @@ func (h *WireguardHost) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r2 := r.Clone(r.Context())
 	r2.URL.Path = tail
 	r2.URL.RawPath = ""
+	// B-007 (BETA.2): preserve RawQuery. The
+	// WireGuard /peers listing requires ?server=ID;
+	// stripping the query here silently broke the
+	// public-proxy contract. Engine.XrayProxy (and
+	// its sibling proxies) bounds + validates the
+	// query before forwarding, so the value here is
+	// already trusted.
+	r2.URL.RawQuery = r.URL.RawQuery
+	r2.URL.ForceQuery = r.URL.ForceQuery
 	src.ServeHTTP(w, r2)
 }
 

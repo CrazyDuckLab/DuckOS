@@ -147,6 +147,14 @@ func (h *XrayHost) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r2 := r.Clone(r.Context())
 	r2.URL.Path = tail
 	r2.URL.RawPath = ""
+	// B-007 (BETA.2): preserve the raw query string.
+	// The Xray /users listing requires ?server=ID and
+	// /subscriptions requires ?cursor=VAL; stripping the
+	// query here silently broke the proxy. RawQuery is
+	// already bounded at the public API and re-validated
+	// by the Engine; we forward verbatim.
+	r2.URL.RawQuery = r.URL.RawQuery
+	r2.URL.ForceQuery = r.URL.ForceQuery
 	src.ServeHTTP(w, r2)
 }
 

@@ -126,6 +126,14 @@ func (h *VaultHost) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r2 := r.Clone(r.Context())
 	r2.URL.Path = tail
 	r2.URL.RawPath = ""
+	// B-007 (BETA.2): preserve RawQuery. Vault
+	// listings are rare but allowed (the Owner
+	// bearer token is in the Authorization header,
+	// not the query) — the same Engine-side
+	// rawQuery gate covers any future vault
+	// listing that filters by id / kind.
+	r2.URL.RawQuery = r.URL.RawQuery
+	r2.URL.ForceQuery = r.URL.ForceQuery
 	src.ServeHTTP(w, r2)
 }
 
