@@ -43,7 +43,74 @@ var kindPattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}(\.[a-z][a-z0-9-]{0,3
 // idPattern matches canonical object ids. The single
 // wildcard "*" is permitted at the ID position so an
 // overlay can target every object of a kind.
+//
+// B-009 (BETA.2): the global idPattern stays strict on
+// purpose. CIDR-bearing kinds (network.route,
+// network.address, network.firewall.rule) use a wider
+// per-kind override (cidrIDPattern) that allows '/',
+// ':' and '%' — the three bytes IPv4+IPv6 CIDR /
+// zone-id forms need. The wider override is NOT applied
+// to the global default; doing so would weaken every
+// kind's id surface for no benefit and is exactly the
+// behaviour the BETA.2 review forbade.
 var idPattern = regexp.MustCompile(`^(\*|[a-z0-9][a-z0-9._:-]{0,63})$`)
+
+// cidrIDPattern matches the canonical CIDR-style object
+// id used by the network kinds. It allows:
+//   - lowercase letters, digits, '.', '_', ':' (IPv6),
+//     '/' (CIDR), '%' (IPv6 zone id like eth0%eth0),
+//     '-' and '+'
+// The first byte can be a letter / digit / colon so the
+// compressed IPv6 form (e.g. "::1/128") is admitted
+// without sacrificing the safety net elsewhere: shell
+// metas, whitespace, NUL and CR/LF are still rejected.
+// The 96-char cap is the longest legitimate IPv6 CIDR +
+// zone we have observed in the test corpus (e.g.
+// "fe80::1%eth0/64" is 14 bytes; "2001:db8::ffff:ffff:
+// ffff:ffff/128" is 31).
+// The wildcard '*' is allowed at the id position so
+// kind-wide RBAC overlays (network.route:* etc.) still
+// work.
+//
+// This pattern is intentionally NOT the global default;
+// it is registered through cidrKinds below so the
+// RBAC overlay can validate CIDR-style ids for the
+// kinds that need them and stay strict for every
+// other kind.
+var cidrIDPattern = regexp.MustCompile(`^(\*|[a-z0-9:][a-z0-9._:/%+-]{0,95})$`)
+
+// cidrKinds enumerates the kinds whose object id may
+// legitimately contain a CIDR-style value. Adding a kind
+// here is a deliberate, code-reviewed decision: every
+// listed kind MUST document that its id is an IPv4/IPv6
+// CIDR, an IPv6 zone id, or a constant from the same
+// family (e.g. "default").
+//
+// The map is built once at package init and is read-only
+// afterwards; tests re-derive it from this declaration
+// so a future kind addition cannot pass without updating
+// the tests.
+var cidrKinds = map[string]*regexp.Regexp{
+	"network.route":            cidrIDPattern,
+	"network.address":          cidrIDPattern,
+	"network.firewall.rule":    cidrIDPattern,
+	"network.firewall.zone":    cidrIDPattern,
+	"network.nat.rule":         cidrIDPattern,
+	"network.dhcp.reservation": cidrIDPattern,
+}
+
+// idPatternForKind returns the regex that governs the id
+// shape for the supplied kind. It is the single
+// indirection ObjectKey.Valid uses; tests inspect this
+// function (not the unexported cidrKinds map) so a
+// future refactor can move the registration to a
+// lifecycle package without breaking the contract.
+func idPatternForKind(kind string) *regexp.Regexp {
+	if p, ok := cidrKinds[kind]; ok {
+		return p
+	}
+	return idPattern
+}
 
 // objectPattern kept for backward compatibility with
 // tests that referenced it directly. New callers should
@@ -52,11 +119,17 @@ var objectPattern = kindPattern
 
 // Valid reports whether the key uses canonical lower-cased
 // vocabulary. A "*" id is allowed for kind-wide overlays.
+//
+// B-009 (BETA.2): Valid selects the per-kind id pattern
+// for CIDR-bearing kinds so Owner-visible route /
+// address objects with '/' in the id (10.0.0.0/24,
+// 2001:db8::/64, fe80::1%eth0/64, default) are no
+// longer dropped by the RBAC redactor.
 func (k ObjectKey) Valid() bool {
 	if !kindPattern.MatchString(k.Kind) {
 		return false
 	}
-	if !idPattern.MatchString(k.ID) {
+	if !idPatternForKind(k.Kind).MatchString(k.ID) {
 		return false
 	}
 	return true
