@@ -427,6 +427,30 @@ func (r *Runtime) writeConf(rendered string) error {
 // state. Apply callers can rely on the rule:
 //   - daemons alive: hot reload only
 //   - daemons dead: cold start
+//
+// Live-qualification finding (BETA.2, Oct 2026):
+// killPidsLocked used the runtime's local r.zebraPID /
+// r.bgpdPID to drive kills. The launcher is the
+// canonical owner of FRR process lifetime, so the
+// runtime's PID state can lag reality after any agent
+// restart, network rehydrate, or surprise reap. When
+// the recorded PID was 0 or a recycled non-FRR PID,
+// isFRRForPathspace refused the kill, startDaemons
+// fell through to the launcher's idempotent EXEC,
+// EXEC returned the surviving PID without forking,
+// and the on-disk frr.conf was updated while the
+// in-memory bgpd kept its old config. Apply reported
+// "applied" but the running daemons never loaded it.
+//
+// Fix: route the restart through the launcher's
+// tracker (STOP "" + EXEC). The launcher's tracker
+// is the authoritative source of truth for FRR
+// (pathspace, binary, PID); killPidsLocked + the
+// agent-restart idempotency rehydrate code stays the
+// defence-in-depth path for the cases where the
+// launcher is unavailable. Every successful EXEC
+// re-populates the runtime's r.zebraPID / r.bgpdPID
+// from the pidfile the launcher writes.
 func (r *Runtime) reloadOrRestart(ctx context.Context) error {
 	if _, _, err := r.runVTYSHFull(ctx, "-C", "-f", filepath.Join(r.sockDir, "frr.conf")); err != nil {
 		return ErrConfig
@@ -434,8 +458,23 @@ func (r *Runtime) reloadOrRestart(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	// vtysh -f is additive, so removed advertisements would survive it.
-	// Replace only this owned pathspace to apply the complete desired set.
+	// Use the launcher as the authoritative FRR-lifetime
+	// owner. STOP "" stops every daemon tracked for this
+	// pathspace (idempotent: returns nil when nothing is
+	// tracked), so Apply works after a fresh runtime, after
+	// an agent restart that rehydrated the survivors, and
+	// after a Rollback for a broken config. The
+	// identity-gated kill is enforced by the launcher's
+	// terminateAndReap; a recycled PID that does not
+	// match (binary, pathspace) is left alone.
+	if err := r.launcherStop(""); err != nil {
+		log.Printf("frr: launcherStop (reload-or-restart): %v", err)
+	}
+	// Defence-in-depth: even after launcherStop succeeded,
+	// also belt-and-braces kill the runtime's recorded
+	// PIDs if isFRRForPathspace still recognises them.
+	// This protects the rare case where the launcher was
+	// unreachable for STOP but came back for EXEC.
 	r.killPidsLocked()
 	if err := r.startDaemons(); err != nil {
 		return err
