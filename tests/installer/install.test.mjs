@@ -277,7 +277,17 @@ test('launcher binary is in the artifact, runs as a daemon, and serves the FRR l
   assert.match(manifest, /  systemd\/duck-frr-launcher\.service\n/);
 
   const launcherService = await fs.readFile(path.join(artifact, 'systemd/duck-frr-launcher.service'), 'utf8');
-  assert.match(launcherService, /^CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_SETPCAP CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_SYS_ADMIN$/m);
+  // CapabilityBoundingSet: CAP_KILL was added deliberately
+  // because the launcher is the canonical owner of FRR
+  // lifetime (cmd/duck-frr-launcher/tracker.go) and every
+  // STOP command identity-verifies the PID via
+  // /proc/<pid>/cmdline, then signals SIGTERM (5s grace)
+  // and SIGKILL. CAP_KILL is bounded to the launcher
+  // service; it never reaches duck-agent (which keeps
+  // its empty bounding set) and never reaches the FRR
+  // child (which inherits from the launcher's Effective
+  // set, not its bounding set).
+  assert.match(launcherService, /^CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_SETPCAP CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_KILL$/m);
   assert.match(launcherService, /^NoNewPrivileges=no$/m);
   assert.match(launcherService, /--daemon --listen=\/run\/duckos-agent\/frr-launcher\.sock/);
   // CAP_SYS_ADMIN is included in the launcher's bounding
