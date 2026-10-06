@@ -1,18 +1,30 @@
 [Unit]
 Description=DuckOS FRR privileged launcher daemon (internal TEST build)
 Documentation=file:/opt/duckos/current/BUILD-INFO.json
-# The launcher must be ready before any FRR-runtime
-# pathspace starts, but it does NOT need to be ready
-# before the API or Agent — those come up
-# independently. We After=duck-agent.service so the
-# agent's socket dir (/run/duckos-agent) exists by
-# the time we try to listen on the launcher's socket.
-After=duck-agent.service
+# The launcher is independent of the Agent: it owns its
+# RuntimeDirectory (duckos-agent, see below) and the FRR
+# launcher socket lives there. The Agent's After=duck-frr-launcher
+# relationship below still holds, so the Agent waits for the
+# launcher's socket before its first FRR dial. Without
+# RuntimeDirectory on this unit, the launcher needed the
+# Agent to create /run/duckos-agent first, which produced
+# an After=cycle (agent waits for launcher, launcher waits
+# for agent) that systemd silently resolved by dropping
+# one dep; the Agent then started before the launcher and
+# left FRR disabled for the entire boot.
 StartLimitIntervalSec=60
 StartLimitBurst=5
 
 [Service]
 Type=simple
+# /run/duckos-agent must exist before the launcher opens
+# its socket. Declaring it on both this unit and the
+# Agent unit lets systemd create it independently of
+# whichever service boots first; RuntimeDirectoryMode=0751
+# matches the Agent's mode so neither service needs to
+# chmod it.
+RuntimeDirectory=duckos-agent
+RuntimeDirectoryMode=0751
 # The launcher is a long-running privileged broker.
 # It holds CAP_SETUID + CAP_SETGID + CAP_SETPCAP so
 # that, when the Agent asks it to start an FRR
