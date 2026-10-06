@@ -41,8 +41,28 @@ Type=simple
 # process genuinely needs it. CAP_SYS_ADMIN MUST NOT
 # reach duck-agent; the agent's bounding set stays
 # empty.
-CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_SETPCAP CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_SYS_ADMIN
+#
+# CAP_KILL is added because the launcher is the
+# canonical owner of FRR lifetime (cmd/duck-frr-launcher
+# /tracker.go). Every STOP command identity-verifies
+# the PID via /proc/<pid>/cmdline, then signals SIGTERM
+# (5s grace) and SIGKILL. The CAP_KILL grant is
+# bounded to the launcher service; it never reaches
+# duck-agent (which keeps its empty bounding set) and
+# never reaches the FRR child (which inherits from
+# the launcher's Effective set, not its bounding set).
+CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_SETPCAP CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_KILL
 AmbientCapabilities=
+# KillMode=process keeps systemd from reaping the
+# launcher's tracked FRR children when the launcher
+# is stopped. The FRR daemons are owned by the
+# agent's runtime, not by the launcher service; if
+# systemd killed them via KillMode=control-group (the
+# default), a launcher restart would orphan / kill
+# / duplicate the pathspace. We let systemd kill
+# only the launcher's own process; the FRR
+# grandchildren survive in PID 1's process tree.
+KillMode=process
 # Allow exec'ing FRR with file caps: the file caps
 # on /usr/lib/frr/{zebra,bgpd} are honored only when
 # the calling process has NoNewPrivileges=no. This

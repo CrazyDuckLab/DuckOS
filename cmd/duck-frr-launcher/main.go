@@ -173,17 +173,31 @@ func runDaemon(args []string) {
 		fmt.Fprintf(os.Stderr, "frr-launcher daemon: rehydrate: %v\n", rerr)
 	}
 	fmt.Fprintf(os.Stderr, "frr-launcher daemon: rehydrated=%d rejected=%d\n", rehydrated, rejected)
-	// Shutdown cleanup: reap every tracked FRR PID,
-	// identity-checked, on SIGTERM / SIGINT. We install
-	// this BEFORE the listen loop so any later signal
-	// triggers deterministic cleanup. The handler is
-	// idempotent; repeated signals are no-ops.
+	// Shutdown semantics:
+	//
+	//   On SIGTERM / SIGINT we DO NOT reap tracked
+	//   FRR children. The launcher is a long-running
+	//   broker that systemd may restart (Restart=
+	//   on-failure) or that the agent may stop /
+	//   start as part of an upgrade. In both cases,
+	//   the canonical FRR lifetime owner is the
+	//   AGENT's runtime, not the launcher — and
+	//   the agent's runtime holds the bookkeeping
+	//   needed to cleanly reap on its own Stop().
+	//   If we killed here, a launcher restart
+	//   would orphan-replace every DuckOS zebra /
+	//   bgpd in the system.
+	//
+	//   Identity-gated reap happens instead via the
+	//   STOP <pathspace> command, dispatched by the
+	//   agent's Stop() path. This is the canonical
+	//   kill route; the launcher stays a stateless
+	//   broker across its own restarts.
 	stopCh := make(chan os.Signal, 4)
 	signal.Notify(stopCh, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
 		sig := <-stopCh
-		fmt.Fprintf(os.Stderr, "frr-launcher daemon: caught %s; reaping\n", ssigname(sig))
-		reapAll(tracker)
+		fmt.Fprintf(os.Stderr, "frr-launcher daemon: caught %s; exiting (no reap)\n", ssigname(sig))
 		// Best-effort: remove the socket so a fresh
 		// launcher (after systemd Restart=on-failure)
 		// does not see a stale listener.

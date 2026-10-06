@@ -67,7 +67,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
@@ -216,34 +215,29 @@ func (t *Tracker) Snapshot() []*TrackedFRR {
 // readPIDCmdline reads /proc/<pid>/cmdline as a
 // NUL-separated byte slice and joins with spaces for
 // human inspection. The first field is argv0.
+//
+// The kernel writes argv entries as NUL-terminated
+// chunks with no separator between them; the LAST
+// chunk ends with a NUL. bufio.ReadBytes(0) returns the
+// chunk up to AND INCLUDING the NUL delimiter. We
+// strip the trailing NUL, append the chunk, and read
+// the next one until the underlying read returns io.EOF.
 func readPIDCmdline(pid int) (string, error) {
-	f, err := os.Open(fmt.Sprintf("/proc/%d/cmdline", pid))
+	raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
-	var buf bytes.Buffer
-	br := bufio.NewReader(f)
-	for {
-		b, err := br.ReadBytes(0)
-		if len(b) > 0 {
-			if buf.Len() > 0 {
-				buf.WriteByte(' ')
-			}
-			// strip trailing NULs; cmdline ends with NUL
-			b = bytes.TrimRight(b, "\x00")
-			buf.Write(b)
-		}
-		if errors.Is(err, os.ErrClosed) || err == nil {
-			// EOF or partial
-			break
-		}
-		if err != nil {
-			// treat readEOF via bufio as normal end
-			break
-		}
+	// argv entries separated by NUL. The final
+	// character is a NUL too (kernel invariant). A
+	// trailing empty string (the post-final NUL) is
+	// dropped.
+	parts := strings.Split(string(raw), "\x00")
+	// Drop the trailing empty entry from the
+	// trailing NUL.
+	if len(parts) > 0 && parts[len(parts)-1] == "" {
+		parts = parts[:len(parts)-1]
 	}
-	return buf.String(), nil
+	return strings.Join(parts, " "), nil
 }
 
 // readPIDComm returns /proc/<pid>/comm (the truncated
