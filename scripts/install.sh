@@ -453,7 +453,15 @@ dnsmasq_uid=$(id -u duck-dnsmasq)
 [[ "$dnsmasq_uid" =~ ^[0-9]+$ && "$dnsmasq_uid" -gt 0 && "$dnsmasq_uid" != "$duckos_uid" ]] || fail 'Invalid DNS service UID.'
 install -d -o root -g root -m 0755 /opt/duckos /opt/duckos/releases
 install -d -o root -g duckos -m 0750 /etc/duckos /var/lib/duckos
-install -d -o duckos -g duckos -m 0700 /var/lib/duckos/config /var/lib/duckos/state /var/lib/duckos/identity /var/lib/duckos/policy /var/lib/duckos/wireguard /var/lib/duckos/xray /var/lib/duckos/backups
+# /var/lib/duckos/wireguard is written by duck-wg-launcher
+# at runtime. The launcher runs as User=root with
+# CapabilityBoundingSet=CAP_NET_ADMIN only (no DAC override);
+# root owns the dir so the launcher's atomic owned.json
+# rename can succeed without CAP_DAC_OVERRIDE. Mode 0750 keeps
+# it readable for the duckos group (the agent and audit path)
+# but not world-writable.
+install -d -o duckos -g duckos -m 0700 /var/lib/duckos/config /var/lib/duckos/state /var/lib/duckos/identity /var/lib/duckos/policy /var/lib/duckos/xray /var/lib/duckos/backups
+install -d -o root -g duckos -m 0750 /var/lib/duckos/wireguard
 install -d -o root -g root -m 0700 /var/lib/duckos-agent /var/lib/duckos-agent/network
 install -d -o root -g root -m 0700 /var/lib/duckos-agent/ztp /var/lib/duckos-agent/wireguard /var/lib/duckos-agent/xray /var/lib/duckos-agent/frr /var/lib/duckos-agent/qos /var/lib/duckos-agent/vault /var/lib/duckos-agent/vault/records
 bootstrap_vault_master_key /var/lib/duckos-agent/vault/master.key /var/lib/duckos-agent/vault/records
