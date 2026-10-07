@@ -69,6 +69,13 @@ AmbientCapabilities=
 NoNewPrivileges=yes
 ExecStart=/opt/duckos/current/bin/duck-agent --socket /run/duckos-agent/agent.sock --allowed-uid @DUCKOS_UID@ --environment test
 RuntimeDirectory=duckos-agent
+RuntimeDirectoryMode=0750
+# RuntimeDirectory created by systemd uses the unit's User:Group
+# as the owner so the duck-api service (running as
+# User=duckos Group=duckos) can connect to the agent.sock
+# without a supplementary-group trap. systemd uses Group
+# from the [Service] section as the runtime-dir owner when
+# the directory does not pre-exist.
 # /run/frr is created with 0751 so the FRR daemon (running
 # as uid=frr) can traverse the parent to reach its
 # pathspace dir /run/frr/<ps>. The pathspace dir's
