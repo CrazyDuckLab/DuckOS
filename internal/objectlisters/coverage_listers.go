@@ -71,8 +71,17 @@ func NewNetworkAddressLister(e ListerSource) engine.ObjectLister {
 	}
 }
 
+// addressToView formats the network.address object id.
+// The id MUST stay inside the cidrIDPattern character
+// class (`^(\*|[a-z0-9:][a-z0-9._:/%+-]{0,95})$`) so the
+// per-object RBAC filter does not redact real addresses
+// from Owner-visible /api/v1/objects/network.address.
+// '|' is rejected by the regex; '%' is the canonical
+// IPv6 zone-id separator and is already in the regex.
+// This is the B-009 RBAC LIVE recovery landed by the
+// BETA.2 corrective round.
 func addressToView(iface, addr string) object.ViewObject {
-	id := iface + "|" + addr
+	id := iface + "%" + addr
 	return object.ViewObject{
 		Ref:          object.ObjectRef{Kind: "network.address", ID: id},
 		DisplayName:  addr + " on " + iface,

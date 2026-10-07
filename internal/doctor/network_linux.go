@@ -238,12 +238,25 @@ func readRoutes() ([]Route, error) {
 	return out, nil
 }
 
+// hexToIP decodes a 4-byte /proc/net/route hex field
+// into a dotted-quad IPv4 string. The hex field is laid
+// out in little-endian byte order (the kernel writes the
+// route destination as the on-wire IPv4 with its octets
+// reversed); we therefore byte-swap before formatting so
+// the resulting string is the canonical CIDR form
+// ("172.18.0.0" not "0.0.18.172"). Without the swap, the
+// per-object RBAC filter rejects every real route (the
+// post-regex ValidateCIDRBody helper refuses '.' after
+// '/') and Owner-visible /api/v1/objects/network.route
+// returns the rbac_redacted rbac issue instead of the
+// real objects. This is the B-009 RBAC LIVE recovery
+// landed by the BETA.2 corrective round.
 func hexToIP(s string) (string, error) {
 	b, err := hex.DecodeString(s)
 	if err != nil || len(b) != 4 {
 		return "", err
 	}
-	return strconv.Itoa(int(b[0])) + "." + strconv.Itoa(int(b[1])) + "." + strconv.Itoa(int(b[2])) + "." + strconv.Itoa(int(b[3])), nil
+	return strconv.Itoa(int(b[3])) + "." + strconv.Itoa(int(b[2])) + "." + strconv.Itoa(int(b[1])) + "." + strconv.Itoa(int(b[0])), nil
 }
 
 func ifFlag(flags uint64, bit uint64, yes, no string) string {
