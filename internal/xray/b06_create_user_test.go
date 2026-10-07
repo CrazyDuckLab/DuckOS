@@ -87,7 +87,7 @@ func TestUpsertUser_RollbackOnApplyFailure(t *testing.T) {
 	// Wire Apply to a deliberately-failing
 	// implementation so the rollback path is
 	// exercised.
-	api.Apply = func(ctx context.Context, cfg Config) error {
+	api.Apply = func(ctx context.Context, servers []Server, users []User) error {
 		return errors.New("xray -test rejected the candidate")
 	}
 	u := User{

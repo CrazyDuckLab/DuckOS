@@ -162,7 +162,7 @@ func main() {
 	} else {
 		log.Printf("wireguard service is not enabled: %v", err)
 	}
-	if xrayHost, err := enableXrayService(*xrayCatalogDir, networkAccess); err == nil {
+	if xrayHost, err := enableXrayService(*xrayCatalogDir, networkAccess, vaultStore); err == nil {
 		handler.EnableXray(xrayHost)
 		log.Print("xray service is enabled; server/user/subscription CRUD will be admitted through the loopback")
 	} else {
@@ -849,7 +849,7 @@ type identityAccess interface {
 // The host now exposes the runtime + the durable
 // catalog so a real Xray daemon can be brought up
 // through public API -> IPC -> kernel.
-func enableXrayService(catalogDir string, access identityAccess) (*agent.XrayHost, error) {
+func enableXrayService(catalogDir string, access identityAccess, secrets *agent.VaultLifecycle) (*agent.XrayHost, error) {
 	if catalogDir == "" {
 		return nil, errors.New("xray: durable catalog directory is required")
 	}
@@ -864,10 +864,18 @@ func enableXrayService(catalogDir string, access identityAccess) (*agent.XrayHos
 	if err != nil {
 		return nil, fmt.Errorf("xray: open runtime: %w", err)
 	}
+	// Bind the vault-backed resolver so Apply can materialize
+	// TLS cert/key files and inline REALITY keys + short ids.
+	// Without this, xray -test fails on placeholder strings
+	// and missing cert files, and the runtime surfaces
+	// ErrConfig rather than bringing the daemon up.
+	if secrets != nil {
+		rt.SetResolver(secrets.XrayResolver())
+	}
 	api := &xray.API{
 		Access:  access,
 		Catalog: cat,
-		Apply:   rt.Apply,
+		Apply:   rt.ApplyWith,
 		Prefix:  "/xray/v1/",
 	}
 	host := agent.NewXrayHost(api, access, rt)

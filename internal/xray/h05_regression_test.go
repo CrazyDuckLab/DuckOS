@@ -20,8 +20,12 @@ func TestH05LastUserRemovalMustApplyRuntime(t *testing.T) {
 			t.Fatal(err)
 		}
 		calls := 0
-		a := API{Catalog: cat, Apply: func(_ context.Context, cfg Config) error {
+		a := API{Catalog: cat, Apply: func(_ context.Context, servers []Server, users []User) error {
 			calls++
+			cfg, rerr := RenderRuntimeConfig(servers, users)
+			if rerr != nil {
+				t.Fatalf("render: %v", rerr)
+			}
 			if len(cfg.Inbounds) != 0 {
 				t.Fatal("revoked listener remains")
 			}

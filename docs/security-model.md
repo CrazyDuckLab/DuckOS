@@ -94,8 +94,11 @@ The required baseline is:
   tunnel;
 - stateful established/related traffic is handled deliberately and default-deny
   policies are used where appropriate;
-- UPnP/NAT-PMP/PCP, if supported, is globally controllable, per-network,
-  time-bounded, visible, audited, and accompanied by warnings;
+- The BETA.2 Port Mapping backend (trusted-LAN registry + nftables mapping
+  manager + TTL/revoke/cleanup) is globally controllable, per-network,
+  time-bounded, visible, audited, and accompanied by warnings.
+  Real UPnP-IGD / NAT-PMP / PCP UDP network protocol frontends are
+  deferred to BETA.3 and are explicitly out of scope for BETA.2;
 - an explicitly public management panel is an exceptional administrator choice
   requiring strong warning, hardening, and audit—not a wizard convenience.
 

@@ -195,7 +195,11 @@ P060  Certificates / ACME          /api/v1/objects (cert kind)
 P061  Internal PKI / SSH CA        /api/v1/objects (pki kind)
 P063  Time / NTP / NTS / PTP       /api/v1/objects (time kind)
 P064  Telemetry / Integrations     /api/v1/objects (telemetry kind)
-P065  UPnP / NAT-PMP / PCP / Wake  /api/v1/objects (upnp kind)
+P065  Port Mapping / Trusted LAN / Wake  /api/v1/objects (upnp kind)
+       BETA.2 ships the backend (trusted-LAN registry + nftables mapping
+       manager + TTL/revoke/cleanup) and Wake-on-LAN. Real UPnP-IGD /
+       NAT-PMP / PCP network protocol frontends are deferred to BETA.3
+       and are explicitly out of scope for BETA.2.
 P066  Portal                       /api/v1/objects (portal kind)
 P067  QoS / Traffic Scheduling     /api/v1/objects/qos.class
 P069  Updates and Upgrades         /api/v1/upgrade/{stage,activate,rollback}

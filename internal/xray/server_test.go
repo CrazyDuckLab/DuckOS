@@ -200,7 +200,7 @@ func TestAPIServerWithoutUsersCommitsCatalogWithoutRuntimeApply(t *testing.T) {
 		Access:  testAccess{},
 		Catalog: cat,
 		Prefix:  "/xray/v1/",
-		Apply: func(context.Context, Config) error {
+		Apply: func(context.Context, []Server, []User) error {
 			called = true
 			return nil
 		},
@@ -238,7 +238,7 @@ func TestAPIRuntimeFailureDoesNotCommitCompletedConfigMutation(t *testing.T) {
 		Access:  testAccess{},
 		Catalog: cat,
 		Prefix:  "/xray/v1/",
-		Apply: func(context.Context, Config) error {
+		Apply: func(context.Context, []Server, []User) error {
 			return errors.New("forced runtime failure")
 		},
 	}

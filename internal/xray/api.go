@@ -57,8 +57,16 @@ type API struct {
 	mu      sync.Mutex
 	Access  Access
 	Catalog CatalogPersistence
-	Apply   func(ctx context.Context, cfg Config) error
-	Prefix  string
+	// Apply accepts the rendered catalog (servers +
+	// users) rather than a pre-rendered Config so the
+	// runtime can materialise vault-managed TLS / REALITY
+	// secrets BEFORE bringing up the daemon. The
+	// production wire is rt.ApplyWith; tests inject a
+	// stub that skips the materialise step. A nil Apply
+	// is the safe default for tests that only exercise
+	// CRUD.
+	Apply  func(ctx context.Context, servers []Server, users []User) error
+	Prefix string
 }
 
 // ServeHTTP dispatches /xray/v1/{servers,users,profiles,subscriptions}
@@ -129,17 +137,42 @@ func (a *API) mutateCatalog(ctx context.Context, mut func() error) (resultErr er
 		}
 		users = append(users, u...)
 	}
-	cfg, err := RenderRuntimeConfig(servers, users)
-	if err == nil && len(cfg.Inbounds) == 0 && snapper != nil {
-		before, beforeErr := RenderRuntimeConfig(snap.Servers, snap.Users)
-		if beforeErr == nil && len(before.Inbounds) == 0 {
-			return nil
+	// Empty-state short-circuit: if BOTH the snapshot AND
+	// the new state have no enabled inbounds, there is
+	// nothing to render and nothing to apply. This avoids
+	// a redundant xray -test on a no-op config.
+	if snapper != nil {
+		if len(servers) == 0 {
+			before, beforeErr := RenderRuntimeConfig(snap.Servers, snap.Users)
+			if beforeErr == nil && len(before.Inbounds) == 0 {
+				return nil
+			}
 		}
 	}
-	if err == nil {
-		err = a.Apply(ctx, cfg)
+	// Server-without-users guard: a server with no enabled
+	// clients does not produce an inbound at render time.
+	// The runtime must NOT bring up an empty listener.
+	if len(users) == 0 && (snapper == nil || !hasEnabledServer(snap.Servers)) {
+		return nil
 	}
-	return err
+	if a.Apply != nil {
+		if err := a.Apply(ctx, servers, users); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// hasEnabledServer reports whether any of the supplied servers
+// would produce a renderable inbound (enabled AND has matching
+// enabled users).
+func hasEnabledServer(servers []Server) bool {
+	for _, s := range servers {
+		if s.Enabled {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *API) requireConfigureNetwork(w http.ResponseWriter, r *http.Request) bool {

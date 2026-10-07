@@ -38,6 +38,15 @@ type Runtime struct {
 	cmd                   *exec.Cmd
 	done                  chan struct{}
 	recovery              bool
+	// resolver is the bounded vault-backed Resolver the
+	// runtime calls from Apply to materialize TLS cert /
+	// key files and to inline REALITY private key + short
+	// ids into the rendered config. A nil resolver means
+	// the runtime cannot bring up TLS / REALITY inbounds
+	// and Apply will fail them with a typed error. The
+	// agent composition root MUST bind a resolver at
+	// startup (production: *VaultLifecycle.XrayResolver()).
+	resolver Resolver
 }
 
 func NewRuntime() (*Runtime, error) {
@@ -52,6 +61,17 @@ func NewRuntime() (*Runtime, error) {
 		return nil, ErrBackend
 	}
 	return &Runtime{stage: stage, binary: XrayPath}, nil
+}
+
+// SetResolver binds a vault-backed Resolver to the runtime.
+// The caller MUST call SetResolver BEFORE the first Apply
+// when the catalog contains any TLS / REALITY inbounds.
+// The resolver is consumed at Apply time only; runtime
+// configuration is otherwise unaffected.
+func (r *Runtime) SetResolver(res Resolver) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.resolver = res
 }
 
 type State struct {
@@ -88,12 +108,56 @@ func (r *Runtime) Apply(ctx context.Context, cfg Config) error {
 	defer r.mu.Unlock()
 	return r.applyLocked(ctx, cfg)
 }
+
+// ApplyWith is the production entry point used by the
+// agent host. It renders the catalog to a Config,
+// resolves the typed vault references via the bound
+// Resolver, and applies the resulting (materialized)
+// Config. Apply(ctx, cfg) is the legacy path used by
+// tests and by callers that already provide a fully
+// materialised Config (security=none).
+//
+// The host MUST bind a Resolver via SetResolver before
+// calling ApplyWith when the catalog has any TLS or
+// REALITY inbounds; ApplyWith returns ErrBackend when the
+// resolver is missing.
+func (r *Runtime) ApplyWith(ctx context.Context, servers []Server, users []User) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.recovery {
+		return errors.New("xray: recovery required")
+	}
+	cfg, err := RenderRuntimeConfig(servers, users)
+	if err != nil {
+		return ErrConfig
+	}
+	if needsMaterializationServers(servers) && r.resolver == nil {
+		return ErrBackend
+	}
+	if r.resolver != nil {
+		mcfg, err := Materialize(ctx, cfg, r.stage, servers, r.resolver)
+		if err != nil {
+			return err
+		}
+		cfg = mcfg
+	}
+	return r.applyLocked(ctx, cfg)
+}
 func (r *Runtime) applyLocked(ctx context.Context, cfg Config) error {
 	if r.recovery {
 		return errors.New("xray: recovery required")
 	}
 	raw, err := json.Marshal(cfg)
 	if err != nil {
+		return ErrConfig
+	}
+	// Reject any inbound whose realised render still
+	// carries the TLS / REALITY placeholder markers
+	// when no resolver is bound. A missing resolver is
+	// treated as an explicit, typed failure rather than
+	// a silent xray -test error so they cannot be
+	// distinguished at the IPC layer.
+	if r.resolver == nil && needsMaterialization(raw) {
 		return ErrConfig
 	}
 	candidate := filepath.Join(r.stage, "candidate.json")
@@ -333,4 +397,40 @@ func writePrivate(path string, data []byte) error {
 	}
 	defer d.Close()
 	return d.Sync()
+}
+
+// needsMaterialization reports whether the rendered
+// Config still carries TLS or REALITY placeholder
+// markers that require runtime materialization. The
+// runtime uses this guard so a missing resolver fails
+// fast with a typed ErrConfig rather than letting xray
+// -test surface a misleading parser error.
+func needsMaterialization(raw []byte) bool {
+	return bytesContains(raw, []byte("resolved at apply time")) ||
+		bytesContains(raw, []byte("\"security\": \"tls\"")) ||
+		bytesContains(raw, []byte("\"security\": \"reality\""))
+}
+
+// needsMaterializationServers is the catalog-level
+// counterpart: any server whose Security is tls or
+// reality forces ApplyWith to require a Resolver.
+func needsMaterializationServers(servers []Server) bool {
+	for _, s := range servers {
+		if s.Security == SecurityTLS || s.Security == SecurityReality {
+			return true
+		}
+	}
+	return false
+}
+
+func bytesContains(haystack, needle []byte) bool {
+	if len(needle) == 0 {
+		return true
+	}
+	for i := 0; i+len(needle) <= len(haystack); i++ {
+		if string(haystack[i:i+len(needle)]) == string(needle) {
+			return true
+		}
+	}
+	return false
 }

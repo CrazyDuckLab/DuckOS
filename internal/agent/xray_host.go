@@ -194,11 +194,7 @@ func (h *XrayHost) Reconcile(ctx context.Context, catalog xray.CatalogPersistenc
 		}
 		users = append(users, u...)
 	}
-	cfg, err := xray.RenderRuntimeConfig(servers, users)
-	if err != nil {
-		return err
-	}
-	return rt.Apply(ctx, cfg)
+	return rt.ApplyWith(ctx, servers, users)
 }
 
 // xrayProblem writes an RFC-7807 problem document with
