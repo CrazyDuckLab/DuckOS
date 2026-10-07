@@ -17,39 +17,31 @@ Documentation=file:/opt/duckos/current/BUILD-INFO.json
 # WG runtime cannot start against an enabled launcher.
 After=syslog.target network-online.target
 After=duck-network-recover.service
-Before=duck-agent.service
+After=duck-agent.service
+Wants=duck-agent.service
 Conflicts=wg-quick@.service wg-quick@*.service
 
 [Service]
 Type=simple
+# B-006 / BETA.2 PHASE-5 IPC FIX: /run/duckos-agent is
+# owned solely by duck-agent.service. The launcher waits
+# for the Agent (After=duck-agent.service) and binds its
+# sockets into the Agent's already-created dir. The
+# launcher itself does NOT declare RuntimeDirectory= so
+# its restart never wipes the parent dir inode.
 ExecStart=/opt/duckos/current/bin/duck-wg-launcher --listen=/run/duckos-agent/wg-launcher.sock --state=/var/lib/duckos/wireguard --secret=/run/duckos-agent/secret --ip=/sbin/ip --wg=/usr/bin/wg
 Restart=on-failure
 RestartSec=2s
 User=root
-# B-006 / BETA.2 PHASE-5 IPC FIX: Group MUST be duckos so
-# RuntimeDirectory=duckos-agent is owned root:duckos 0750.
-# The launcher runs privileged but writes sockets and
-# state files under the duckos group so duck-api (running
-# as duckos:duckos) can connect to wg-launcher.sock via
-# SO_PEERCRED and read the launcher channel. Group=root
-# previously clobbered duckos to root on every restart of
-# this unit, breaking /agent/v1/* proxy from duck-api.
-# See internal/systemd/runtime_dir_owner_test.go for the
-# regression guard.
 Group=duckos
-# B-006 / BETA.2 PHASE-5 IPC FIX: RuntimeDirectoryMode=0750
-# matches duck-agent.service. A conflicting 0770 here
-# also clobbered the parent dir ownership on each restart.
-RuntimeDirectory=duckos-agent
-RuntimeDirectoryMode=0750
-RuntimeDirectoryPreserve=yes
+RuntimeDirectory=
 # owned.json (DuckOS-owned interface tracking) lives
 # under /var/lib/duckos/wireguard; ProtectSystem=strict
 # makes the rest of / read-only so we MUST list it
 # explicitly in ReadWritePaths, otherwise the launcher's
-# atomic saveOwned() would fail silently. This is the
-# B-005 live-once fix landed via the BETA.2 pre-live
-# corrective round.
+# atomic saveOwned() would fail silently. /run/duckos-agent
+# is also writable so the launcher can create wg-launcher.sock
+# and the secret file under it.
 ReadWritePaths=/var/lib/duckos/wireguard /run/duckos-agent/secret
 
 # CapabilityBoundingSet: CAP_NET_ADMIN. The launcher

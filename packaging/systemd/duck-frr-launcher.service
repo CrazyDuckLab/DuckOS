@@ -1,40 +1,34 @@
 [Unit]
 Description=DuckOS FRR privileged launcher daemon (internal TEST build)
 Documentation=file:/opt/duckos/current/BUILD-INFO.json
-# The launcher is independent of the Agent: it owns its
-# RuntimeDirectory (duckos-agent, see below) and the FRR
-# launcher socket lives there. The Agent's After=duck-frr-launcher
-# relationship below still holds, so the Agent waits for the
-# launcher's socket before its first FRR dial. Without
-# RuntimeDirectory on this unit, the launcher needed the
-# Agent to create /run/duckos-agent first, which produced
-# an After=cycle (agent waits for launcher, launcher waits
-# for agent) that systemd silently resolved by dropping
-# one dep; the Agent then started before the launcher and
-# left FRR disabled for the entire boot.
+# B-006 / BETA.2 PHASE-5 IPC FIX: /run/duckos-agent is
+# owned solely by duck-agent.service. Multiple units
+# declaring RuntimeDirectory=duckos-agent caused systemd
+# to wipe the dir inode on every restart of any unit,
+# breaking duck-api's IPC path to /agent/v1/*. The launcher
+# waits for the Agent (After=duck-agent.service) and
+# binds its socket into the Agent's already-created dir.
+After=duck-agent.service
+Wants=duck-agent.service
 # B-010 (BETA.2): duck-frr-launcher is the canonical owner
 # of FRR lifecycle. The installer masks every native FRR
-# unit (frr.service / frr-watchfrr.service / per-daemon
-# frr-zebra.service etc.) so a stock package upgrade cannot
-# silently resurrect a competing zebra/bgpd. Conflicts= is
-# belt-and-braces: even if a future package upgrade
-# accidentally re-enables a native unit, systemd refuses
-# to start it alongside duck-frr-launcher.
+# unit so a stock package upgrade cannot silently resurrect
+# a competing zebra/bgpd. Conflicts= is belt-and-braces:
+# even if a future package upgrade accidentally re-enables
+# a native unit, systemd refuses to start it alongside
+# duck-frr-launcher.
 Conflicts=frr.service frr-watchfrr.service frr-zebra.service frr-bgpd.service frr-ospfd.service frr-ospf6d.service frr-ripd.service frr-ripngd.service frr-isisd.service frr-pimd.service frr-babeld.service frr-vrrpd.service frr-nhrpd.service frr-eigrpd.service frr-bfdd.service frr-fabricd.service frr-staticd.service
 StartLimitIntervalSec=60
 StartLimitBurst=5
 
 [Service]
 Type=simple
-# /run/duckos-agent must exist before the launcher opens
-# its socket. Declaring it on both this unit and the
-# Agent unit lets systemd create it independently of
-# whichever service boots first; RuntimeDirectoryMode=0750
-# matches duck-agent.service / duck-wg-launcher.service
-# exactly so no service clobbers the parent dir ownership
-# on restart.
-RuntimeDirectory=duckos-agent
-RuntimeDirectoryMode=0750
+# The launcher does NOT declare RuntimeDirectory=. The
+# Agent owns /run/duckos-agent exclusively so no unit
+# restart wipes the parent dir inode. The launcher binds
+# its socket into the Agent's dir which already exists.
+RuntimeDirectory=
+# (Capabilities / KillMode / NoNewPrivileges unchanged.)
 # The launcher is a long-running privileged broker.
 # It holds CAP_SETUID + CAP_SETGID + CAP_SETPCAP so
 # that, when the Agent asks it to start an FRR
@@ -75,6 +69,11 @@ RuntimeDirectoryMode=0750
 # the launcher's Effective set, not its bounding set).
 CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_SETPCAP CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_KILL
 AmbientCapabilities=
+# ReadWritePaths lets the launcher create its socket
+# under /run/duckos-agent (owned by duck-agent.service).
+# ProtectSystem=strict makes the rest of / read-only
+# so we MUST list /run/duckos-agent explicitly here.
+ReadWritePaths=/run/duckos-agent
 # KillMode=process keeps systemd from reaping the
 # launcher's tracked FRR children when the launcher
 # is stopped. The FRR daemons are owned by the
