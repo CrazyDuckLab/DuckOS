@@ -425,7 +425,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.HasPrefix(r.URL.EscapedPath(), UPnPPath) {
 		if h.upnp == nil {
-			NewUPnPHost(nil, nil).ServeHTTP(w, r)
+			NewUPnPHostNoRegistry(nil, nil).ServeHTTP(w, r)
 			return
 		}
 		h.upnp.ServeHTTP(w, r)

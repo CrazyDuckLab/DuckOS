@@ -85,7 +85,7 @@ func (f *fakeUPnPAccess) Authorize(_ string, p identity.Permission) (identity.Us
 
 func TestUPnPHost_StateRequiresObserve(t *testing.T) {
 	src := &fakeUPnPSource{}
-	host := NewUPnPHost(src, &fakeUPnPAccess{grant: identity.ConfigureNetwork})
+	host := NewUPnPHostNoRegistry(src, &fakeUPnPAccess{grant: identity.ConfigureNetwork})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, UPnPPath+"/state", nil)
 	req.Header.Set("Authorization", "Bearer t")
@@ -93,7 +93,7 @@ func TestUPnPHost_StateRequiresObserve(t *testing.T) {
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d", rec.Code)
 	}
-	host2 := NewUPnPHost(src, &fakeUPnPAccess{grant: identity.Observe})
+	host2 := NewUPnPHostNoRegistry(src, &fakeUPnPAccess{grant: identity.Observe})
 	rec2 := httptest.NewRecorder()
 	req2 := httptest.NewRequest(http.MethodGet, UPnPPath+"/state", nil)
 	req2.Header.Set("Authorization", "Bearer t")
@@ -105,7 +105,7 @@ func TestUPnPHost_StateRequiresObserve(t *testing.T) {
 
 func TestUPnPHost_EnableAndDisable(t *testing.T) {
 	src := &fakeUPnPSource{}
-	host := NewUPnPHost(src, &fakeUPnPAccess{grant: identity.ConfigureNetwork})
+	host := NewUPnPHostNoRegistry(src, &fakeUPnPAccess{grant: identity.ConfigureNetwork})
 	body, _ := json.Marshal(map[string]any{
 		"network": map[string]any{
 			"networkRef": "lan.home",
@@ -141,7 +141,7 @@ func TestUPnPHost_EnableAndDisable(t *testing.T) {
 
 func TestUPnPHost_EnableRejectsInvalidNetwork(t *testing.T) {
 	src := &fakeUPnPSource{}
-	host := NewUPnPHost(src, &fakeUPnPAccess{grant: identity.ConfigureNetwork})
+	host := NewUPnPHostNoRegistry(src, &fakeUPnPAccess{grant: identity.ConfigureNetwork})
 	body, _ := json.Marshal(map[string]any{
 		"network": map[string]any{
 			"networkRef": "!!bogus!!",
@@ -160,7 +160,7 @@ func TestUPnPHost_EnableRejectsInvalidNetwork(t *testing.T) {
 
 func TestUPnPHost_RevokeMapping(t *testing.T) {
 	src := &fakeUPnPSource{mappings: []upnp.Mapping{{ID: "m1"}}}
-	host := NewUPnPHost(src, &fakeUPnPAccess{grant: identity.ConfigureNetwork})
+	host := NewUPnPHostNoRegistry(src, &fakeUPnPAccess{grant: identity.ConfigureNetwork})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodDelete, UPnPPath+"/mappings/m1", nil)
 	req.Header.Set("Authorization", "Bearer t")
@@ -175,7 +175,7 @@ func TestUPnPHost_RevokeMapping(t *testing.T) {
 
 func TestUPnPHost_NoBearer(t *testing.T) {
 	src := &fakeUPnPSource{}
-	host := NewUPnPHost(src, &fakeUPnPAccess{grant: identity.Observe})
+	host := NewUPnPHostNoRegistry(src, &fakeUPnPAccess{grant: identity.Observe})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, UPnPPath+"/state", nil)
 	host.ServeHTTP(rec, req)
@@ -186,7 +186,7 @@ func TestUPnPHost_NoBearer(t *testing.T) {
 
 func TestUPnPHost_MultipleAuthorizationHeaders(t *testing.T) {
 	src := &fakeUPnPSource{}
-	host := NewUPnPHost(src, &fakeUPnPAccess{grant: identity.Observe})
+	host := NewUPnPHostNoRegistry(src, &fakeUPnPAccess{grant: identity.Observe})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, UPnPPath+"/state", nil)
 	req.Header.Add("Authorization", "Bearer t1")
@@ -199,7 +199,7 @@ func TestUPnPHost_MultipleAuthorizationHeaders(t *testing.T) {
 
 func TestUPnPHost_UnknownPath(t *testing.T) {
 	src := &fakeUPnPSource{}
-	host := NewUPnPHost(src, &fakeUPnPAccess{grant: identity.Observe})
+	host := NewUPnPHostNoRegistry(src, &fakeUPnPAccess{grant: identity.Observe})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, UPnPPath+"/unknown", nil)
 	req.Header.Set("Authorization", "Bearer t")
@@ -211,7 +211,7 @@ func TestUPnPHost_UnknownPath(t *testing.T) {
 
 func TestUPnPHost_MethodNotAllowed(t *testing.T) {
 	src := &fakeUPnPSource{}
-	host := NewUPnPHost(src, &fakeUPnPAccess{grant: identity.Observe})
+	host := NewUPnPHostNoRegistry(src, &fakeUPnPAccess{grant: identity.Observe})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPatch, UPnPPath+"/state", nil)
 	req.Header.Set("Authorization", "Bearer t")
