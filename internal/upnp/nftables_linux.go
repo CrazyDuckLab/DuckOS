@@ -115,6 +115,34 @@ func (n *NftablesBackend) TrustIfaces(ifaces ...string) {
 	n.trustedIfxs = append(n.trustedIfxs, ifaces...)
 }
 
+// TrustIface adds iface to the trusted-interface allow-list
+// (NetworkBackend interface). Duplicates are tolerated
+// because the production wiring may legitimately re-add the
+// same iface when reloading the registry.
+func (n *NftablesBackend) TrustIface(iface string) {
+	n.TrustIfaces(iface)
+}
+
+// UntrustIface removes iface from the trusted-interface
+// allow-list (NetworkBackend interface). An iface that is
+// not present is a no-op so the disable path is idempotent
+// and safe to call on agent restarts after a stale trust
+// has already been cleared.
+func (n *NftablesBackend) UntrustIface(iface string) {
+	if iface == "" {
+		return
+	}
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	out := n.trustedIfxs[:0]
+	for _, t := range n.trustedIfxs {
+		if t != iface {
+			out = append(out, t)
+		}
+	}
+	n.trustedIfxs = out
+}
+
 // Add renders and applies the mapping. Returns an explicit
 // error if the nft staging file fails validation so the
 // runtime can roll back the Manager state.

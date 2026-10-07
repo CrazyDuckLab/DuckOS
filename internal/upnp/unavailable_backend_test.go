@@ -87,3 +87,5 @@ type nftLikeBackend struct{}
 func (nftLikeBackend) Add(Mapping) error                { return nil }
 func (nftLikeBackend) Remove(string) error              { return nil }
 func (nftLikeBackend) AllowListen(string, net.Addr) bool { return true }
+func (nftLikeBackend) TrustIface(string)                 {}
+func (nftLikeBackend) UntrustIface(string)               {}

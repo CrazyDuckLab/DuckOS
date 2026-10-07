@@ -17,6 +17,7 @@ type recordingBackend struct {
 	added    []Mapping
 	removed  []string
 	listenOK bool
+	trusted  []string
 }
 
 func (r *recordingBackend) Add(m Mapping) error {
@@ -24,6 +25,24 @@ func (r *recordingBackend) Add(m Mapping) error {
 	defer r.mu.Unlock()
 	r.added = append(r.added, m)
 	return nil
+}
+
+func (r *recordingBackend) TrustIface(iface string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.trusted = append(r.trusted, iface)
+}
+
+func (r *recordingBackend) UntrustIface(iface string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := r.trusted[:0]
+	for _, t := range r.trusted {
+		if t != iface {
+			out = append(out, t)
+		}
+	}
+	r.trusted = out
 }
 
 func (r *recordingBackend) Remove(id string) error {
@@ -309,6 +328,8 @@ type failingBackend struct{}
 func (failingBackend) Add(Mapping) error              { return errBackendNew }
 func (failingBackend) Remove(string) error            { return nil }
 func (failingBackend) AllowListen(string, net.Addr) bool { return true }
+func (failingBackend) TrustIface(string)               {}
+func (failingBackend) UntrustIface(string)             {}
 
 var errBackendNew = errBackend("backend refused")
 

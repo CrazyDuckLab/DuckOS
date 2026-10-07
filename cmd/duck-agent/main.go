@@ -929,6 +929,23 @@ func enableUPnPService(access identityAccess) (*agent.UPnPHost, error) {
 		return nil, errors.New("upnp: identity service is required")
 	}
 	mgr := upnp.NewManager()
+	// Load the B-008 TrustedLANRegistry. The registry owns
+	// the persistent trust list keyed by stable DuckOS
+	// network refs. The agent's UPnPHost enforces the
+	// registry's role check before the runtime / backend
+	// admit iface, so a reboot or restart always re-seeds
+	// the backend from the persisted registry rather than
+	// starting blank.
+	registry, err := upnp.LoadTrustedLANRegistry("/var/lib/duckos-agent/upnp-trust.json", time.Now)
+	if err != nil {
+		return nil, fmt.Errorf("upnp: load trust registry: %w", err)
+	}
+	// Build the bounded enrollment view the registry consumes
+	// from the Agent's existing network enrollment document.
+	// Management / WAN / LAN roles are read once at boot; the
+	// registry re-checks them on every Trust call so a
+	// rename / role flip is reflected immediately.
+	enrollment := upnpEnrollmentSnapshot("/var/lib/duckos-agent")
 	var backend upnp.NetworkBackend
 	if b, err := upnp.NewNftablesBackend(""); err == nil {
 		backend = b
@@ -940,9 +957,67 @@ func enableUPnPService(access identityAccess) (*agent.UPnPHost, error) {
 		)
 		log.Printf("upnp: nft binary not available (%v); runtime is wired to UnavailableBackend so the UI shows 'backend unavailable'", err)
 	}
+	// Boot restore: seed the backend's trusted-iface list
+	// from the registry's resolved kernel names. The
+	// registry's assertLANRole has already passed for these
+	// refs at Trust() time; we re-run it here so a stale
+	// role flip (LAN -> management) does not survive a
+	// reboot into the trusted set.
+	for _, ref := range registry.Trusted() {
+		if err := registry.AssertLANRoleOrRevoke(ref, enrollment); err != nil {
+			log.Printf("upnp: ref %q lost role at boot (%v); revoking", ref, err)
+			continue
+		}
+		iface, ok := registry.ResolvedInterfaces(enrollment)[ref]
+		if !ok {
+			log.Printf("upnp: ref %q has no live kernel name; skipping boot trust", ref)
+			continue
+		}
+		backend.TrustIface(iface)
+		log.Printf("upnp: boot-trust %s -> %s", ref, iface)
+	}
 	rt := upnp.NewRuntime(mgr, backend)
 	go rt.Start(context.Background())
-	return agent.NewUPnPHost(rt, access), nil
+	return agent.NewUPnPHost(rt, access, registry, enrollment), nil
+}
+
+// upnpEnrollmentSnapshot loads the Agent's enrollment.json
+// and projects it into the bounded view upnp.EnrollmentSnapshot.
+// A missing / corrupt enrollment leaves Interfaces empty so
+// every Trust attempt is rejected as ErrNotTrusted — the
+// safe default.
+//
+// network.PhysicalBinding has no role field — the registry
+// needs role = "lan" for non-management physicals — so we
+// derive it from ExternallyManaged. Management is set
+// true when the binding is externally managed; role is
+// set to "lan" for the rest. WAN physicals do not exist
+// in the production enrollment format (the management NIC
+// IS the WAN), so role "wan" never appears here. The
+// registry still admits "wan" roles structurally; a
+// future WAN-physical enrollment would set Role="wan"
+// upstream and the registry would reject it as
+// ErrWANRejected.
+func upnpEnrollmentSnapshot(dir string) upnp.EnrollmentSnapshot {
+	enr, err := network.ReadEnrollment(dir)
+	if err != nil {
+		log.Printf("upnp: enrollment unavailable (%v); Trust will refuse every ref", err)
+		return upnp.EnrollmentSnapshot{}
+	}
+	out := upnp.EnrollmentSnapshot{Interfaces: make([]upnp.EnrollmentInterface, 0, len(enr.Physical))}
+	for _, b := range enr.Physical {
+		role := "lan"
+		if b.ExternallyManaged {
+			role = "lan"
+		}
+		out.Interfaces = append(out.Interfaces, upnp.EnrollmentInterface{
+			ID:         b.ID,
+			Name:       b.Name,
+			Role:       role,
+			Management: b.ExternallyManaged,
+		})
+	}
+	return out
 }
 
 // enableWakeService wires the production Wake-on-LAN host.

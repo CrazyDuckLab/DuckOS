@@ -120,6 +120,33 @@ func (r *Runtime) EnableNetwork(n Network, iface string) error {
 	return nil
 }
 
+// TrustIface records iface on the backend's trusted-iface
+// list so subsequent EnableNetwork(iface) calls pass the
+// AllowListen check. TrustIface is the runtime seam the
+// agent uses to push a registry-approved LAN into the
+// backend; the registry has already done the role check.
+// TrustIface does NOT call into the manager — it is a
+// pure backend update — so it is safe to call before the
+// runtime starts.
+func (r *Runtime) TrustIface(iface string) {
+	if iface == "" {
+		return
+	}
+	r.backend.TrustIface(iface)
+}
+
+// UntrustIface removes iface from the backend's trusted-iface
+// list. UntrustIface is called by the agent on the Disable
+// path so a revoked ref does not leak into the next Enable
+// cycle. The manager-side DisableNetwork is the caller that
+// invokes this — see the agent host.
+func (r *Runtime) UntrustIface(iface string) {
+	if iface == "" {
+		return
+	}
+	r.backend.UntrustIface(iface)
+}
+
 // DisableNetwork removes the network. All mappings on the
 // network are revoked and the backend is asked to remove them.
 func (r *Runtime) DisableNetwork(ref string) {
@@ -345,6 +372,8 @@ type noopBackend struct{}
 func (noopBackend) Add(Mapping) error                { return nil }
 func (noopBackend) Remove(string) error              { return nil }
 func (noopBackend) AllowListen(string, net.Addr) bool { return false }
+func (noopBackend) TrustIface(string)                 {}
+func (noopBackend) UntrustIface(string)               {}
 
 // WanRefused is the error returned when a UPnP / NAT-PMP /
 // PCP listener is asked to bind a WAN address. Production

@@ -37,6 +37,15 @@ type UPnPSource interface {
 	Mappings() []upnp.Mapping
 	RevokeMapping(id string)
 	Stats() upnp.RuntimeStats
+	// TrustIface is the runtime seam the host uses to push
+	// a registry-approved LAN into the backend so the next
+	// EnableNetwork(iface) finds AllowListen true. The
+	// registry has already done the role check upstream.
+	TrustIface(iface string)
+	// UntrustIface removes iface from the backend's
+	// trusted-iface list on the disable path so a revoked
+	// ref does not leak into the next Enable cycle.
+	UntrustIface(iface string)
 }
 
 // UPnPAccess is the narrow contract the host uses to
@@ -48,20 +57,33 @@ type UPnPAccess interface {
 // UPnPHost wraps the upnp.Runtime behind a goroutine-safe
 // IPC entry point.
 type UPnPHost struct {
-	mu     sync.Mutex
-	Source UPnPSource
-	Access UPnPAccess
+	mu         sync.Mutex
+	Source     UPnPSource
+	Access     UPnPAccess
+	Registry   *upnp.TrustedLANRegistry
+	Enrollment upnp.EnrollmentSnapshot
 }
 
 // NewUPnPHost wires the upnp.Runtime into the host.
-func NewUPnPHost(src UPnPSource, acc UPnPAccess) *UPnPHost {
+// registry and enrollment are optional; when registry is
+// nil the host skips the role check (preserving the
+// cross-platform test stub). Production wiring in
+// cmd/duck-agent/main.go always passes both.
+func NewUPnPHost(src UPnPSource, acc UPnPAccess, registry *upnp.TrustedLANRegistry, enrollment upnp.EnrollmentSnapshot) *UPnPHost {
 	if src == nil {
 		src = stubUPnPSource{}
 	}
 	if acc == nil {
 		acc = stubUPnPAccess{}
 	}
-	return &UPnPHost{Source: src, Access: acc}
+	return &UPnPHost{Source: src, Access: acc, Registry: registry, Enrollment: enrollment}
+}
+
+// NewUPnPHostNoRegistry is the legacy constructor used by
+// tests that don't need a real registry. Production wiring
+// always uses NewUPnPHost with both arguments populated.
+func NewUPnPHostNoRegistry(src UPnPSource, acc UPnPAccess) *UPnPHost {
+	return NewUPnPHost(src, acc, nil, upnp.EnrollmentSnapshot{})
 }
 
 // ServeHTTP dispatches /agent/v1/upnp/* to the underlying
@@ -176,7 +198,27 @@ func (h *UPnPHost) handleEnable(w http.ResponseWriter, r *http.Request, ref stri
 	if body.Network.NetworkRef == "" {
 		body.Network.NetworkRef = ref
 	}
+	// Push iface into the backend's trusted list BEFORE the
+	// runtime's EnableNetwork check. The runtime's
+	// AllowListen(iface, nil) is satisfied only when the
+	// backend has already admitted iface. The agent layer is
+	// the single seam that synchronises the registry /
+	// backend / runtime, so do not reorder these calls.
+	if h.Registry != nil {
+		if err := h.Registry.Trust(body.Network.NetworkRef, h.Enrollment); err != nil {
+			upnpProblem(w, 400, "invalid_request", err.Error())
+			return
+		}
+	}
+	if body.Iface != "" {
+		src.TrustIface(body.Iface)
+	}
 	if err := src.EnableNetwork(body.Network, body.Iface); err != nil {
+		// Roll back the trust update so a rejected enable
+		// does not leak iface into the next enable cycle.
+		if body.Iface != "" {
+			src.UntrustIface(body.Iface)
+		}
 		upnpProblem(w, 400, "invalid_request", err.Error())
 		return
 	}
@@ -188,6 +230,15 @@ func (h *UPnPHost) handleDisable(w http.ResponseWriter, r *http.Request, ref str
 		return
 	}
 	src.DisableNetwork(ref)
+	// Untrust the iface after the runtime's DisableNetwork
+	// completes so a re-enable of the same ref cannot bypass
+	// the AllowListen check via the previous trust. The
+	// handleEnable path will TrustIface once the registry
+	// admits the ref again.
+	src.UntrustIface(ref)
+	if h.Registry != nil {
+		_ = h.Registry.Revoke(ref)
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -226,6 +277,8 @@ func (stubUPnPSource) Networks() []upnp.Network            { return nil }
 func (stubUPnPSource) Mappings() []upnp.Mapping            { return nil }
 func (stubUPnPSource) RevokeMapping(string)                {}
 func (stubUPnPSource) Stats() upnp.RuntimeStats            { return upnp.RuntimeStats{} }
+func (stubUPnPSource) TrustIface(string)                   {}
+func (stubUPnPSource) UntrustIface(string)                 {}
 
 type stubUPnPAccess struct{}
 

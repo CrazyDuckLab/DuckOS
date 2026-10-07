@@ -239,6 +239,21 @@ type NetworkBackend interface {
 	Add(m Mapping) error
 	Remove(id string) error
 	AllowListen(iface string, addr net.Addr) bool
+	// TrustIface adds iface to the trusted-interface list at
+	// runtime so AllowListen(iface, nil) starts returning true
+	// for it. TrustIface is called by the runtime when the
+	// TrustedLANRegistry admits a new ref. WAN / management
+	// interfaces are rejected upstream; the backend only stores
+	// kernel names that have already cleared the registry.
+	TrustIface(iface string)
+	// UntrustIface removes iface from the trusted-interface
+	// list so AllowListen(iface, nil) starts returning false
+	// again. UntrustIface is a no-op when iface was never
+	// trusted. The runtime calls UntrustIface whenever the
+	// registry revokes the corresponding ref (Disable path)
+	// so a removed trust does not leak into the next Enable
+	// cycle.
+	UntrustIface(iface string)
 }
 
 // RuntimeStub is a cross-platform stub that satisfies the
@@ -334,6 +349,16 @@ func (r *RuntimeStub) RevokeMapping(id string) {
 	r.mgr.RevokeMapping(id)
 }
 
+// TrustIface is the stub equivalent.
+func (r *RuntimeStub) TrustIface(iface string) {
+	r.backend.TrustIface(iface)
+}
+
+// UntrustIface is the stub equivalent.
+func (r *RuntimeStub) UntrustIface(iface string) {
+	r.backend.UntrustIface(iface)
+}
+
 // Stats is the stub equivalent.
 func (r *RuntimeStub) Stats() RuntimeStats {
 	return RuntimeStats{
@@ -360,6 +385,8 @@ type noopBackendCross struct{}
 func (noopBackendCross) Add(Mapping) error                { return nil }
 func (noopBackendCross) Remove(string) error              { return nil }
 func (noopBackendCross) AllowListen(string, net.Addr) bool { return false }
+func (noopBackendCross) TrustIface(string)                 {}
+func (noopBackendCross) UntrustIface(string)               {}
 
 // ErrBackendUnavailable is the canonical error returned by
 // UnavailableBackend for every host-mutating operation. The
@@ -432,3 +459,13 @@ func (u *UnavailableBackend) Reason() UnavailableReason {
 	defer u.mu.Unlock()
 	return u.reason
 }
+
+// TrustIface is a no-op for the unavailable backend. The
+// backend cannot admit traffic regardless, so the trust list
+// has no effect; the runtime still surfaces the
+// ErrBackendUnavailable on every Add / DisableNetwork.
+func (u *UnavailableBackend) TrustIface(string) {}
+
+// UntrustIface is a no-op for the unavailable backend. See
+// TrustIface.
+func (u *UnavailableBackend) UntrustIface(string) {}

@@ -265,6 +265,32 @@ func (r *TrustedLANRegistry) ResolvedInterfaces(enrollment EnrollmentSnapshot) m
 	return out
 }
 
+// AssertLANRoleOrRevoke is the boot-restore helper. It
+// re-runs assertLANRole against the supplied enrollment
+// for a ref that is already in the trust list. If the
+// role check fails (the ref was renamed / reclassified
+// since the last Trust), the ref is removed from the
+// trust list so a stale WAN / management entry does not
+// survive a reboot into the trusted set. Returns nil if
+// the ref still passes the role check; returns the
+// assertion error (after Revoke) so the caller can log
+// the structural flip.
+func (r *TrustedLANRegistry) AssertLANRoleOrRevoke(ref string, enrollment EnrollmentSnapshot) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if err := assertLANRole(ref, enrollment); err != nil {
+		for i, n := range r.state.Networks {
+			if n == ref {
+				r.state.Networks = append(r.state.Networks[:i], r.state.Networks[i+1:]...)
+				_ = r.saveLocked()
+				return err
+			}
+		}
+		return err
+	}
+	return nil
+}
+
 // saveLocked persists the trust file atomically. The
 // caller MUST hold r.mu (write lock).
 func (r *TrustedLANRegistry) saveLocked() error {
