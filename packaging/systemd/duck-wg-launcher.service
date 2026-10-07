@@ -26,9 +26,22 @@ ExecStart=/opt/duckos/current/bin/duck-wg-launcher --listen=/run/duckos-agent/wg
 Restart=on-failure
 RestartSec=2s
 User=root
-Group=root
+# B-006 / BETA.2 PHASE-5 IPC FIX: Group MUST be duckos so
+# RuntimeDirectory=duckos-agent is owned root:duckos 0750.
+# The launcher runs privileged but writes sockets and
+# state files under the duckos group so duck-api (running
+# as duckos:duckos) can connect to wg-launcher.sock via
+# SO_PEERCRED and read the launcher channel. Group=root
+# previously clobbered duckos to root on every restart of
+# this unit, breaking /agent/v1/* proxy from duck-api.
+# See internal/systemd/runtime_dir_owner_test.go for the
+# regression guard.
+Group=duckos
+# B-006 / BETA.2 PHASE-5 IPC FIX: RuntimeDirectoryMode=0750
+# matches duck-agent.service. A conflicting 0770 here
+# also clobbered the parent dir ownership on each restart.
 RuntimeDirectory=duckos-agent
-RuntimeDirectoryMode=0770
+RuntimeDirectoryMode=0750
 RuntimeDirectoryPreserve=yes
 # owned.json (DuckOS-owned interface tracking) lives
 # under /var/lib/duckos/wireguard; ProtectSystem=strict

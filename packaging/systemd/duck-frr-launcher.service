@@ -29,11 +29,12 @@ Type=simple
 # /run/duckos-agent must exist before the launcher opens
 # its socket. Declaring it on both this unit and the
 # Agent unit lets systemd create it independently of
-# whichever service boots first; RuntimeDirectoryMode=0751
-# matches the Agent's mode so neither service needs to
-# chmod it.
+# whichever service boots first; RuntimeDirectoryMode=0750
+# matches duck-agent.service / duck-wg-launcher.service
+# exactly so no service clobbers the parent dir ownership
+# on restart.
 RuntimeDirectory=duckos-agent
-RuntimeDirectoryMode=0751
+RuntimeDirectoryMode=0750
 # The launcher is a long-running privileged broker.
 # It holds CAP_SETUID + CAP_SETGID + CAP_SETPCAP so
 # that, when the Agent asks it to start an FRR
