@@ -5,6 +5,7 @@ package doctor
 import (
 	"bufio"
 	"encoding/hex"
+	"errors"
 	"os"
 	"strconv"
 	"strings"
@@ -209,22 +210,22 @@ func readRoutes() ([]Route, error) {
 			first = false
 			continue
 		}
-		dest, err := hexToIPLE(fields[1])
+		dest, err := hexToIP(fields[1])
 		if err != nil {
 			continue
 		}
-		gw, err := hexToIPLE(fields[2])
+		gw, err := hexToIP(fields[2])
 		if err != nil {
 			continue
 		}
 		flags, _ := strconv.ParseUint(fields[3], 16, 32)
 		metric, _ := strconv.Atoi(fields[6])
-		mask, err := hexToIP(fields[7])
+		prefix, err := hexToPrefixLength(fields[7])
 		if err != nil {
 			continue
 		}
 		out = append(out, Route{
-			Destination: dest + "/" + mask,
+			Destination: dest + "/" + prefix,
 			Gateway:     gw,
 			Device:      fields[0],
 			Table:       "main",
@@ -239,37 +240,52 @@ func readRoutes() ([]Route, error) {
 }
 
 // hexToIP decodes a 4-byte /proc/net/route hex field
-// into a dotted-quad IPv4 string. The MASK hex field is
-// laid out in network byte order (big-endian); we just
-// format the bytes directly. This is what the kernel
-// writes for the Mask column.
+// into a dotted-quad IPv4 string. Every column of
+// /proc/net/route (Destination / Gateway / Mask) is
+// written by the kernel in host byte order, which on
+// x86_64 means little-endian. We byte-swap so the
+// resulting string is the canonical CIDR form
+// ("172.18.0.0" not "0.0.18.172"). Without the swap, the
+// per-object RBAC filter rejects every real route (the
+// post-regex ValidateCIDRBody helper refuses '.' after
+// '/') and Owner-visible /api/v1/objects/network.route
+// returns the rbac_redacted rbac issue instead of the
+// real objects. This is the B-009 RBAC LIVE recovery
+// landed by the BETA.2 corrective round.
 func hexToIP(s string) (string, error) {
 	b, err := hex.DecodeString(s)
 	if err != nil || len(b) != 4 {
 		return "", err
 	}
-	return strconv.Itoa(int(b[0])) + "." + strconv.Itoa(int(b[1])) + "." + strconv.Itoa(int(b[2])) + "." + strconv.Itoa(int(b[3])), nil
+	return strconv.Itoa(int(b[3])) + "." + strconv.Itoa(int(b[2])) + "." + strconv.Itoa(int(b[1])) + "." + strconv.Itoa(int(b[0])), nil
 }
 
-// hexToIPLE decodes the Destination / Gateway hex fields
-// of /proc/net/route. Those fields are written by the
-// kernel in little-endian byte order (the kernel writes
-// the on-wire IPv4 with its octets reversed); we
-// byte-swap before formatting so the resulting string is
-// the canonical CIDR form ("172.18.0.0" not "0.0.18.172").
-// Without the swap, the per-object RBAC filter rejects
-// every real route (the post-regex ValidateCIDRBody
-// helper refuses '.' after '/') and Owner-visible
-// /api/v1/objects/network.route returns the rbac_redacted
-// rbac issue instead of the real objects. This is the
-// B-009 RBAC LIVE recovery landed by the BETA.2
-// corrective round.
-func hexToIPLE(s string) (string, error) {
+// hexToPrefixLength decodes the 4-byte /proc/net/route
+// Mask column and returns the canonical CIDR prefix
+// length ("/16"). The Mask column is host-byte-order;
+// we byte-swap so we count the high-order bits. A
+// non-contiguous mask returns an error so the route is
+// skipped (the kernel never writes a non-contiguous
+// IPv4 netmask in practice, so this guards future
+// regressions).
+func hexToPrefixLength(s string) (string, error) {
 	b, err := hex.DecodeString(s)
 	if err != nil || len(b) != 4 {
 		return "", err
 	}
-	return strconv.Itoa(int(b[3])) + "." + strconv.Itoa(int(b[2])) + "." + strconv.Itoa(int(b[1])) + "." + strconv.Itoa(int(b[0])), nil
+	mask := uint32(b[3])<<24 | uint32(b[2])<<16 | uint32(b[1])<<8 | uint32(b[0])
+	bits := 0
+	for mask != 0 {
+		if mask&1 == 0 && bits > 0 {
+			// Non-contiguous mask.
+			return "", errors.New("non-contiguous netmask")
+		}
+		if mask&1 == 1 {
+			bits++
+		}
+		mask >>= 1
+	}
+	return strconv.Itoa(bits), nil
 }
 
 func ifFlag(flags uint64, bit uint64, yes, no string) string {
