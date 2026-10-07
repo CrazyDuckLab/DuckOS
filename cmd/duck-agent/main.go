@@ -100,6 +100,20 @@ func main() {
 	if flag.NArg() != 0 || *allowedUID < 1 || *allowedUID > math.MaxUint32 || !model.ValidEnvironment(*environment) {
 		log.Fatal("an explicit non-root --allowed-uid and valid --environment are required")
 	}
+	// Bootstrap the shared IPC layout under /run/duckos-agent.
+	// The Agent is the canonical owner of /run/duckos-agent
+	// (RuntimeDirectory=duckos-agent on duck-agent.service is the
+	// ONLY declaration; the launchers wait on this unit and bind
+	// their sockets into the already-created dir). The wg-launcher
+	// needs /run/duckos-agent/secret to exist BEFORE systemd's
+	// namespace setup runs (ReadWritePaths= requires the path to
+	// exist at namespace setup time, not at first write). The
+	// frr-launcher.sock is a socket the launcher creates itself
+	// (listenUnix), so no bootstrap is needed for it. Mode 0750
+	// root:duckos matches the parent.
+	if err := agent.BootstrapRuntimeLayout(); err != nil {
+		log.Fatalf("bootstrap /run/duckos-agent IPC layout: %v", err)
+	}
 	listener, err := agent.Listen(*socket, uint32(*allowedUID))
 	if err != nil {
 		log.Fatal(err)
