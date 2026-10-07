@@ -209,11 +209,11 @@ func readRoutes() ([]Route, error) {
 			first = false
 			continue
 		}
-		dest, err := hexToIP(fields[1])
+		dest, err := hexToIPLE(fields[1])
 		if err != nil {
 			continue
 		}
-		gw, err := hexToIP(fields[2])
+		gw, err := hexToIPLE(fields[2])
 		if err != nil {
 			continue
 		}
@@ -239,19 +239,32 @@ func readRoutes() ([]Route, error) {
 }
 
 // hexToIP decodes a 4-byte /proc/net/route hex field
-// into a dotted-quad IPv4 string. The hex field is laid
-// out in little-endian byte order (the kernel writes the
-// route destination as the on-wire IPv4 with its octets
-// reversed); we therefore byte-swap before formatting so
-// the resulting string is the canonical CIDR form
-// ("172.18.0.0" not "0.0.18.172"). Without the swap, the
-// per-object RBAC filter rejects every real route (the
-// post-regex ValidateCIDRBody helper refuses '.' after
-// '/') and Owner-visible /api/v1/objects/network.route
-// returns the rbac_redacted rbac issue instead of the
-// real objects. This is the B-009 RBAC LIVE recovery
-// landed by the BETA.2 corrective round.
+// into a dotted-quad IPv4 string. The MASK hex field is
+// laid out in network byte order (big-endian); we just
+// format the bytes directly. This is what the kernel
+// writes for the Mask column.
 func hexToIP(s string) (string, error) {
+	b, err := hex.DecodeString(s)
+	if err != nil || len(b) != 4 {
+		return "", err
+	}
+	return strconv.Itoa(int(b[0])) + "." + strconv.Itoa(int(b[1])) + "." + strconv.Itoa(int(b[2])) + "." + strconv.Itoa(int(b[3])), nil
+}
+
+// hexToIPLE decodes the Destination / Gateway hex fields
+// of /proc/net/route. Those fields are written by the
+// kernel in little-endian byte order (the kernel writes
+// the on-wire IPv4 with its octets reversed); we
+// byte-swap before formatting so the resulting string is
+// the canonical CIDR form ("172.18.0.0" not "0.0.18.172").
+// Without the swap, the per-object RBAC filter rejects
+// every real route (the post-regex ValidateCIDRBody
+// helper refuses '.' after '/') and Owner-visible
+// /api/v1/objects/network.route returns the rbac_redacted
+// rbac issue instead of the real objects. This is the
+// B-009 RBAC LIVE recovery landed by the BETA.2
+// corrective round.
+func hexToIPLE(s string) (string, error) {
 	b, err := hex.DecodeString(s)
 	if err != nil || len(b) != 4 {
 		return "", err
