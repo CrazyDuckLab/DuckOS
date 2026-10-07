@@ -2,15 +2,32 @@
 Description=DuckOS privileged read-only system Agent (internal TEST build)
 Documentation=file:/opt/duckos/current/BUILD-INFO.json
 After=local-fs.target
-# The Agent starts the FRR child through the
-# duck-frr-launcher daemon. The daemon MUST be listening
-# on /run/duckos-agent/frr-launcher.sock before the
-# Agent's startup-time FRR init runs, otherwise the
-# Agent's first FRR dial returns ENOENT and the FRR
-# service is permanently marked unavailable until the
-# Agent is restarted.
-After=duck-frr-launcher.service
-Wants=duck-frr-launcher.service
+# Single-owner RuntimeDirectory model (BETA.2 B-006):
+# duck-agent.service is the canonical owner of
+# /run/duckos-agent. The FRR launcher and WG launcher
+# both wait on the Agent (After=duck-agent.service +
+# Wants=duck-agent.service on their units) so they bind
+# their sockets into the Agent's already-created dir.
+#
+# The Agent does NOT declare After=duck-frr-launcher.
+# The FRR runtime is built lazily in main()
+# (enableFRRService); it does NOT dial
+# /run/duckos-agent/frr-launcher.sock until the first
+# /api/v1/frr/* request lands. If the FRR launcher is
+# not yet up at that moment, the dial retries per the
+# frrHost policy (and the API returns 503 frr_unavailable
+# until the launcher becomes reachable). The launcher is
+# guaranteed to start after the Agent because of its
+# own After=duck-agent.service dependency, so the
+# first request after Agent boot will succeed once the
+# launcher's After= dependency resolves.
+#
+# This ordering avoids a hard startup-time cycle
+# (agent After= frr-launcher + frr-launcher After= agent
+# previously caused "Transaction order is cyclic" on
+# any restart that listed the units out of the natural
+# boot order, and it broke duck-api restart through the
+# shared After=/Wants= dependency graph).
 Before=duck-api.service
 StartLimitIntervalSec=60
 StartLimitBurst=5
