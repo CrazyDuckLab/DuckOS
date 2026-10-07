@@ -33,7 +33,20 @@ func (r Reference) valid() bool {
 		return false
 	}
 	switch r.Purpose {
-	case "wireguard-private", "wireguard-preshared", "subscription-token", "xray-credential", "netbird-setup", "tls-private":
+	case "wireguard-private", "wireguard-preshared", "subscription-token", "xray-credential", "netbird-setup", "tls-private",
+		// BETA.2 P065 typed vault binding for Xray TLS / REALITY.
+		// "tls-certificate" carries a PEM-encoded X.509 certificate
+		// for Xray Server.TLSCertRef. Distinct from "tls-private"
+		// so a cert and a key cannot be interchanged.
+		// "reality-private" carries the 32-byte X25519 private key
+		// for Xray Server.RealityKeyRef. Semantically distinct
+		// from "wireguard-private" (which also carries a 32-byte
+		// Curve25519 key) so an operator cannot bind a WireGuard
+	// identity into a REALITY server by accident.
+		// "reality-shortid" carries the 8-byte / 16-hex-char short
+	// ID for Xray Server.ShortIDRef. The bytes never travel in
+	// the protocol body.
+		"tls-certificate", "reality-private", "reality-shortid":
 		return true
 	default:
 		return false

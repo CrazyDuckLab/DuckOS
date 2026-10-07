@@ -102,6 +102,10 @@ var allowedPurposes = map[string]struct{}{
 	"xray-credential":     {},
 	"netbird-setup":       {},
 	"tls-private":         {},
+	// BETA.2 P065 typed vault binding for Xray TLS / REALITY.
+	"tls-certificate": {},
+	"reality-private": {},
+	"reality-shortid": {},
 }
 
 var opaqueIDPattern = pattern32Hex()

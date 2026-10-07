@@ -284,6 +284,35 @@ func TestVaultInvalidPurpose(t *testing.T) {
 	}
 }
 
+// TestVaultAcceptsXrayTLSPurposes locks in BETA.2 P065 typed
+// vault binding for Xray TLS / REALITY: each new purpose must
+// be accepted by the handler so the operator can store the
+// matching secret bytes through the public API.
+func TestVaultAcceptsXrayTLSPurposes(t *testing.T) {
+	src := newStubSource()
+	acc := stubAccess{Allowed: true, Role: identity.Owner, User: "alice"}
+	api := newAPI(t, src, acc)
+	for _, purpose := range []string{"tls-certificate", "reality-private", "reality-shortid"} {
+		id := random32Hex(t)
+		body := mustJSON(t, SecretPutRequest{
+			ID:      id,
+			Purpose: purpose,
+			Payload: base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{0xab}, 32)),
+		})
+		w, _ := doRequest(t, api, http.MethodPost, "/vault/v1/keys", "good", body)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("purpose %s: status %d body %s", purpose, w.Code, w.Body.String())
+		}
+		var resp SecretPutResponse
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("purpose %s: unmarshal: %v", purpose, err)
+		}
+		if resp.Purpose != purpose {
+			t.Fatalf("purpose %s: resp.Purpose = %s", purpose, resp.Purpose)
+		}
+	}
+}
+
 func TestVaultInvalidID(t *testing.T) {
 	src := newStubSource()
 	acc := stubAccess{Allowed: true, Role: identity.Owner, User: "alice"}

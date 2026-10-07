@@ -110,6 +110,42 @@ func TestSecretReferenceAndCiphertextAuthentication(t *testing.T) {
 	}
 }
 
+func TestSecretReferenceAcceptsXrayTLSPurposes(t *testing.T) {
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		t.Fatal(err)
+	}
+	for _, purpose := range []string{"tls-certificate", "reality-private", "reality-shortid"} {
+		ref := Reference{ID: strings.Repeat("a", 32), Revision: strings.Repeat("b", 32), KeyID: strings.Repeat("c", 32), Purpose: purpose}
+		plaintext := []byte("synthetic xray material for " + purpose)
+		raw, err := Seal(key, ref, plaintext)
+		if err != nil {
+			t.Fatalf("Seal(%s): %v", purpose, err)
+		}
+		secret, err := Open(key, ref, raw)
+		if err != nil {
+			t.Fatalf("Open(%s): %v", purpose, err)
+		}
+		if !bytes.Equal(secret.Reveal(), plaintext) {
+			t.Fatalf("%s: plaintext mismatch", purpose)
+		}
+		// Reference validation must accept the new purpose.
+		if !ref.valid() {
+			t.Fatalf("%s: Reference.valid() false", purpose)
+		}
+	}
+	// And the cross-purpose tamper check must still reject.
+	real := Reference{ID: strings.Repeat("a", 32), Revision: strings.Repeat("b", 32), KeyID: strings.Repeat("c", 32), Purpose: "reality-private"}
+	raw, err := Seal(key, real, []byte("reality key bytes"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tampered := Reference{ID: strings.Repeat("a", 32), Revision: strings.Repeat("b", 32), KeyID: strings.Repeat("c", 32), Purpose: "wireguard-private"}
+	if secret, err := Open(key, tampered, raw); err == nil || secret != nil {
+		t.Fatal("reality-private accepted as wireguard-private")
+	}
+}
+
 func TestSecretLimits(t *testing.T) {
 	key, ref := fixture(t)
 	for _, size := range []int{1, MaxSecretBytes} {
