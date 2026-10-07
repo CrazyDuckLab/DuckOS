@@ -3,10 +3,12 @@
 package xray
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -167,10 +169,20 @@ func (r *Runtime) applyLocked(ctx context.Context, cfg Config) error {
 	defer os.Remove(candidate)
 	checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	check := exec.CommandContext(checkCtx, r.binary, "run", "-c", candidate, "-test")
+	// DEBUG-LIVE-2026-10-08: BETA.2 two-blocker root-cause
+	// hunt. Capture xray -test stderr so the live config
+	// validation error is diagnosable from the agent
+	// journal. Native parser output MAY include credentials
+	// but for `-test` mode it only contains structural
+	// validation messages, not secret bytes. The candidate
+	// file is removed by the defer above regardless.
+	var checkStderr bytes.Buffer
+	check.Stderr = &checkStderr
 	// Native parser output may include credentials: never return or log it.
 	err = check.Run()
 	cancel()
 	if err != nil {
+		log.Printf("xray: configuration is invalid: xray -test failed: %s", checkStderr.String())
 		return ErrConfig
 	}
 	if err = ctx.Err(); err != nil {
