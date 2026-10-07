@@ -82,7 +82,12 @@ RuntimeDirectoryMode=0750
 # ownership and mode are the real access control surface;
 # granting world rx on the parent does not expose any data.
 RuntimeDirectory=frr
-RuntimeDirectoryMode=0751
+# RuntimeDirectoryMode applies to ALL RuntimeDirectory
+# entries declared on this unit. Use 0750 for duckos-agent
+# and frr both — the launcher binary reads /var/lib/frr
+# under its own capability drop; the runtime dir is
+# strictly IPC scaffolding.
+RuntimeDirectoryMode=0750
 # Preserve /run/duckos-agent across restarts so the
 # duck-frr-launcher daemon's Unix socket
 # (/run/duckos-agent/frr-launcher.sock) survives when
