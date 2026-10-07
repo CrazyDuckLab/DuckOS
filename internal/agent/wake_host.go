@@ -16,6 +16,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/CrazyDuckLab/DuckOS/internal/identity"
@@ -76,6 +77,12 @@ func (h *WakeHost) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			tail = tail[len(p):]
 			break
 		}
+	}
+	// Strip the leading "/" so the wake verb matches
+	// ("send" instead of "/send"). The Engine proxy
+	// preserves the original path semantics.
+	if strings.HasPrefix(tail, "/") {
+		tail = strings.TrimPrefix(tail, "/")
 	}
 	if r.Method == http.MethodPost && tail == "send" {
 		h.handleSend(w, r, src, acc)

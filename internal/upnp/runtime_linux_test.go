@@ -427,13 +427,27 @@ func TestRuntime_CloseStopsExpiry(t *testing.T) {
 	}
 }
 
-// 19. noopBackend is the safe default; AddMapping succeeds
-// without any firewall integration.
+// 19. noopBackend is the safe default; with no iface
+// trust registered, EnableNetwork refuses any non-empty
+// interface so the operator cannot accidentally start
+// listening on the WAN. With iface="" the AllowListen
+// check is bypassed and the manager store commits the
+// network — the nftables backend is what would normally
+// install the listener; the runtime never installs anything
+// on its own.
 func TestRuntime_NoopBackendSafeDefault(t *testing.T) {
 	rt := NewRuntime(nil, nil)
 	defer rt.Close()
-	if err := rt.EnableNetwork(Network{NetworkRef: "lan", Protocols: []Protocol{ProtoUPnP}, TTLSec: 60}, "eth1"); err != nil {
-		t.Fatal(err)
+
+	// iface != "" + noopBackend (no TrustIface registered)
+	// → runtime refuses. This is the SAFE default.
+	if err := rt.EnableNetwork(Network{NetworkRef: "lan", Protocols: []Protocol{ProtoUPnP}, TTLSec: 60}, "eth1"); err == nil {
+		t.Fatal("noop backend without TrustIface must refuse non-empty iface")
+	}
+
+	// iface == "" + noopBackend → check is bypassed.
+	if err := rt.EnableNetwork(Network{NetworkRef: "lan", Protocols: []Protocol{ProtoUPnP}, TTLSec: 60}, ""); err != nil {
+		t.Fatalf("noop backend must accept empty iface (no listener): %v", err)
 	}
 	m := Mapping{ID: "m-1", NetworkRef: "lan", Protocol: ProtoUPnP, ClientIP: "192.168.1.10", ExternalPort: 5000, InternalPort: 5000, InternalHost: "192.168.1.10"}
 	if err := rt.AddMapping(m, ""); err != nil {
@@ -575,11 +589,16 @@ func TestWanRefused_Exported(t *testing.T) {
 }
 
 // 27. runtime Stats with nil Manager.
+//
+// Manager.Mappings() is documented to return a non-nil
+// empty slice (the sorted-by-id invariant requires a
+// stable length-0 value), so this assertion checks length
+// instead of nil-comparison.
 func TestRuntime_NilManagerSafe(t *testing.T) {
 	rt := NewRuntime(nil, nil)
 	defer rt.Close()
-	if got := rt.Mappings(); got != nil {
-		t.Fatalf("got=%v", got)
+	if got := rt.Mappings(); len(got) != 0 {
+		t.Fatalf("got=%v want empty", got)
 	}
 }
 

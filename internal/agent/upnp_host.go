@@ -117,6 +117,13 @@ func (h *UPnPHost) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			tail = tail[len(p):]
 		}
 	}
+	// Strip the leading "/" so the verb branches resolve
+	// ("state", "networks/<ref>", "mappings/<id>"). The
+	// Engine proxy preserves the original /audit/ prefix
+	// upstream.
+	if strings.HasPrefix(tail, "/") {
+		tail = strings.TrimPrefix(tail, "/")
+	}
 	switch r.Method {
 	case http.MethodGet:
 		if tail == "state" {

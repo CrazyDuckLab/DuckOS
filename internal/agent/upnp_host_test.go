@@ -25,11 +25,13 @@ import (
 )
 
 type fakeUPnPSource struct {
-	mu       sync.Mutex
-	networks []upnp.Network
-	mappings []upnp.Mapping
-	revoked  []string
-	disabled []string
+	mu        sync.Mutex
+	networks  []upnp.Network
+	mappings  []upnp.Mapping
+	revoked   []string
+	disabled  []string
+	trusted   []string
+	untrusted []string
 }
 
 func (f *fakeUPnPSource) EnableNetwork(net upnp.Network, _ string) error {
@@ -70,6 +72,21 @@ func (f *fakeUPnPSource) Stats() upnp.RuntimeStats {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return upnp.RuntimeStats{Networks: len(f.networks), Mappings: len(f.mappings)}
+}
+
+// TrustIface / UntrustIface are part of UPnPSource
+// since BETA.2 commit ed9f94f (B-008 wiring). The test
+// stub records calls so tests that exercise the agent's
+// registry-backed Enable/Disable path can assert.
+func (f *fakeUPnPSource) TrustIface(iface string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.trusted = append(f.trusted, iface)
+}
+func (f *fakeUPnPSource) UntrustIface(iface string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.untrusted = append(f.untrusted, iface)
 }
 
 type fakeUPnPAccess struct {
