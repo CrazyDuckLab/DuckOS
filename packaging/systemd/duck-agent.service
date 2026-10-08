@@ -121,7 +121,7 @@ ProtectSystem=strict
 # ProtectSystem=strict applies; it does not grant DAC
 # bypass. The Agent must still own the parent paths
 # (UID 0 + owner-rwx) to write into them.
-ReadWritePaths=/run/duckos-agent /run/frr /var/lib/frr /var/lib/duckos-agent /var/lib/duckos-agent/network /var/lib/duckos-agent/ztp /var/lib/duckos-agent/wireguard /var/lib/duckos-agent/xray /var/lib/duckos-agent/frr /var/lib/duckos-agent/qos /var/lib/duckos-agent/vault /var/lib/duckos-agent/vault/records /etc/systemd/network /etc/frr
+ReadWritePaths=/run/duckos-agent /run/frr /var/lib/frr /var/lib/duckos-agent /var/lib/duckos-agent/network /var/lib/duckos-agent/ztp /var/lib/duckos-agent/wireguard /var/lib/duckos-agent/xray /var/lib/duckos-agent/frr /var/lib/duckos-agent/qos /var/lib/duckos-agent/vault /var/lib/duckos-agent/vault/records /etc/systemd/network /etc/frr /etc/wireguard
 PrivateTmp=yes
 PrivateDevices=yes
 ProtectKernelTunables=yes

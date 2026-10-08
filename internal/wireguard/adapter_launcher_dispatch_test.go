@@ -187,3 +187,30 @@ func TestAdapterApplyServerLauncherErrorPropagates(t *testing.T) {
 		t.Fatal("launcher error was not propagated")
 	}
 }
+
+// TestIsExistsAcceptsBothIproute2ConflictWordings pins the
+// launcher-path idempotency guarantee: when the agent re-applies
+// a WireGuard server whose address is already on the kernel
+// interface, AddrAdd must be treated as a no-op so the apply
+// step succeeds (idempotent re-apply after restart). iproute2
+// emits the conflict in two wordings across versions; both
+// must be accepted.
+func TestIsExistsAcceptsBothIproute2ConflictWordings(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, true},
+		{"old wording", errors.New("RTNETLINK answers: File exists"), true},
+		{"new wording", errors.New("Error: ipv4: Address already assigned."), true},
+		{"unrelated", errors.New("some other error"), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isExists(tc.err); got != tc.want {
+				t.Fatalf("isExists(%v) = %v, want %v", tc.err, got, tc.want)
+			}
+		})
+	}
+}

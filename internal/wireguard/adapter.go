@@ -495,14 +495,17 @@ func isNoPeer(err error) bool {
 }
 
 func isExists(err error) bool {
-	// Linux ip link returns exit code 2 with "RTNETLINK answers: File exists".
-	// The bridge here uses a string match; the runner abstracts the error
-	// type, so we are conservative and treat only the explicit "exists"
-	// hint as a no-op.
+	// Linux iproute2 returns the same RTNETLINK conflict in two
+	// wordings depending on the version. We accept both so the
+	// launcher path stays portable across older and newer
+	// iproute2 builds. The runner abstracts the error type, so
+	// we are conservative and treat only the explicit conflict
+	// hints as a no-op.
 	if err == nil {
 		return true
 	}
-	return strings.Contains(err.Error(), "File exists")
+	msg := err.Error()
+	return strings.Contains(msg, "File exists") || strings.Contains(msg, "Address already assigned")
 }
 
 func isNoDevice(err error) bool {
