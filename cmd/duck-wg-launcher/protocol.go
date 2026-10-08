@@ -164,9 +164,18 @@ type WGPeer struct {
 // The function is intentionally pure: it does not
 // touch the filesystem or run exec. The caller
 // supplies the parsed Op to the exec layer.
+//
+// Field splitting respects "double-quoted" spans so
+// a peer= value can carry its own k=v tokens (which
+// contain spaces and commas) without escaping. The
+// quotes are stripped from the value before the key
+// is matched.
 func ParseOp(line string) (Op, error) {
 	var op Op
-	fields := strings.Fields(line)
+	fields, err := splitFields(line)
+	if err != nil {
+		return op, err
+	}
 	if len(fields) == 0 {
 		return op, errors.New("empty op")
 	}
@@ -203,6 +212,18 @@ func ParseOp(line string) (Op, error) {
 			op.ReplacePeers = true
 		case "public_only":
 			op.PublicOnly = true
+		case "peer":
+			// A WG_SET op carries its peer list as
+			// one peer= field per [Peer] block. The
+			// value is a self-contained k=v list
+			// passed through ParsePeer so the
+			// protocol layer keeps a single
+			// validation gate for peer syntax.
+			peer, err := ParsePeer(val)
+			if err != nil {
+				return op, fmt.Errorf("peer %q: %w", val, err)
+			}
+			op.Peers = append(op.Peers, peer)
 		default:
 			return op, fmt.Errorf("unknown key: %q", key)
 		}
@@ -280,7 +301,10 @@ func (o Op) Validate() error {
 // "endpoint=..." field that is actually a script.
 func ParsePeer(line string) (WGPeer, error) {
 	var p WGPeer
-	fields := strings.Fields(line)
+	fields, err := splitFields(line)
+	if err != nil {
+		return p, err
+	}
 	for _, f := range fields {
 		eq := strings.IndexByte(f, '=')
 		if eq < 0 {
@@ -399,4 +423,46 @@ func RenderSetConf(ifname string, listenPort int, privateKeyFile string, peers [
 // tests. It is not used by the wire protocol.
 func EncodeOps(list []Op) ([]byte, error) {
 	return json.MarshalIndent(list, "", "  ")
+}
+
+// splitFields is a quote-aware field splitter for the
+// launcher's k=v protocol. It treats whitespace
+// (space / tab) as a separator except inside a
+// double-quoted span, where it is preserved. A bare
+// backslash is not interpreted; only the quote rules
+// matter because the launcher's protocol does not use
+// escapes. The returned strings have the surrounding
+// quotes stripped; any embedded quote terminates the
+// span. This is sufficient for the WG_SET peer= field,
+// which contains the same k=v syntax ParsePeer
+// consumes (and no quote characters).
+func splitFields(line string) ([]string, error) {
+	var out []string
+	var cur strings.Builder
+	inQuotes := false
+	hadAny := false
+	for i := 0; i < len(line); i++ {
+		b := line[i]
+		switch {
+		case b == '"':
+			inQuotes = !inQuotes
+			hadAny = true
+		case (b == ' ' || b == '\t') && !inQuotes:
+			if cur.Len() > 0 || hadAny {
+				out = append(out, cur.String())
+				cur.Reset()
+				hadAny = false
+			}
+		default:
+			cur.WriteByte(b)
+			hadAny = true
+		}
+	}
+	if inQuotes {
+		return nil, errors.New("unterminated quoted value")
+	}
+	if cur.Len() > 0 || hadAny {
+		out = append(out, cur.String())
+	}
+	return out, nil
 }

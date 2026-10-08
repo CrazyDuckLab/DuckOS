@@ -117,6 +117,47 @@ func TestParseOp_WGSet_AcceptsValidConf(t *testing.T) {
 	}
 }
 
+// TestParseOp_WGSet_AcceptsPeerField covers the agent's
+// per-peer payload: the launcher receives each peer as a
+// peer="..." field on the same WG_SET op, so the
+// kernel sees a complete configuration atomically.
+func TestParseOp_WGSet_AcceptsPeerField(t *testing.T) {
+	op, err := ParseOp("op=WG_SET ifname=wg-edge1 listen_port=51820 " +
+		"private_key_file=/run/duckos-agent/secret/wg-edge1.key replace_peers=true " +
+		"peer=\"public=kZqPLkFBVCjoSTRcC3ZFGpVSPlc5WoqdH7jLfvL1FW0= endpoint=peer.example:51820 allowed_ips=10.0.0.2/32 keepalive=25\"")
+	if err != nil {
+		t.Fatalf("ParseOp: %v", err)
+	}
+	if len(op.Peers) != 1 {
+		t.Fatalf("got %d peers, want 1", len(op.Peers))
+	}
+	if op.Peers[0].PublicKey != "kZqPLkFBVCjoSTRcC3ZFGpVSPlc5WoqdH7jLfvL1FW0=" {
+		t.Fatalf("peer public key = %q", op.Peers[0].PublicKey)
+	}
+	if op.Peers[0].Endpoint != "peer.example:51820" {
+		t.Fatalf("peer endpoint = %q", op.Peers[0].Endpoint)
+	}
+	if len(op.Peers[0].AllowedIPs) != 1 {
+		t.Fatalf("peer allowed-ips count = %d", len(op.Peers[0].AllowedIPs))
+	}
+	if !op.ReplacePeers {
+		t.Fatal("replace_peers flag not set")
+	}
+}
+
+// TestParseOp_WGSet_RejectsMalformedPeer pins the
+// negative path: a peer= field that fails ParsePeer is
+// surfaced verbatim so the agent returns 422 with the
+// typed envelope, not a silent 200.
+func TestParseOp_WGSet_RejectsMalformedPeer(t *testing.T) {
+	_, err := ParseOp("op=WG_SET ifname=wg-edge1 listen_port=51820 " +
+		"private_key_file=/run/duckos-agent/secret/wg-edge1.key " +
+		"peer=\"public=not-a-real-key\"")
+	if err == nil {
+		t.Fatal("malformed peer must be rejected")
+	}
+}
+
 // TestParseOp_WGSet_RejectsListenPortOutOfRange covers
 // the UDP port gate. 0 is reserved (kernel "auto-pick")
 // and rejected; > 65535 is rejected; out-of-range non-

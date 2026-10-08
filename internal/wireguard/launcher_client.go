@@ -153,7 +153,9 @@ func (c *LauncherClient) LinkDown(ifname string) error {
 //
 // listenPort may be 0 to mean "do not bind"; privateKey
 // may be empty to mean "do not overwrite the existing
-// key".
+// key". Peers travel as peer= fields on the same
+// WG_SET op so the launcher's protocol parser can
+// validate the full op atomically.
 func (c *LauncherClient) SetConf(ifname string, listenPort int, privateKey []byte, peers []PeerConf) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -176,32 +178,32 @@ func (c *LauncherClient) SetConf(ifname string, listenPort int, privateKey []byt
 	if keyFile != "" {
 		op += " private_key_file=" + keyFile
 	}
-	if err := c.sendOpLocked(op); err != nil {
-		return err
-	}
-	for _, p := range peers {
-		pline := "OP " + peerLine("public="+p.PublicKey)
-		if p.Endpoint != "" {
-			pline += " endpoint=" + p.Endpoint
-		}
-		if len(p.AllowedIPs) > 0 {
-			var cidr string
-			for i, a := range p.AllowedIPs {
-				if i > 0 {
-					cidr += ","
-				}
-				cidr += a.String()
+	if len(peers) > 0 {
+		op += " replace_peers=true"
+		for _, p := range peers {
+			var pkv strings.Builder
+			pkv.WriteString("public=")
+			pkv.WriteString(p.PublicKey)
+			if p.Endpoint != "" {
+				pkv.WriteString(" endpoint=")
+				pkv.WriteString(p.Endpoint)
 			}
-			pline += " allowed_ips=" + cidr
-		}
-		if p.PersistentKeepalive > 0 {
-			pline += " keepalive=" + fmt.Sprintf("%d", p.PersistentKeepalive)
-		}
-		if err := c.sendOpLocked(pline); err != nil {
-			return err
+			if len(p.AllowedIPs) > 0 {
+				pkv.WriteString(" allowed_ips=")
+				for i, a := range p.AllowedIPs {
+					if i > 0 {
+						pkv.WriteString(",")
+					}
+					pkv.WriteString(a.String())
+				}
+			}
+			if p.PersistentKeepalive > 0 {
+				fmt.Fprintf(&pkv, " keepalive=%d", p.PersistentKeepalive)
+			}
+			op += " peer=\"" + pkv.String() + "\""
 		}
 	}
-	return nil
+	return c.sendOpLocked(op)
 }
 
 // PeerConf is the agent-side peer config the runner
