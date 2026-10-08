@@ -19,7 +19,19 @@ After=syslog.target network-online.target
 After=duck-network-recover.service
 After=duck-agent.service
 Wants=duck-agent.service
-Conflicts=wg-quick@.service wg-quick@*.service
+# B-005 / B-009: a previous Conflicts= line that listed
+# "wg-quick@.service" + "wg-quick@*.service" (or "wg-quick@*"
+# alone) was rejected by systemd as "Invalid argument" at
+# parse time. In some lab installs that caused the unit to
+# be silently dropped from the multi-user.target Wants
+# graph and the launcher never started on reboot. There is
+# no valid Conflicts= value against the wg-quick@.service
+# *template* (systemd does not accept template-name globs in
+# Conflicts=). The correct enforcement is for the installer
+# to `systemctl mask wg-quick@.service` (and the frr-launcher
+# already follows that pattern for frr.service et al.).
+# This unit therefore drops Conflicts= entirely and the
+# installer takes care of the mask.
 
 [Service]
 Type=simple

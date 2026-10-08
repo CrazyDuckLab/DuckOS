@@ -569,6 +569,28 @@ duckos_disable_native_frr() {
 }
 duckos_disable_native_frr || true
 
+# B-009 (BETA.2): the duck-wg-launcher unit cannot use
+# Conflicts= against the wg-quick@.service template (systemd
+# rejects template-name globs in Conflicts= with "Invalid
+# argument"). The proper belt-and-braces enforcement is to
+# mask the wg-quick template so a future wireguard-tools
+# package postinst cannot silently resurrect a competing
+# WireGuard runtime against the launcher. This mirrors the
+# duckos_disable_native_frr pattern above and uses the same
+# idempotent `|| true` so a missing unit is a no-op.
+duckos_mask_native_wg_quick() {
+  local unit rc=0
+  for unit in wg-quick@.service; do
+    if systemctl list-unit-files "${unit}" --no-legend 2>/dev/null | awk '{print $1}' | grep -qx "${unit}"; then
+      if ! systemctl is-enabled "${unit}" 2>/dev/null | grep -q mask; then
+        systemctl mask "${unit}" >/dev/null 2>&1 || rc=$?
+      fi
+    fi
+  done
+  return $rc
+}
+duckos_mask_native_wg_quick || true
+
 # Provision the production network enrollment from real host state.
 # Reads physical NIC MACs via `ip -j link show`, filters out loopback and
 # qualification fixtures (anything starting with ducklab-), and writes a
