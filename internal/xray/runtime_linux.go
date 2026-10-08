@@ -3,10 +3,12 @@
 package xray
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -167,10 +169,16 @@ func (r *Runtime) applyLocked(ctx context.Context, cfg Config) error {
 	defer os.Remove(candidate)
 	checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	check := exec.CommandContext(checkCtx, r.binary, "run", "-c", candidate, "-test")
-	// Native parser output may include credentials: never return or log it.
+	// DEBUG-LIVE-2026-10-08 round 2: capture xray -test
+	// output for live diagnostics. Re-removed after the
+	// two-blocker root-cause is closed.
+	var checkOut, checkStderr bytes.Buffer
+	check.Stdout = &checkOut
+	check.Stderr = &checkStderr
 	err = check.Run()
 	cancel()
 	if err != nil {
+		log.Printf("xray: configuration is invalid: xray -test failed: stdout=%s stderr=%s", checkOut.String(), checkStderr.String())
 		return ErrConfig
 	}
 	if err = ctx.Err(); err != nil {
