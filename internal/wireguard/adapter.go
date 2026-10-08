@@ -96,7 +96,16 @@ type Filesystem interface {
 // interface up, applies the listen port, replaces the peer set and
 // persists the rendered wg-quick config so the daemon can restore
 // the tunnel on reboot. The function never logs key bytes.
+//
+// B-005 (BETA.2): when a.Typer is set (production wiring), the
+// adapter dispatches to ApplyServerLauncher so the kernel operations
+// run in duck-wg-launcher with CAP_NET_ADMIN. ApplyServer (the
+// Runner-based path) is kept for tests that wire a fakeRunner; the
+// production code path goes through the launcher IPC.
 func (a *KernelAdapter) ApplyServer(ctx context.Context, server Server) error {
+	if a.Typer != nil {
+		return a.ApplyServerLauncher(ctx, server)
+	}
 	if err := server.Validate(); err != nil {
 		return err
 	}
@@ -304,7 +313,14 @@ func (a *KernelAdapter) refreshPersistedConfig(ctx context.Context, server Serve
 
 // RemoveServer tears down the WireGuard interface and removes the
 // persisted configuration.
+//
+// B-005 (BETA.2): when a.Typer is set (production wiring), the
+// adapter dispatches to RemoveServerLauncher so the kernel operation
+// runs in duck-wg-launcher with CAP_NET_ADMIN.
 func (a *KernelAdapter) RemoveServer(ctx context.Context, server Server) error {
+	if a.Typer != nil {
+		return a.RemoveServerLauncher(ctx, server)
+	}
 	if a.Runner == nil || a.Files == nil {
 		return errors.New("wireguard kernel adapter requires runner and filesystem")
 	}
