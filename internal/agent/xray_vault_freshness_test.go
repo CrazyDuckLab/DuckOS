@@ -146,7 +146,7 @@ func TestXrayVaultReferenceFreshnessPostStartup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RenderRuntimeConfig: %v", err)
 	}
-	mcfg, err := xray.Materialize(context.Background(), rendered, stage, []xray.Server{srv}, resolver)
+	mcfg, err := xray.Materialize(context.Background(), rendered, stage, []xray.Server{srv}, users, resolver)
 	if err != nil {
 		t.Fatalf("Materialize after post-startup Put: %v", err)
 	}
@@ -245,7 +245,7 @@ func TestXrayVaultReferenceFreshnessTLS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
-	mcfg, err := xray.Materialize(context.Background(), rendered, stage, []xray.Server{srv}, resolver)
+	mcfg, err := xray.Materialize(context.Background(), rendered, stage, []xray.Server{srv}, users, resolver)
 	if err != nil {
 		t.Fatalf("Materialize TLS: %v", err)
 	}
