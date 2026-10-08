@@ -81,9 +81,14 @@ func (r xrayVaultResolver) Resolve(ctx context.Context, ref xray.KeyRef) ([]byte
 // reuse is structurally impossible: a wireguard-private
 // record is rejected here, even though the lifecycle
 // happily enumerates it.
+//
+// xray-credential is consumed by the User path
+// (internal/xray/server.go User.Credential). The
+// materialiser resolves it at apply time and inlines
+// the resulting UUID into settings.clients[].id.
 func xrayVaultKeyAllowed(purpose string) bool {
 	switch purpose {
-	case "tls-private", "tls-certificate", "reality-private", "reality-shortid":
+	case "tls-private", "tls-certificate", "reality-private", "reality-shortid", "xray-credential":
 		return true
 	default:
 		return false

@@ -27,6 +27,7 @@
 package xray
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/hex"
@@ -79,7 +80,7 @@ type Resolver interface {
 // materialisation (security=none only); it is rejected
 // with a typed error when any inbound has tls or reality
 // security so the runtime fails fast.
-func Materialize(ctx context.Context, cfg Config, stageDir string, servers []Server, resolver Resolver) (Config, error) {
+func Materialize(ctx context.Context, cfg Config, stageDir string, servers []Server, users []User, resolver Resolver) (Config, error) {
 	if stageDir == "" {
 		return cfg, errors.New("xray: stage dir is required for TLS materialization")
 	}
@@ -87,6 +88,17 @@ func Materialize(ctx context.Context, cfg Config, stageDir string, servers []Ser
 	byName := make(map[string]Server, len(servers))
 	for _, s := range servers {
 		byName[s.Name] = s
+	}
+	// Build credential-keyid -> KeyRef lookup so the
+	// materialiser can resolve placeholder client.id
+	// strings emitted by the renderer when a user has
+	// only a Credential vault ref (no inline UUID).
+	credByKeyID := make(map[string]KeyRef)
+	for _, u := range users {
+		if u.Credential == nil {
+			continue
+		}
+		credByKeyID[u.Credential.KeyID] = *u.Credential
 	}
 	// Decide whether a resolver is required at all.
 	requiresResolver := false
@@ -176,8 +188,132 @@ func Materialize(ctx context.Context, cfg Config, stageDir string, servers []Ser
 			}
 			cfg.Inbounds[i] = inlined
 		}
+		// User Credential substitution: a user may carry
+		// a Credential vault ref (purpose "xray-credential")
+		// instead of an inline UUID. xray(8) refuses to
+		// start with an empty settings.clients[].id, so
+		// the renderer emits a placeholder string and the
+		// materialiser resolves the corresponding KeyRef
+		// at apply time and inlines the canonical UUID.
+		// The pass runs after the security switch so
+		// credentials are substituted even for security=none
+		// or security=tls inbounds.
+		if hasCredentialPlaceholder(in) {
+			if err := substituteCredentialsOnInbound(&cfg.Inbounds[i], credByKeyID, resolver, ctx); err != nil {
+				return cfg, err
+			}
+		}
 	}
 	return cfg, nil
+}
+
+// hasCredentialPlaceholder reports whether the inbound
+// contains any settings.clients[].id that still carries
+// the credential placeholder string. The placeholder is
+// JSON-escaped by the renderer (`<` -> `\u003c`, `>` ->
+// `\u003e`); we search for the escaped form so the
+// check survives JSON marshalling.
+func hasCredentialPlaceholder(in Inbound) bool {
+	if len(in.Settings) == 0 {
+		return false
+	}
+	// The rendered placeholder is the literal
+	// "<resolved at apply time; see vault record " in
+	// the in-memory model, but JSON marshals it to the
+	// escaped form. Match the escaped form to avoid a
+	// re-marshal of the entire Settings.
+	return bytes.Contains(in.Settings, []byte(jsonPlaceholderMarker))
+}
+
+// jsonPlaceholderMarker is the JSON-escaped form of
+// realityMarker, used to scan the marshalled Settings
+// JSON for placeholder-bearing client.id values.
+const jsonPlaceholderMarker = "\\u003cresolved at apply time; see vault record "
+
+// substituteCredentialsOnInbound walks the inbound's
+// settings.clients[] and substitutes every
+// placeholder client.id (form: "<resolved at apply
+// time; see vault record <credKeyID>>") with the
+// resolved UUID bytes for the matching credential
+// KeyRef. The placeholder's last token is the vault
+// KeyID so the right KeyRef is selected even when
+// multiple users carry distinct credentials.
+func substituteCredentialsOnInbound(in *Inbound, credByKeyID map[string]KeyRef, resolver Resolver, ctx context.Context) error {
+	if len(in.Settings) == 0 {
+		return nil
+	}
+	var settings map[string]any
+	if err := json.Unmarshal(in.Settings, &settings); err != nil {
+		return fmt.Errorf("decode settings: %w", err)
+	}
+	clientsRaw, ok := settings["clients"]
+	if !ok {
+		return nil
+	}
+	clients, ok := clientsRaw.([]any)
+	if !ok {
+		return nil
+	}
+	changed := false
+	for i, e := range clients {
+		entry, ok := e.(map[string]any)
+		if !ok {
+			continue
+		}
+		v, ok := entry["id"].(string)
+		if !ok {
+			continue
+		}
+		credKeyID, isPlaceholder := parseCredentialPlaceholder(v)
+		if !isPlaceholder {
+			continue
+		}
+		cred, ok := credByKeyID[credKeyID]
+		if !ok {
+			return fmt.Errorf("xray: substitute credentials: no user with credential KeyID %s", credKeyID)
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		uuid, err := resolver.Resolve(ctx, cred)
+		if err != nil {
+			return fmt.Errorf("xray: resolve credential: %w", err)
+		}
+		entry["id"] = strings.TrimSpace(string(uuid))
+		clients[i] = entry
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+	settings["clients"] = clients
+	encoded, err := json.Marshal(settings)
+	if err != nil {
+		return fmt.Errorf("encode settings: %w", err)
+	}
+	in.Settings = encoded
+	return nil
+}
+
+// parseCredentialPlaceholder extracts the vault KeyID
+// from a settings.clients[].id placeholder string and
+// reports whether the string was a placeholder. The
+// format mirrors substituteCredentialFromValues: the
+// string starts with realityMarker and ends with ">".
+func parseCredentialPlaceholder(s string) (string, bool) {
+	return parsePlaceholder(s)
+}
+
+func parsePlaceholder(s string) (string, bool) {
+	const trailing = ">"
+	if !strings.HasPrefix(s, realityMarker) {
+		return "", false
+	}
+	if !strings.HasSuffix(s, trailing) {
+		return "", false
+	}
+	body := strings.TrimSuffix(strings.TrimPrefix(s, realityMarker), trailing)
+	return body, true
 }
 
 // realityMarker is the substring the renderer emits as
@@ -189,6 +325,20 @@ func Materialize(ctx context.Context, cfg Config, stageDir string, servers []Ser
 // raw form starts with realityMarker and whose suffix
 // matches the given key id with the actual bytes.
 const realityMarker = "<resolved at apply time; see vault record "
+
+// CredentialPlaceholder returns the placeholder string the
+// renderer emits in settings.clients[].id when a user has
+// a Credential vault ref but no inline UUID. The
+// materialiser walks the inbound's settings.clients tree
+// and replaces the matching placeholder with the resolved
+// UUID bytes (a UTF-8 string of canonical
+// 8-4-4-4-12 hex form). The placeholder's last token is
+// the vault KeyID of the user's Credential ref so that two
+// users with two distinct xray-credential records do not
+// collide at substitution time.
+func CredentialPlaceholder(credKeyID string) string {
+	return realityMarker + credKeyID + ">"
+}
 
 // substituteRealityFromValues walks an inbound's
 // streamSettings.realitySettings and replaces the
@@ -265,4 +415,57 @@ func realityMatches(s, keyID string) bool {
 	}
 	body := strings.TrimSuffix(strings.TrimPrefix(s, realityMarker), trailing)
 	return body == keyID
+}
+
+// substituteCredentialFromValues walks the inbound's
+// settings.clients tree and replaces any settings.clients[i].id
+// whose value is the placeholder emitted by the renderer
+// for a user with a Credential vault ref (no inline UUID).
+// The placeholder carries the vault KeyID of the user's
+// Credential ref; the resolved value is the inlined
+// canonical UUID string the materialiser fetched from
+// the vault at apply time.
+//
+// xray(8) refuses to start with an empty
+// settings.clients[].id, so the substitution is the
+// gate between "user has only a credential ref" and
+// "xray accepts the rendered config".
+func substituteCredentialFromValues(in *Inbound, credKeyID string, uuid []byte) (Inbound, error) {
+	if len(in.Settings) == 0 {
+		return *in, nil
+	}
+	var settings map[string]any
+	if err := json.Unmarshal(in.Settings, &settings); err != nil {
+		return Inbound{}, fmt.Errorf("decode settings: %w", err)
+	}
+	clientsRaw, ok := settings["clients"]
+	if !ok {
+		return *in, nil
+	}
+	clients, ok := clientsRaw.([]any)
+	if !ok {
+		return *in, nil
+	}
+	uuidStr := strings.TrimSpace(string(uuid))
+	for i, e := range clients {
+		entry, ok := e.(map[string]any)
+		if !ok {
+			continue
+		}
+		v, ok := entry["id"].(string)
+		if !ok {
+			continue
+		}
+		if realityMatches(v, credKeyID) {
+			entry["id"] = uuidStr
+			clients[i] = entry
+		}
+	}
+	settings["clients"] = clients
+	encoded, err := json.Marshal(settings)
+	if err != nil {
+		return Inbound{}, fmt.Errorf("encode settings: %w", err)
+	}
+	in.Settings = encoded
+	return *in, nil
 }

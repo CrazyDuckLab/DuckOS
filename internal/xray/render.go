@@ -172,7 +172,22 @@ func buildProtocolSettings(server Server, users []User) (json.RawMessage, error)
 		// "please add/set 'decryption':'none'".
 		clients := []map[string]any{}
 		for _, u := range users {
-			entry := map[string]any{"id": u.UUID, "level": 0}
+			// A user may carry a Credential vault ref
+			// (purpose "xray-credential") instead of an
+			// inline UUID. xray(8) refuses to start with
+			// an empty settings.clients[].id, so the
+			// renderer emits a placeholder of the form
+			// "<resolved at apply time; see vault record
+			// <Credential.KeyID>>" and the materialiser
+			// substitutes the resolved UUID bytes at
+			// apply time. The placeholder carries the
+			// vault KeyID so two users with two distinct
+			// xray-credential records do not collide.
+			id := u.UUID
+			if id == "" && u.Credential != nil {
+				id = CredentialPlaceholder(u.Credential.KeyID)
+			}
+			entry := map[string]any{"id": id, "level": 0}
 			if u.Email != "" {
 				entry["email"] = u.Email
 			}

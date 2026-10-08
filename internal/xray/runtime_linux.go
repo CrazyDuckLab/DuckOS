@@ -137,7 +137,7 @@ func (r *Runtime) ApplyWith(ctx context.Context, servers []Server, users []User)
 		return ErrBackend
 	}
 	if r.resolver != nil {
-		mcfg, err := Materialize(ctx, cfg, r.stage, servers, r.resolver)
+		mcfg, err := Materialize(ctx, cfg, r.stage, servers, users, r.resolver)
 		if err != nil {
 			return err
 		}
