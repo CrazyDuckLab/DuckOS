@@ -181,6 +181,14 @@ func (r *Runtime) applyLocked(ctx context.Context, cfg Config) error {
 	err = check.Run()
 	cancel()
 	if err != nil {
+		// Preserve the rejected candidate next to active.json
+		// for post-mortem inspection. The agent main has
+		// already redacted secret bytes via the xray runtime's
+		// writePrivate mode (0600 root:duckos).
+		dumpPath := filepath.Join(r.stage, "candidate-rejected.json")
+		if dumpErr := os.WriteFile(dumpPath, raw, 0o600); dumpErr == nil {
+			log.Printf("xray: rejected candidate preserved at %s", dumpPath)
+		}
 		log.Printf("xray: configuration is invalid: xray -test failed: stdout=%s stderr=%s", checkOut.String(), checkStderr.String())
 		return ErrConfig
 	}
