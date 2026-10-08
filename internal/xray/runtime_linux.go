@@ -3,12 +3,10 @@
 package xray
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -169,27 +167,10 @@ func (r *Runtime) applyLocked(ctx context.Context, cfg Config) error {
 	defer os.Remove(candidate)
 	checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	check := exec.CommandContext(checkCtx, r.binary, "run", "-c", candidate, "-test")
-	// DEBUG-LIVE-2026-10-08: BETA.2 two-blocker root-cause
-	// hunt. Capture xray -test stdout+stderr so the live
-	// config validation error is diagnosable from the
-	// agent journal. xray writes its parser output to
-	// stdout when -test fails; stderr is silent.
-	var checkOut, checkStderr bytes.Buffer
-	check.Stdout = &checkOut
-	check.Stderr = &checkStderr
 	// Native parser output may include credentials: never return or log it.
 	err = check.Run()
 	cancel()
 	if err != nil {
-		// Preserve the rejected candidate next to active.json
-		// for post-mortem inspection. The agent main has
-		// already redacted secret bytes via the xray runtime's
-		// writePrivate mode (0600 root:duckos).
-		dumpPath := filepath.Join(r.stage, "candidate-rejected.json")
-		if dumpErr := os.WriteFile(dumpPath, raw, 0o600); dumpErr == nil {
-			log.Printf("xray: rejected candidate preserved at %s", dumpPath)
-		}
-		log.Printf("xray: configuration is invalid: xray -test failed: stdout=%s stderr=%s", checkOut.String(), checkStderr.String())
 		return ErrConfig
 	}
 	if err = ctx.Err(); err != nil {

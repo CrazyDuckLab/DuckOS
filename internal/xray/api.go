@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -272,13 +271,6 @@ func (a *API) serveUsers(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := a.mutateCatalog(r.Context(), func() error { return a.Catalog.UpsertUser(r.Context(), user) }); err != nil {
-			// DEBUG-LIVE-2026-10-08: BETA.2 two-blocker root-cause
-			// hunt. Print the underlying mutateCatalog error so
-			// live materialization failures are diagnosable from
-			// the agent journal. Remove once the live xray E2E
-			// completes without the "Xray catalog rejected"
-			// generic error masking the real cause.
-			log.Printf("xray: mutateCatalog.UpsertUser failed: %v", err)
 			problem(w, 503, "xray_unavailable", "Xray catalog rejected the user.")
 			return
 		}
