@@ -51,6 +51,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -299,10 +300,49 @@ func executeOp(op Op, ownedMu *sync.RWMutex, owned map[string]struct{},
 // function returns a cleanup function the caller MUST
 // defer so the file does not outlive the launcher
 // connection.
+//
+// B-005 (BETA.2): the WireGuard-tools `wg setconf`
+// command consumes a textual wg-quick style conf where
+// `PrivateKey = <b64>` and `PresharedKey = <b64>` carry
+// the actual base64-encoded value, NOT a path to the
+// secret file. The agent hands the launcher file
+// references (so the secret bytes never cross argv /
+// env), and the launcher is the only place that
+// resolves those references into the inlined base64
+// values before invoking wg. The launcher's secret
+// channel directory (0600 root:duckos) is the only
+// place the bytes are touched on disk.
 func stageSetConf(op Op, secretDir string) (path string, cleanup func(), err error) {
 	conf, err := RenderSetConf(op.Ifname, op.ListenPort, op.PrivateKeyFile, op.Peers)
 	if err != nil {
 		return "", func() {}, err
+	}
+	// Resolve the secret file references into the actual
+	// base64 values wg-tools expects on each line. The
+	// launcher is the canonical gate for "a path under
+	// /run/duckos-agent/secret/ is replaced by its
+	// base64 contents in the staged conf".
+	if op.PrivateKeyFile != "" {
+		b64, err := readSecretFileAsBase64(op.PrivateKeyFile)
+		if err != nil {
+			return "", func() {}, err
+		}
+		conf = []byte(strings.Replace(string(conf),
+			"PrivateKey = "+op.PrivateKeyFile,
+			"PrivateKey = "+b64, 1))
+	}
+	for i, p := range op.Peers {
+		if p.PresharedKeyFile == "" {
+			continue
+		}
+		b64, err := readSecretFileAsBase64(p.PresharedKeyFile)
+		if err != nil {
+			return "", func() {}, err
+		}
+		conf = []byte(strings.Replace(string(conf),
+			"PresharedKey = "+p.PresharedKeyFile,
+			"PresharedKey = "+b64, 1))
+		_ = i
 	}
 	tmp, err := os.CreateTemp(secretDir, "wg-setconf-*.conf")
 	if err != nil {
@@ -348,6 +388,29 @@ func runExec(bin string, args ...string) error {
 		return fmt.Errorf("%s %v: %w (%s)", filepath.Base(bin), args, err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+// readSecretFileAsBase64 reads a private / preshared
+// key file under /run/duckos-agent/secret/ and returns
+// its contents base64-encoded (the textual form
+// wg-tools expects on the PrivateKey / PresharedKey
+// lines of a setconf input). The launcher is the only
+// component allowed to read the secret file; the agent
+// hands a path reference, never the bytes. The file is
+// shred -u'd by the caller as soon as wg setconf
+// returns so the bytes do not outlive the call.
+func readSecretFileAsBase64(path string) (string, error) {
+	if !strings.HasPrefix(path, "/run/duckos-agent/secret/") {
+		return "", fmt.Errorf("secret path %q is not in the launcher secret channel", path)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("read secret %q: %w", path, err)
+	}
+	if len(data) == 0 {
+		return "", fmt.Errorf("secret %q is empty", path)
+	}
+	return base64.StdEncoding.EncodeToString(data), nil
 }
 
 // runExecCapture is like runExec but returns stdout so
