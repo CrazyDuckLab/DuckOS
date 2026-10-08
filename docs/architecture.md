@@ -9,8 +9,22 @@ Requirements source: [`product-spec-1.0.md`](product-spec-1.0.md)
 
 This document defines the target component boundaries and the invariants that
 implementation must preserve. [ADR-0005](adr/0005-executable-observation-foundation.md)
-defines the implemented read-only subset. Other flows below remain target
+defines the historical observation foundation. Beta.2 adds qualified WireGuard
+and Xray runtime paths; other flows below remain target
 architecture; see [`docs/testing.md`](testing.md) for the qualification-evidence framework.
+
+## Beta.2 implementation snapshot
+
+Official release artifacts cover AMD64, ARM64 and ARMv7 (`GOARCH=arm GOARM=7`).
+Only AMD64 received the complete final two-node live matrix. The Agent has zero
+effective Linux capabilities and private authenticated IPC. WireGuard mutations
+use `duck-wg-launcher` with CAP_NET_ADMIN only; FRR uses `duck-frr-launcher`.
+Xray 26.3.27 uses Vault-backed secret materialization. Port Mapping includes
+backend / Trusted LAN / nftables lifecycle / TTL / revoke / cleanup, without
+UPnP IGD, SSDP/M-SEARCH, NAT-PMP or PCP protocol frontends.
+See [release notes](release-notes.md), [compatibility](compatibility.md) and
+[qualification evidence](../beta2-final-report.md). The broader requirements
+below remain target architecture where not explicitly qualified.
 
 ## Product boundary
 

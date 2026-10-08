@@ -49,7 +49,7 @@ scope, safety invariants, development, and test evidence.
 
 - [`roadmap.md`](roadmap.md) — V1 beta, LATER, FUTURE.
 - [`beta-limitations.md`](beta-limitations.md) — what V1 is **not**.
-- [`release-notes.md`](release-notes.md) — v0.1.0-beta.1
+- [`release-notes.md`](release-notes.md) — v0.1.0-beta.2 and historical beta.1
   release-note draft (not yet released).
 
 ## Licensing

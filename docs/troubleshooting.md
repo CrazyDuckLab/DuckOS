@@ -29,5 +29,17 @@ hand on a production gateway; full network activation remains gated.
 Include build, environment, sanitized topology, expected/actual behavior and
 reproduction steps. Remove passwords, keys, client QR/config content and
 subscription URLs/tokens. Security-sensitive reports follow
-[SECURITY.md](../SECURITY.md), not public issues. Duck Doctor and automatic
-support bundles remain planned; no undocumented command is required for a report.
+[SECURITY.md](../SECURITY.md), not public issues. Doctor provides deterministic findings; automatic support bundles are not
+required for reporting.
+
+## Beta.2 launcher startup
+
+Check `duck-agent`, `duck-api`, `duck-frr-launcher` and `duck-wg-launcher`
+with systemctl and bounded journal output. `/run/duckos-agent` must be
+`root:duckos 0750`; native `frr.service` and `wg-quick@.service` are masked.
+Do not unmask competing daemons to work around launcher startup. Agent effective
+capabilities should be zero and the WireGuard launcher CAP_NET_ADMIN only.
+FRR refusal with missing zebra/bgpd is not proof of functioning BGP routing.
+
+Beta.2 installation is fresh-install-only; existing-state refusal is not a
+supported upgrade path. Preserve evidence and consult [installation](install.md).

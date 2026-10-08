@@ -198,7 +198,7 @@ P064  Telemetry / Integrations     /api/v1/objects (telemetry kind)
 P065  Port Mapping / Trusted LAN / Wake  /api/v1/objects (upnp kind)
        BETA.2 ships the backend (trusted-LAN registry + nftables mapping
        manager + TTL/revoke/cleanup) and Wake-on-LAN. Real UPnP-IGD /
-       NAT-PMP / PCP network protocol frontends are deferred to BETA.3
+       NAT-PMP / PCP network protocol frontends are deferred to a later release
        and are explicitly out of scope for BETA.2.
 P066  Portal                       /api/v1/objects (portal kind)
 P067  QoS / Traffic Scheduling     /api/v1/objects/qos.class

@@ -78,15 +78,15 @@ Do not extend it from fields without grounding the claim.
 
 ```yaml
 project: DuckOS
-release: v0.1.0-beta.1
-runtime_build: 1.0.0-dev.f698de16b4a9
-source_commit: f698de16b4a90c52d7bd5b50f287ad01f36da5f3
+release: v0.1.0-beta.2
+runtime_build: read VERSION from the installed beta.2 artifact
+source_commit: read BUILD-INFO.json from the installed beta.2 artifact
 status: Public beta
 license: GPL-3.0-only
 qualified_platform: Linux amd64 on Debian 13 (trixie) with systemd
-reference_platforms:
-  - Linux arm64 on Debian 13 (cross-build, not natively qualified)
-  - Linux armv7 on Debian 13 (cross-build, not natively qualified)
+official_build_platforms:
+  - Linux arm64 on Debian 13 (build/artifact verified, not complete AMD64 live matrix)
+  - Linux armv7 on Debian 13 (build/artifact verified, not complete AMD64 live matrix)
 unsupported_in_this_beta:
   - direct LAN HTTPS / mDNS onboarding
   - self-signed browser-trusted onboarding
@@ -116,14 +116,10 @@ defaults:
 
 ## Version-aware answers
 
-DuckOS uses two identifiers for the same qualified first public beta:
-
-- The **GitHub release name** is `v0.1.0-beta.1`. This appears on the
-  release tag, on the downloadable filename, and in public-facing text.
-- The **qualified runtime build identifier** is
-  `1.0.0-dev.f698de16b4a9`. This is what the installed binaries
-  expose (the `/api/v1/overview` payload, the `VERSION` file in the
-  archive), and what the supported build script and installer lock to.
+DuckOS uses the public beta name `v0.1.0-beta.2` and an internal runtime
+identifier `1.0.0-dev.<12-character-commit>`. Read the exact source commit from
+`BUILD-INFO.json`; do not substitute the historical beta.1 build or the full
+live-qualification baseline for the final release artifact identity.
 
 Do not assume that instructions written for a future beta are valid
 for this release. When a user reports a behavior, ask which beta they
@@ -155,8 +151,8 @@ If the user is afraid of locking themselves out, surface:
 - The rollback watchdog is independent of the Engine.
 - The pre-networkd boot recovery unit reconstructs host state on the
   next reboot **for the qualified network-renderer path** if a rollback
-  fails. Full real-reboot / power-loss durability qualification is still
-  pending for v0.1.0-beta.1 — see
+  fails. AMD64 reboot/service recovery was verified; physical power-loss and
+  broader hardware durability remain unqualified for v0.1.0-beta.2 — see
   [`../beta-limitations.md`](../beta-limitations.md).
 
 See [`../user/safe-apply.md`](../user/safe-apply.md) for the lifecycle
@@ -221,5 +217,5 @@ button in an actual answer must be grounded in current documentation.
 - [`../beta-limitations.md`](../beta-limitations.md) — what V1 beta is
   and is not.
 - [`../release-notes.md`](../release-notes.md) — what's in
-  `v0.1.0-beta.1`.
+  `v0.1.0-beta.2`.
 - [`../../llms.txt`](../../llms.txt) — the full documentation map.

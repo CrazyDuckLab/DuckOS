@@ -1,5 +1,10 @@
 # Public roadmap
 
+Beta.2 current scope supersedes older delivery-stage summaries below: official
+AMD64 / ARM64 / ARMv7 artifacts, qualified AMD64 WireGuard and Xray paths,
+Port Mapping backend, Wake and Speed Lab. See [release notes](release-notes.md)
+and [limitations](beta-limitations.md) for evidence and remaining gates.
+
 This page is the public roadmap. It exists to be honest about what
 ships in V1 beta and what does not. It does not contain promises
 beyond the V1 frozen frontend baseline.

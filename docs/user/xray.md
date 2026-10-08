@@ -1,8 +1,10 @@
 # Xray
 
-DuckOS exposes an Xray subsystem in Full Mode under **VPN** →
-**Xray**. Like WireGuard, Xray activation through Safe Apply is a
-qualified subsystem; the V1 beta renders the observed state.
+DuckOS exposes Xray in Full Mode under **VPN** → **Xray**.
+Beta.2 bundles xray-core **26.3.27** and qualified real VLESS/TLS and
+VLESS/REALITY client data-plane traffic on AMD64. Credentials and keys use
+Vault-backed materialization. Empty inbound renders stop the daemon rather
+than reporting an active listener. See [beta limitations](../beta-limitations.md).
 
 ## Concepts
 
@@ -18,7 +20,7 @@ qualified subsystem; the V1 beta renders the observed state.
 1. Open **Xray** in Full Mode.
 2. Confirm the inbound and outbound configuration.
 3. Add or update routing rules.
-4. When the activation gate opens, run Safe Apply.
+4. Use the supported apply flow and verify observed runtime state.
 
 ## Secrets
 

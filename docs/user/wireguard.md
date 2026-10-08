@@ -1,10 +1,11 @@
 # WireGuard tunnels
 
-DuckOS exposes a WireGuard subsystem in Full Mode under **VPN** →
-**WireGuard**. The V1 beta renders the observed state and the
-canonical model. WireGuard activation through Safe Apply is a
-qualified subsystem; check [`docs/beta-limitations.md`](../beta-limitations.md)
-before relying on it.
+DuckOS exposes WireGuard in Full Mode under **VPN** → **WireGuard**.
+Beta.2 uses a separate privileged launcher with CAP_NET_ADMIN only, while
+`duck-agent` has zero Linux capabilities. Two simultaneous tunnels were
+qualified between two AMD64 nodes, including real traffic and restart recovery.
+Native `wg-quick@.service` is masked to avoid competing lifecycle ownership.
+See [beta limitations](../beta-limitations.md) for platform evidence limits.
 
 ## Concepts
 
@@ -22,7 +23,7 @@ before relying on it.
 1. Open **WireGuard** in Full Mode.
 2. Confirm the server's address range, listen port, and DNS.
 3. Add or rotate peers as needed.
-4. When the activation gate opens, run Safe Apply.
+4. Use the supported apply flow and verify observed runtime state.
 
 ## Xray
 

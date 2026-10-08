@@ -9,12 +9,12 @@ real home, office, hotel, and branch networks. Its default posture is to reduce
 exposure before an attack occurs and to fail without stranding the
 administrator or silently weakening policy.
 
-This document records required trust boundaries, threats, and controls. It does
-not claim a completed security review, hardened image, Vault, authentication
-stack, or tested firewall. ADR-0008 and
-the implemented
-local identity subset and its explicit remaining gates. Requirements below are
-not automatically evidence that every control exists.
+This document records required trust boundaries, threats and controls. Beta.2
+implements local identity/RBAC and Vault-backed Xray secret materialization;
+`duck-agent` has zero effective Linux capabilities, with separate constrained
+WireGuard (CAP_NET_ADMIN only) and FRR launchers. This is not a completed product
+security review. Requirements below are not automatically implementation evidence.
+See [the qualification report](../beta2-final-report.md) for verified boundaries.
 
 ## Security objectives
 
@@ -98,7 +98,7 @@ The required baseline is:
   manager + TTL/revoke/cleanup) is globally controllable, per-network,
   time-bounded, visible, audited, and accompanied by warnings.
   Real UPnP-IGD / NAT-PMP / PCP UDP network protocol frontends are
-  deferred to BETA.3 and are explicitly out of scope for BETA.2;
+  deferred to a later release and are explicitly out of scope for BETA.2;
 - an explicitly public management panel is an exceptional administrator choice
   requiring strong warning, hardening, and audit—not a wizard convenience.
 

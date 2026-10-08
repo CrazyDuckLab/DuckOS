@@ -1,3 +1,120 @@
+# DuckOS v0.1.0-beta.2
+
+DuckOS beta.2 expands the public platform builds and strengthens the local
+networking runtime, privilege boundaries and operational interface.
+**This is a beta prerelease. Fresh installation is required; no beta.1 → beta.2
+in-place upgrade has been qualified.**
+
+## Highlights
+
+- Official Linux AMD64, ARM64 and ARMv7 archives.
+- Bundled **xray-core 26.3.27** with real VLESS/TLS and VLESS/REALITY traffic
+  qualification on the AMD64 production runtime.
+- Two simultaneous WireGuard tunnels qualified between two nodes, including
+  handshakes, ICMP/TCP/UDP traffic, counters, restart and cleanup.
+- Separate WireGuard and FRR privileged launchers; zero Linux capabilities for
+  `duck-agent`, and only `CAP_NET_ADMIN` for `duck-wg-launcher`.
+- Port Mapping backend and Trusted LAN enforcement, with nftables lifecycle,
+  TTL expiry, revoke and cleanup; Wake-on-LAN and Speed Lab.
+- RBAC and network-object fixes, Easy / Full UI improvements, EN / RU / DE / ES,
+  and improved IPC, systemd startup and reboot recovery.
+
+## Platform support
+
+| Platform | Release archive | Build/artifact verification | Complete final live matrix |
+|---|---|---|---|
+| Linux AMD64 / x86_64 | `duckos-v0.1.0-beta.2-linux-amd64.tar.gz` | Yes | Yes, two Debian 13 VMs |
+| Linux ARM64 / AArch64 | `duckos-v0.1.0-beta.2-linux-arm64.tar.gz` | Yes | No |
+| Linux ARMv7 / 32-bit ARM | `duckos-v0.1.0-beta.2-linux-armv7.tar.gz` | Yes | No |
+
+Identify the architecture with `uname -m` and `dpkg --print-architecture`:
+`x86_64` / `amd64` selects AMD64; `aarch64` / `arm64` selects ARM64;
+`armv7l` / `armhf` selects ARMv7. The ARMv7 Go target is
+`GOARCH=arm GOARM=7`. ARM builds are official targets with a narrower evidence
+level than AMD64. The physical ODROID XU4 was excluded from final qualification.
+
+## Networking and privilege boundaries
+
+WireGuard operations use a constrained privileged launcher rather than granting
+network capabilities to the Agent. Native `wg-quick@.service` is masked to avoid
+competing lifecycle ownership. Peer materialization, idempotent address handling
+and reboot startup defects were corrected.
+
+FRR uses a separate privileged launcher and native `frr.service` is masked.
+The final lab verified launcher startup and explicit refusal behavior; zebra
+and bgpd were not installed there, so this is not a live BGP routing claim.
+
+Port Mapping ships the backend, Trusted LAN Registry and nftables mapping
+lifecycle with TTL, revoke and cleanup. **UPnP IGD, SSDP/M-SEARCH, NAT-PMP and PCP
+network protocol frontends are not included.**
+
+## Xray and security
+
+The release bundles xray-core **26.3.27**. AMD64 qualification passed real
+VLESS/TLS traffic and real VLESS/REALITY traffic using an xray-core client and a
+controlled TLS camouflage endpoint. Credentials and key material are resolved
+through the protected Vault path. Empty rendered inbounds now stop the daemon,
+keeping catalog and runtime behavior consistent.
+
+RBAC boundaries, constrained launcher IPC and systemd runtime ownership received
+fixes and verification. The Agent effective capability set is zero; the
+WireGuard launcher effective capability set is `CAP_NET_ADMIN` only.
+These results do not constitute a completed product security audit.
+
+## UI and operations
+
+Easy and Full modes share the configuration model. This beta improves
+network-object handling, authentication/role behavior and operational UI flows
+across English, Russian, German and Spanish. Wake-on-LAN and Speed Lab remain
+bounded by their configured network and target policies. API availability is
+separate from network health; incomplete observations remain visible.
+
+## Installation and checksums
+
+**Fresh installation only, on Debian 13 with systemd.** Use the architecture
+archive above and the release's top-level `SHA256SUMS`.
+Follow [the installation guide](https://github.com/CrazyDuckLab/DuckOS/blob/v0.1.0-beta.2/docs/install.md)
+for download, SHA-256 verification, root-owned staging, preflight and installation.
+Each archive extracts to `duckos-v0.1.0-beta.2/`.
+
+```bash
+sha256sum --check --ignore-missing SHA256SUMS
+```
+
+Require an `OK` result for the archive you downloaded. The supplied installer
+also checks the internal manifest and architecture-specific ELF headers.
+Checksums detect corruption; they do not independently authenticate a publisher.
+No signed `.duck` beta.1 → beta.2 upgrade package is supplied.
+
+## Known limitations
+
+- Beta software; isolated evaluation and out-of-band console access recommended.
+- Fresh install required; no qualified beta.1 → beta.2 in-place upgrade.
+- No UPnP IGD / SSDP-M-SEARCH, NAT-PMP or PCP protocol frontends.
+- ARM64 and ARMv7 did not undergo the complete AMD64 final two-node live matrix.
+- FRR daemon data-plane routing, physical board/chipset variance and power-loss
+  behavior are not established by the final VM qualification.
+- No public OTA delivery channel, automatic LAN TLS onboarding or mDNS discovery.
+
+## Verification and source identity
+
+The full live qualification used product commit
+`90be1e00ae6c364f25d195ffe5223e8525e1310c` and build
+`1.0.0-dev.90be1e00ae6c`. Documentation/report-only follow-ups do not alter the
+qualified product behavior. Final archives must be built from the same release
+commit as the annotated tag; `BUILD-INFO.json` records that full source commit,
+and `VERSION` uses `1.0.0-dev.<12-character-commit>`.
+
+See the [final qualification report](https://github.com/CrazyDuckLab/DuckOS/blob/v0.1.0-beta.2/beta2-final-report.md)
+for the evidence and its limits. The top-level checksum file covers all three
+public archives; each archive also contains an internal `SHA256SUMS`.
+
+Source remains GPL-3.0-only; Xray licensing follows its upstream distribution.
+Report bugs with sanitized logs; follow [SECURITY.md](https://github.com/CrazyDuckLab/DuckOS/blob/v0.1.0-beta.2/SECURITY.md)
+for vulnerabilities.
+
+---
+
 # DuckOS v0.1.0-beta.1
 
 First public beta of DuckOS.

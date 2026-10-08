@@ -1,6 +1,13 @@
+> Public release preparation note: the authoritative qualification identity is
+> `90be1e00ae6c364f25d195ffe5223e8525e1310c` / `1.0.0-dev.90be1e00ae6c`.
+> The accepted report follow-up commit is `6fb4c132a631502f62677fe0050fb878d4b43578`.
+> Older report/deploy identifiers below are historical notes, not the final public
+> release identity. Final release artifacts record their own source in BUILD-INFO.
+> Private lab management addresses and the test account identifier are redacted.
+
 # DuckOS BETA.2 — Final Live Qualification Report
 
-> HEAD at the moment this report is written: `0f5aec1c9b45ca03cea43edb93fe3cfeeb28b467` (the report commit itself). The final **qualification HEAD** — the HEAD under which the live gate run executed — is `90be1e00ae6c364f25d195ffe5223e8525e1310c` (the prior commit). All live evidence was produced against the binaries at the qualification HEAD; the report commit is a documentation-only follow-up.
+> Historical report snapshot identity: `0f5aec1c9b45ca03cea43edb93fe3cfeeb28b467` (the report commit itself). The final **qualification HEAD** — the HEAD under which the live gate run executed — is `90be1e00ae6c364f25d195ffe5223e8525e1310c` (the prior commit). All live evidence was produced against the binaries at the qualification HEAD; the report commit is a documentation-only follow-up.
 
 ## Pre-overnight state (accepted)
 - HEAD: `51616cbc97d099b943d2d3bea3eb19e7df0f0f5a`
@@ -98,7 +105,7 @@
 - `speedlab` service enabled with explicit allow-list; loopback-only, no public-internet SSRF.
 
 ## Phase K — RBAC / network objects
-- Owner / Network write / Secrets write boundaries verified via the live `labowner` token on the two lab VMs.
+- Owner / Network write / Secrets write boundaries verified via the live an enrolled Owner session on the two lab VMs.
 
 ## Phase L — Failure injection
 - xray runtime now correctly handles an empty inbounds render (B-010). Other failure-injection coverage retained from BETA.1.
@@ -121,7 +128,7 @@
 - `duck-agent` ~96M memory peak; `duck-wg-launcher` ~6M; `duck-frr-launcher` ~3M; `duck-api` ~12M. Bounded.
 
 ## Phase Q — Final management safety
-- eth0 on both VMs intact (172.18.4.102/16 on VM A, 172.18.4.159/16 on VM B). No DHCP address change required during this run.
+- eth0 on both VMs intact ([redacted management address] on VM A, [redacted management address] on VM B). No DHCP address change required during this run.
 - `CapEff: 0x0` on `duck-agent` and `CapEff: 0x1000` on `duck-wg-launcher` verified at HEAD 90be1e0 on both VMs.
 - `/run/duckos-agent = root:duckos 0750` verified on both VMs.
 - IPC ownership: `agent.sock`, `wg-launcher.sock`, `frr-launcher.sock` all present and owned by `root:duckos 0660`.
@@ -148,13 +155,13 @@
 - No new tag. `v0.1.0-beta.1` untouched.
 
 ## Lab deploy state (both VMs identical, end of run)
-- VM A (duck-beta-01, eth0 172.18.4.102/16):
+- VM A (duck-beta-01, eth0 [redacted management address]):
   - `duck-agent` sha256 `ea2b6666d40d79d579b25ace5f9b0852f4f04de92596c9cc09a3befe588ff08b`
   - `duck-api` sha256 `31708bf90062f11f4fdd01e38df8c0354bfd3401047e7cd9ccb29897991bc097`
   - `duck-wg-launcher` sha256 `da305a419a87d32c6774b8bdc343e9da5619ecf3592cb8d01b7c2e1d6aa3b5d0`
   - VERSION `1.0.0-dev.90be1e00ae6c`; `/opt/duckos/current/VERSION` updated.
   - All 4 services active; `/run/duckos-agent = root:duckos 0750`; API 200; REALITY data-plane test PASS.
-- VM B (duck-dev-01, eth0 172.18.4.159/16):
+- VM B (duck-dev-01, eth0 [redacted management address]):
   - Identical artifact set, same SHA-256 values.
   - B-009 fix verified (reboot → wg-launcher auto-starts without manual intervention); wg-quick@.service masked.
   - All 4 services active; `/run/duckos-agent = root:duckos 0750`; API 200.

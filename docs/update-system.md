@@ -1,6 +1,9 @@
 # DuckOS update system
 
-Status: foundation specification; not implemented or verified
+Status: target specification with implemented update foundations; not a qualified beta.2 upgrade path
+
+**Beta.2 is fresh-install-only. No beta.1 → beta.2 in-place upgrade is qualified.**
+The public tarballs are installer payloads, not signed `.duck` updates.
 Last updated: 2026-09-07
 
 This document defines the safety contract for DuckOS software updates. It does

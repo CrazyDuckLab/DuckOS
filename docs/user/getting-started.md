@@ -16,7 +16,9 @@ on a production gateway.
 
 - The DuckOS installation image that matches your target architecture
   (`amd64`, `arm64`, or `armv7`). The V1 beta is qualified for **amd64**
-  on Debian 13 host targets. ARM targets are reference-supported only.
+  on Debian 13 host targets. ARM64 and ARMv7 are official artifacts with build verification, but
+  did not receive the complete AMD64 live matrix. Fresh installation is required;
+  there is no qualified beta.1 → beta.2 upgrade.
 - An isolated test network — never the same physical network as a
   production router.
 - A second way to reach the device out-of-band (a serial console, a
@@ -26,26 +28,17 @@ on a production gateway.
 - A modern browser. DuckOS targets Chromium and Firefox at current
   versions; older browsers are not supported.
 
-## Finding DuckOS on the network
-
-After the first boot, DuckOS advertises itself on the management LAN
-through:
-
-- **mDNS / DNS-SD** under `duckos-<hostname>.local`.
-- A link-local IPv6 address on the management interface.
-
-The host terminal prints the management interface name and its current
-address. Use the printed URL or `https://duckos-<hostname>.local` from a
-browser on the same management network.
-
 ## Opening the UI
 
-1. From a browser on the management LAN, navigate to the URL the
-   install terminal printed.
-2. The browser will warn that the TLS certificate is not trusted. This
-   is expected for a first install; the certificate is self-signed.
-   Accept the warning **only on a private management LAN** and continue.
-3. The first screen is **Owner enrollment**.
+Beta.2 uses a loopback management listener, with no automatic mDNS discovery
+or browser-trusted LAN TLS onboarding. From your administrator workstation:
+
+```bash
+ssh -N -L 8080:127.0.0.1:8080 <user>@<duckos-ip>
+```
+
+Open `http://127.0.0.1:8080`. The first screen is Owner enrollment.
+Read the host's `/etc/duckos/api-token` privately when prompted; never publish it.
 
 ## Owner enrollment
 
@@ -80,26 +73,12 @@ If you are an administrator who needs the dense Full Mode view, click
 
 ## Initial configuration
 
-DuckOS V1 beta observes Linux state and renders it. It does not yet
-write network configuration through the public UI on a running
-system — the Safe Apply integration is gated behind the qualification
-gates. The current beta is therefore useful as a viewer for an
-already-installed system, not as a configurator.
-
-When the gates open, the path is:
-
-1. Open the **Interfaces** page in Full Mode.
-2. Pick the interface you want to configure.
-3. Edit its fields in the candidate UI.
-4. Click **Apply**. The Safe Apply flow described in
-   [`safe-apply.md`](safe-apply.md) takes over.
-5. After Apply succeeds, click **Confirm**.
-
-Until the gates open, configuration has to happen by editing the
-relevant Linux adapters directly, with the Safe Apply flow reserved
-for the narrow paths that have passed qualification. See
-[`docs/beta-limitations.md`](../beta-limitations.md) for the current
-list of which subsystems are wired up.
+Beta.2 includes qualified WireGuard and Xray runtime paths. This does not make
+every catalog page a qualified configuration workflow. Check
+[beta limitations](../beta-limitations.md) and [release notes](../release-notes.md).
+Network changes require the documented validation, Safe Apply and confirmation
+path; preserve the active management interface and console access. Do not apply
+rendered Linux configuration by hand to bypass an unavailable UI operation.
 
 ## Search
 

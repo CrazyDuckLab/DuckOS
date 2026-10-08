@@ -1,5 +1,10 @@
 # DuckOS hardware support and evidence
 
+Current beta.2 artifact and qualification status is in [compatibility.md](compatibility.md).
+AMD64, ARM64 and ARMv7 are official build targets; only AMD64 received the
+complete final live matrix. The physical XU4 was excluded. The broader 1.0
+hardware policy below remains a target, not a beta.2 qualification claim.
+
 Status: foundation specification; no hardware support is qualified yet
 Last updated: 2026-09-07
 

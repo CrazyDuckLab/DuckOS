@@ -20,69 +20,16 @@ chat, screenshots, logs, or documentation.
 
 ## First installation
 
-**Goal:** Install DuckOS V1 beta (`v0.1.0-beta.1`) on a fresh,
-isolated Debian 13 amd64 host with systemd.
+**Goal:** Fresh-install DuckOS v0.1.0-beta.2 on isolated Debian 13 with systemd.
+Official artifacts cover AMD64, ARM64 and ARMv7; only AMD64 received the complete
+final live matrix. No beta.1 → beta.2 in-place upgrade is qualified.
 
-### Before you start
-
-- Use a fresh Debian 13 (trixie) amd64 host. The installer refuses
-  any pre-existing DuckOS installation.
-- Confirm the host is **not** a production gateway. Install on an
-  isolated test network.
-- Have an out-of-band recovery path (serial console, second
-  management interface, or VM console).
-- Have an administrator workstation with `ssh` (capable of local
-  port forwarding) and a modern Chromium or Firefox browser.
-- Have the two release files: the tarball and the matching
-  `SHA256SUMS`.
-
-### Where to go
-
-On the administrator workstation: nothing to open. On the Debian host:
-the bash installer `install.sh` in the extracted archive.
-
-### Steps
-
-1. Verify the archive:
-   ```bash
-   sha256sum -c SHA256SUMS
-   ```
-2. Extract:
-   ```bash
-   tar -xzf duckos-v0.1.0-beta.1-linux-amd64.tar.gz
-   cd duckos-v0.1.0-beta.1
-   ```
-3. On the Debian host, install:
-   ```bash
-   sudo bash install.sh --artifact "$(pwd -P)"
-   ```
-4. Optional preflight only:
-   ```bash
-   sudo bash install.sh --check --artifact "$(pwd -P)"
-   sudo bash install.sh --verify-artifact --artifact "$(pwd -P)"
-   ```
-
-### Verify
-
-- `systemctl status duck-agent.service duck-api.service` reports both
-  units active.
-- `curl --fail http://127.0.0.1:8080/api/v1/health` returns HTTP 200.
-- Authenticated `/api/v1/ready` returns HTTP 200 with a build commit
-  matching `f698de16b4a9…`.
-
-### Safety
-
-The installer only takes effect from public release artifacts that
-match `SHA256SUMS`. Checksums authenticate integrity, not the
-publisher. Review the source tree and trust the transfer channel.
-
-### Related documentation
-
-- [`../install.md`](../install.md) — qualified installer flow.
-- [`../user/getting-started.md`](../user/getting-started.md) —
-  full step-by-step, including the SSH tunnel and Owner enrollment.
-- [`../beta-limitations.md`](../beta-limitations.md) — installer
-  limitations and the bootstrap-token lifecycle.
+Use [the canonical installation guide](../install.md) for architecture selection,
+exact filenames, download verification, root-owned staging and installer syntax.
+Do not duplicate its commands or install directly from a user's home directory.
+Check all four services and authenticated readiness, then use the SSH local-forward
+and Owner enrollment flow in [getting started](../user/getting-started.md).
+Keep console access and the management interface intact.
 
 ---
 
@@ -611,7 +558,7 @@ subsystem page (for example, **Interfaces** or **Routing**).
    fails, the pre-networkd boot recovery unit reconstructs host state
    on the next reboot **for the qualified network-renderer path**.
    Full real-reboot / power-loss durability qualification is still
-   pending for v0.1.0-beta.1 — see
+   outside the complete beta.2 hardware matrix — see
    [`../beta-limitations.md`](../beta-limitations.md).
 
 ### Verify
@@ -630,7 +577,7 @@ subsystem page (for example, **Interfaces** or **Routing**).
   dies mid-Apply, the Agent reports the outcome to the journal; on
   the next boot the boot recovery unit reconstructs host state **for
   the qualified network-renderer path**. Full real-reboot / power-loss
-  durability qualification is still pending for v0.1.0-beta.1.
+  physical power-loss durability remains unqualified for beta.2.
 
 ### Related documentation
 
@@ -671,7 +618,7 @@ console, second management interface, or VM console.
    `duck-network-recover.service` one-shot unit reconstructs host
    state from the durable journal before networkd comes up **for the
    qualified network-renderer path**. Full real-reboot / power-loss
-   durability qualification is still pending for v0.1.0-beta.1 — see
+   physical power-loss durability remains unqualified for beta.2 — see
    [`../beta-limitations.md`](../beta-limitations.md).
 
 ### Verify

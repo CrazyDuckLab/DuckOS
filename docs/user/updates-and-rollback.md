@@ -1,48 +1,16 @@
 # Updates and rollback
 
-DuckOS uses a signed `.duck` payload for updates. The update
-supervisor keeps the current payload and the previous payload on
-disk. The supervisor enforces the `Active + Previous` invariant: at
-all times, two known-good payloads are available.
+**v0.1.0-beta.2 is fresh-install-only. No beta.1 → beta.2 in-place upgrade
+has been qualified.** Do not pass the release tarball to an update command or
+replace installed binaries manually as a supported public upgrade procedure.
 
-## Update flow
+The source includes signed `.duck` update foundations, a supervisor and the
+Active + Previous release-store invariant. These mechanisms do not establish a
+public beta.2 update channel. No public OTA or beta.2 signed upgrade package is
+supplied. A successful first install may have Active without Previous.
 
-1. The administrator downloads a signed `.duck` payload.
-2. The update supervisor validates the signature.
-3. The supervisor writes the new payload as **Previous** (replacing
-   the previous Previous) and the current payload becomes
-   **Active**.
-4. The new Active payload is started.
-5. The supervisor waits for the new Active to reach steady state
-   within a configured window.
-6. If steady state is reached, the new payload becomes the new
-   Active. If steady state is **not** reached, the supervisor rolls
-   back to the previous payload.
-
-## Active + Previous invariant
-
-DuckOS does not allow three concurrent payloads. There is exactly one
-**Active** and one **Previous**. A failed update keeps the prior
-**Active** as the new **Previous**, so the device always has two
-known-good states to choose from.
-
-## Rollback
-
-Rollback can be triggered:
-
-- Manually from the UI, in Full Mode under **Updates**.
-- Automatically by the supervisor, when the new Active does not
-  reach steady state.
-- By the recovery primitives when the device reboots into a
-  non-functional state.
-
-The CLI exposes a destructive rollback path: `sudo duck upgrade
-rollback`. This action is logged in the audit log.
-
-## What the V1 beta does NOT do
-
-- It does not yet auto-download new releases.
-- It does not yet surface the rollback UI as a Full Mode page.
-
-See [`docs/update-system.md`](../update-system.md) and
-[`docs/updater-supervisor.md`](../updater-supervisor.md).
+The broader update design and its evidence requirements are documented in
+[update-system.md](../update-system.md) and
+[updater-supervisor.md](../updater-supervisor.md).
+For installation failures use [recovery](recovery.md) with console access;
+do not delete installation or identity state to bypass preflight.

@@ -2,7 +2,7 @@
 
 DuckOS is a **local-first** network operating platform. This page
 documents, from source and runtime evidence, the categories of
-network traffic a V1 beta (`v0.1.0-beta.1`) installation actually
+network traffic a V1 beta (`v0.1.0-beta.2`) installation actually
 generates — and what it deliberately does not generate.
 
 The classification is evidence-backed. Every category below links
@@ -11,7 +11,7 @@ API, or the product source.
 
 ## At a glance
 
-| Traffic category | Present in `v0.1.0-beta.1`? |
+| Traffic category | Present in `v0.1.0-beta.2`? |
 |---|---|
 | Product telemetry / analytics | **No.** DuckOS V1 beta does not collect, transmit, or store telemetry or analytics from the installed device. No remote telemetry endpoint is configured. |
 | Crash reporting | **No.** No automated crash reporting to a remote service. |
@@ -22,7 +22,7 @@ API, or the product source.
 | Management access from the LAN | **No, by default.** The management UI/API bind only `127.0.0.1:8080`. |
 | Install-time package-manager traffic | **Yes, opportunistic and documented.** The supported installer can run `apt-get install` for `frr` when the host has `apt` available and `frr` is not already installed. No other package manager is invoked. |
 | User-configured traffic (WireGuard, Xray, DNS forwarders, subscriptions) | **Yes, by configuration.** Whatever the administrator configures and confirms through Safe Apply. |
-| First-install prerequisite install | **Possibly.** Before running the DuckOS installer, an administrator on a bare Debian host may run `apt-get install` to provide build / runtime prerequisites (`sutil`, `iproute2`, `nftables`, `curl`, `ca-certificates`, `passwd`, `coreutils`, `findutils`). This is an administrator action, not DuckOS-initiated. |
+| First-install prerequisite install | **Possibly.** Before running the DuckOS installer, an administrator on a bare Debian host may run `apt-get install` to provide build / runtime prerequisites (`python3`, `iproute2`, `nftables`, `curl`, `ca-certificates`, `passwd`, `coreutils`, `findutils`). This is an administrator action, not DuckOS-initiated. |
 
 ## What V1 beta traffic actually looks like
 
@@ -32,13 +32,14 @@ The runtime traffic is the network traffic the installed DuckOS
 service generates by itself, without any user-configured tunnel or
 forwarder.
 
-**In V1 beta, runtime DuckOS traffic is limited to loopback IPC:**
+**Management and launcher IPC are local. Configured networking and diagnostics
+can generate traffic within their explicit policies:**
 
 - The Engine talks to the privileged Agent over a Unix-domain socket
   (`/run/duckos-agent/agent.sock`). The Engine's HTTP client URL is
   `http://agent/...`, a host alias that resolves to that socket.
-- The privileged Agent does not bind a routable listener. It has no
-  network socket other than the local IPC socket.
+- The privileged Agent does not bind a routable listener. Its management IPC socket is local; bounded Wake and Speed Lab operations
+  may generate explicitly requested network traffic.
 - The API binds `127.0.0.1:8080` only. It validates the management Host
   header and rejects other ports.
 - The bootstrap API token (used once, on the first-run enrollment
@@ -78,9 +79,8 @@ The GitHub release page is the supported delivery channel for this
 beta; there is no public OTA / update server, and no remote endpoint
 is contacted to look for new releases.
 
-If you want to update, download the signed `.duck` payload from the
-GitHub release, validate the signature with the project's
-published key, and apply it through the documented update flow.
+Beta.2 is fresh-install-only. Its GitHub archives are installer payloads;
+no signed beta.1 → beta.2 `.duck` upgrade is supplied or qualified.
 
 ### User-configured traffic
 

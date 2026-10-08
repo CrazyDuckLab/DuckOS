@@ -1,129 +1,56 @@
-# V1 beta limitations
+# DuckOS v0.1.0-beta.2 limitations
 
-This page is the honest list of what V1 beta is **not**. It exists
-because the public catalog lists many subsystems, and the V1 beta
-renders many of them as observed state rather than as live
-configuration.
+**Beta software. Fresh installation required. No qualified beta.1 → beta.2
+in-place upgrade.** Use an isolated network and preserve console access.
 
-Every item below is a real limitation in the current beta. Where a
-subsystem is partially wired, this page says so. Where a subsystem
-is qualified on one architecture but not another, this page says so.
+## Platforms and qualification
 
-## Architecture
+AMD64, ARM64 and ARMv7 are official release targets with build/artifact
+verification. Only AMD64 received the complete final two-node live matrix on
+Debian 13 VMs. ARMv7 is `GOARCH=arm GOARM=7`; the physical ODROID XU4 was excluded.
+Cross-build and artifact evidence does not prove native hardware behavior.
+See [compatibility](compatibility.md) and [the report](../beta2-final-report.md).
 
-- **Qualified**: `amd64` only, on a Debian 13 host target.
-- **Reference-supported**: `arm64` and `armv7` — the code
-  cross-builds, but native qualification on these targets has not
-  been completed.
-- **ODROID XU4** is the minimum resource reference for ARMv7.
-- The **V1 beta** is not a production router. It is a beta of an
-  observability and configuration platform that does not yet
-  activate every catalog feature.
+## Networking
 
-## Network configuration through the public UI
+Beta.2 qualified two simultaneous WireGuard tunnels and real Xray VLESS/TLS and
+VLESS/REALITY client traffic on AMD64. These are subsystem-specific results,
+not a claim that every page in the V1 catalog is a qualified network workflow.
+Safe Apply, explicit confirmation and management protection remain required.
+Do not infer a complete multi-WAN, DHCP/DNS, NetBird or arbitrary hardware matrix
+from the release highlights.
 
-- The V1 beta **observes** the network. It does **not write** to
-  `/etc/network/interfaces`, networkd, nftables, dnsmasq, frr,
-  WireGuard or Xray through the public UI.
-- Safe Apply is the only path from candidate to active state, and
-  the Safe Apply integration for catalog subsystems is gated behind
-  qualification. The V1 beta does not yet expose Safe Apply for
-  every subsystem the public catalog lists.
+FRR launcher startup and refusal behavior were verified. The final lab lacked
+zebra/bgpd; live BGP routing is not established by that evidence.
 
-## Multi-WAN
+Port Mapping includes the backend, Trusted LAN Registry, nftables lifecycle,
+TTL expiry, revoke and cleanup. **UPnP IGD, SSDP/M-SEARCH, NAT-PMP and PCP network
+protocol frontends are not included.**
+Wake-on-LAN and Speed Lab are bounded by configured network/target policy.
 
-- Rendered against observed state.
-- Live activation through the public UI is gated.
+## Installation, updates and recovery
 
-## WireGuard / Xray / NetBird
+- The supported installer requires fresh Debian 13 with systemd and matching architecture.
+- Existing DuckOS installation paths/units are refused; do not bypass preflight.
+- The release tarball is not a signed `.duck` upgrade package.
+- There is no public OTA channel and no qualified beta.1 → beta.2 upgrade.
+- Reboot/service recovery was exercised on the AMD64 lab VMs. Physical power-loss,
+  hardware variance and wider install-path qualification remain separate work.
 
-- Rendered against observed state.
-- Live activation through the public UI is gated.
-- Subscription URLs are stored as encrypted secrets. They are never
-  displayed in cleartext. QR codes that embed subscription URLs are
-  redacted.
+## Management and UI
 
-## DNS and DHCP
+- Use SSH local-forward to loopback; automatic LAN HTTPS onboarding and mDNS are absent.
+- Easy and Full modes share the configuration model and support EN/RU/DE/ES.
+- API reachability alone does not prove network health. Missing/stale observations
+  remain visible; an incomplete headline is not proof of a broken network.
+- Doctor provides deterministic findings; a generative remediation assistant is absent.
+- Wi-Fi chipset and modem/LTE support are not established by the final VM matrix.
 
-- Rendered against observed state (lease file, resolver
-  configuration).
-- Live DHCP-scope editing through the public UI is gated.
+## Security and reporting
 
-## Updates
-
-- The update supervisor exists in code. The `Active + Previous`
-  invariant is implemented in tests.
-- The release-channel surface in the public UI is gated.
-- The V1 beta is a single bundled release. There is no
-  auto-update channel.
-
-## Doctor and diagnostics
-
-- Doctor runs a fixed set of deterministic checks.
-- Doctor does not have a generative remediation assistant.
-- Doctor does not propose configuration changes. It surfaces
-  findings and links to the relevant recovery action.
-
-## Hardware support
-
-- Wi-Fi hardware variance is high. The V1 beta does not test
-  every chipset. Use a chipset listed in
-  [`docs/hardware-support.md`](hardware-support.md) before deploying.
-- Modems and LTE are not supported.
-- Real ARMv7 native qualification is pending. Cross-build success
-  is not native qualification.
-
-## Recovery
-
-- The pre-networkd boot recovery unit exists and is qualified in
-  tests.
-- Real-reboot and power-loss qualification is pending.
-- Phone-scan and real-forwarding qualification is pending.
-- Hardware-specific native qualification is pending.
-
-## Installer
-
-- A fresh Debian 13 amd64 TEST installer exists. It is qualified
-  in tests.
-- Real-world install-path qualification on a wider set of
-  hardware is pending.
-- The installer does not currently enable the network or DNS
-  services at install time; the administrator must provision
-  them through Safe Apply.
-
-## Reserved host identity
-
-The host service identity names `duckos` and `duck-dnsmasq` are
-reserved by the supported installer. Installation on a Debian host
-where an unrelated interactive account or group already uses either
-name is not supported for this beta. See
-[`compatibility.md`](compatibility.md#reserved-host-identity) for the
-recovery procedure (choose a different administrator username, or
-rename the colliding local account, before installing). Reusing a
-human `duckos` account for the service is unsafe and is not
-supported.
-
-## What's NOT a beta limitation
-
-These are not limitations — they are intentional choices:
-
-- The UI is honest about which signals the backend currently
-  provides. The Easy Mode "Status check incomplete" verdict is
-  the conservative default and is not a bug.
-- Safe Apply uses a forwarding guard. The guard is what makes a
-  mid-Apply state safe. There is no "apply now" shortcut.
-- The Agent unit is sandboxed through `PrivateNetwork=no`,
-  `IPAddressDeny=any`, `RestrictAddressFamilies`, and an empty
-  `CapabilityBoundingSet`. We do not relax these.
-- IPv6 is first-class. IPv4-only shortcuts are not in scope.
-
-## Reporting a bug or limitation you think is missing
-
-Please open an issue against this repository following the bug
-report template. Sanitize logs before attaching them. Do not
-publish private keys, subscription URLs, or production network
-details.
-
-## Reporting a vulnerability
-
-See [`SECURITY.md`](../SECURITY.md).
+The Agent has zero effective Linux capabilities. WireGuard privileged mutations
+use the separate CAP_NET_ADMIN-only launcher; FRR has its own constrained launcher.
+Vault-backed secrets and RBAC fixes are part of beta.2, without claiming a complete
+product security audit. Never publish private keys, credentials or session data.
+Use repository issue templates for sanitized bugs and [SECURITY.md](../SECURITY.md)
+for vulnerabilities.

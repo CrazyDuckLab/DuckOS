@@ -9,7 +9,7 @@ and engineering controls are in [`docs/security-model.md`](docs/security-model.m
 
 | Version | Supported |
 |---|---|
-| `v0.1.0-beta.1` (public beta) | **Best-effort community support** during the public beta. Security-relevant fixes land in the next beta or stable. See [`docs/beta-limitations.md`](docs/beta-limitations.md) for what is and is not wired to live data in this beta. |
+| `v0.1.0-beta.2` (public beta) | **Best-effort community support** during the public beta. Security-relevant fixes land in the next beta or stable. See [`docs/beta-limitations.md`](docs/beta-limitations.md) for what is and is not wired to live data in this beta. |
 | Source code at any commit | Not a supported release. Use the qualified artifact only. |
 | Internal / unlabelled builds | Not supported. |
 
