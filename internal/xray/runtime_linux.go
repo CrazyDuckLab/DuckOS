@@ -160,6 +160,60 @@ func (r *Runtime) applyLocked(ctx context.Context, cfg Config) error {
 	if r.resolver == nil && needsMaterialization(raw) {
 		return ErrConfig
 	}
+	// B-010 (BETA.2): a render that produced no inbounds
+	// (e.g. an enabled server with no matching enabled
+	// users) must NOT bring up an xray daemon that has
+	// zero listeners. xray -test accepts an empty
+	// inbounds list as syntactically valid; the previous
+	// code took that as "apply succeeded" and wrote the
+	// empty config to active.json, which silently
+	// desynced the public state from the runtime state
+	// (the api returns 201 but the inbound never binds,
+	// and any subsequent user create on a server that
+	// depends on a previously-empty apply can fail
+	// because the runtime is now in a half-applied
+	// state). The correct contract: no inbounds = no
+	// daemon. Stop the existing daemon if one is up,
+	// write a no-inbounds active.json, return nil so the
+	// api call still reports success on the catalog
+	// mutation.
+	if len(cfg.Inbounds) == 0 {
+		active := filepath.Join(r.stage, "active.json")
+		previous, readErr := os.ReadFile(active)
+		if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
+			return ErrConfig
+		}
+		if err = r.stopLocked(); err != nil {
+			r.recovery = true
+			return err
+		}
+		if len(previous) > 0 {
+			if err = writePrivate(filepath.Join(r.stage, "previous.json"), previous); err != nil {
+				return r.recoverLocked(previous, ErrConfig)
+			}
+		}
+		// xray -test may print a warning about an empty
+		// inbounds list; the config is structurally valid
+		// (outbounds is non-empty by construction in
+		// RenderConfig) so write it.
+		candidate := filepath.Join(r.stage, "candidate.json")
+		if err = writePrivate(candidate, raw); err != nil {
+			return ErrConfig
+		}
+		checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		check := exec.CommandContext(checkCtx, r.binary, "run", "-c", candidate, "-test")
+		err = check.Run()
+		cancel()
+		_ = os.Remove(candidate)
+		if err != nil {
+			return ErrConfig
+		}
+		if err = writePrivate(active, raw); err != nil {
+			return ErrConfig
+		}
+		r.active = active
+		return nil
+	}
 	candidate := filepath.Join(r.stage, "candidate.json")
 	if err = writePrivate(candidate, raw); err != nil {
 		return ErrConfig
