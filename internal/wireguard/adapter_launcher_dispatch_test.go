@@ -128,6 +128,9 @@ func TestAdapterApplyServerDispatchesToLauncherWhenTyperSet(t *testing.T) {
 	if typer.setConfPort != server.ListenPort {
 		t.Fatalf("Typer.SetConf port = %d, want %d", typer.setConfPort, server.ListenPort)
 	}
+	if want := len(server.Peers); typer.setConfPeer != want {
+		t.Fatalf("Typer.SetConf peer count = %d, want %d", typer.setConfPeer, want)
+	}
 	if len(typer.setConfKey) != len(priv) {
 		t.Fatalf("Typer.SetConf key bytes = %d, want %d", len(typer.setConfKey), len(priv))
 	}

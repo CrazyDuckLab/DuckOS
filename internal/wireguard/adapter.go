@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/netip"
 	"sort"
 	"strings"
 	"time"
@@ -385,7 +386,11 @@ func (a *KernelAdapter) ApplyServerLauncher(ctx context.Context, server Server) 
 			return fmt.Errorf("add wireguard address %s: %w", addr, err)
 		}
 	}
-	if err := a.Typer.SetConf(server.Interface, server.ListenPort, priv, nil); err != nil {
+	launcherPeers, err := peersForLauncher(server.Peers)
+	if err != nil {
+		return fmt.Errorf("configure wireguard: %w", err)
+	}
+	if err := a.Typer.SetConf(server.Interface, server.ListenPort, priv, launcherPeers); err != nil {
 		return fmt.Errorf("configure wireguard: %w", err)
 	}
 	if err := a.Typer.LinkUp(server.Interface); err != nil {
@@ -519,6 +524,37 @@ func clearBytes(b []byte) {
 	for i := range b {
 		b[i] = 0
 	}
+}
+
+// peersForLauncher maps the production Peer list (string
+// AllowedIPs) to the launcher's typed PeerConf
+// (net/netip.Prefix). Disabled peers are skipped — the
+// launcher does not need to know about them because the
+// previous ApplyServer already removed them from the
+// kernel. Invalid CIDRs are rejected with an error so
+// the API can return a typed envelope to the caller.
+func peersForLauncher(peers []Peer) ([]PeerConf, error) {
+	out := make([]PeerConf, 0, len(peers))
+	for _, p := range peers {
+		if !p.Enabled {
+			continue
+		}
+		prefixes := make([]netip.Prefix, 0, len(p.AllowedIPs))
+		for _, raw := range p.AllowedIPs {
+			prefix, err := netip.ParsePrefix(raw)
+			if err != nil {
+				return nil, fmt.Errorf("peer %s allowed-ip %q: %w", p.PublicKey, raw, err)
+			}
+			prefixes = append(prefixes, prefix)
+		}
+		out = append(out, PeerConf{
+			PublicKey:           p.PublicKey,
+			Endpoint:            p.Endpoint,
+			AllowedIPs:          prefixes,
+			PersistentKeepalive: p.PersistentKeepalive,
+		})
+	}
+	return out, nil
 }
 
 // RecoverySnapshot is the durable recovery evidence the Safe Apply
