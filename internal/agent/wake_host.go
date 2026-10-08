@@ -72,15 +72,20 @@ func (h *WakeHost) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	tail := r.URL.EscapedPath()
-	for _, p := range []string{WakePath, "/wake/v1/"} {
-		if len(tail) >= len(p) && tail[:len(p)] == p {
-			tail = tail[len(p):]
-			break
-		}
+	// B-008 (BETA.2): the Engine proxy concatenates
+	// WakePath + "/wake/v1/" + tail, so the full agent-
+	// side path is e.g. /agent/v1/wake/wake/v1/send.
+	// Both prefixes must be stripped in order to get
+	// the canonical "send" verb. The previous loop
+	// broke after the first match, which left
+	// "wake/v1/send" instead of "send" and made every
+	// wake request 404.
+	if strings.HasPrefix(tail, WakePath) {
+		tail = strings.TrimPrefix(tail, WakePath)
 	}
-	// Strip the leading "/" so the wake verb matches
-	// ("send" instead of "/send"). The Engine proxy
-	// preserves the original path semantics.
+	if strings.HasPrefix(tail, "/wake/v1/") {
+		tail = strings.TrimPrefix(tail, "/wake/v1/")
+	}
 	if strings.HasPrefix(tail, "/") {
 		tail = strings.TrimPrefix(tail, "/")
 	}

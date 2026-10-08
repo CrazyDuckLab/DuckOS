@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -92,12 +93,21 @@ func (h *SpeedLabHost) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	tail := r.URL.EscapedPath()
-	// Strip the agent-side mount prefix.
-	for _, p := range []string{SpeedLabPath, "/speedlab/v1/"} {
-		if len(tail) >= len(p) && tail[:len(p)] == p {
-			tail = tail[len(p):]
-			break
-		}
+	// B-008 (BETA.2): see wake_host.go — the Engine
+	// proxy concatenates both SpeedLabPath and
+	// /speedlab/v1/ in front of the verb, so we must
+	// strip both to reach the canonical "probes" /
+	// "probes/{id}" tail. The previous loop broke
+	// after the first match and left "speedlab/v1/..."
+	// which made every speedlab request 404.
+	if strings.HasPrefix(tail, SpeedLabPath) {
+		tail = strings.TrimPrefix(tail, SpeedLabPath)
+	}
+	if strings.HasPrefix(tail, "/speedlab/v1/") {
+		tail = strings.TrimPrefix(tail, "/speedlab/v1/")
+	}
+	if strings.HasPrefix(tail, "/") {
+		tail = strings.TrimPrefix(tail, "/")
 	}
 	switch r.Method {
 	case http.MethodPost:

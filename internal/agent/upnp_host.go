@@ -107,15 +107,21 @@ func (h *UPnPHost) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	tail := r.URL.EscapedPath()
 	// The Engine proxy concatenates agent.UPnPPath + "/upnp/v1/"
 	// (see internal/engine/engine.go UPnPProxy) so the
-	// incoming path can carry both prefixes; strip every
-	// recognised one before dispatch. Without this loop
-	// (or with a `break` after the first match) state /
-	// networks / mappings paths would never resolve and
-	// the public API would 404 every UPnP call.
-	for _, p := range []string{UPnPPath, "/upnp/v1/"} {
-		if len(tail) >= len(p) && tail[:len(p)] == p {
-			tail = tail[len(p):]
-		}
+	// incoming path carries both prefixes. Strip both
+	// sequentially so the canonical verb
+	// ("state" / "networks/<ref>" / "mappings/<id>")
+	// reaches the switch. The previous loop had a
+	// `break` after the first match which left the
+	// path as "upnp/v1/<verb>" and made every
+	// public call fall through to 405.
+	if strings.HasPrefix(tail, UPnPPath) {
+		tail = strings.TrimPrefix(tail, UPnPPath)
+	}
+	if strings.HasPrefix(tail, "/upnp/v1/") {
+		tail = strings.TrimPrefix(tail, "/upnp/v1/")
+	}
+	if strings.HasPrefix(tail, "/") {
+		tail = strings.TrimPrefix(tail, "/")
 	}
 	// Strip the leading "/" so the verb branches resolve
 	// ("state", "networks/<ref>", "mappings/<id>"). The
