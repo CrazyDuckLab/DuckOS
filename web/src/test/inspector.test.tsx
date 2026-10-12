@@ -21,10 +21,7 @@ import {
 
 const bundle = {} as Messages;
 
-function wrap(
-  node: React.ReactNode,
-  inspectorObject: InspectorObject | null,
-) {
+function wrap(node: React.ReactNode, inspectorObject: InspectorObject | null) {
   const value = {
     state: {
       ...initialPrefs,
@@ -116,8 +113,8 @@ describe("Inspector — contextual object mode", () => {
       sample,
     );
     const buttons = container.querySelectorAll("button");
-    const clearButton = Array.from(buttons).find((b) =>
-      b.getAttribute("aria-label") === "Clear selection",
+    const clearButton = Array.from(buttons).find(
+      (b) => b.getAttribute("aria-label") === "Clear selection",
     );
     expect(clearButton).toBeDefined();
   });

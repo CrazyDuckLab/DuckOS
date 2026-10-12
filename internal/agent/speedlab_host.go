@@ -220,8 +220,8 @@ func (h *SpeedLabHost) handleStatus(w http.ResponseWriter, r *http.Request, id s
 	}
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(struct {
-		State   speedlab.State    `json:"state"`
-		Summary speedlab.Summary  `json:"summary"`
+		State   speedlab.State   `json:"state"`
+		Summary speedlab.Summary `json:"summary"`
 	}{
 		State:   state,
 		Summary: summary,
@@ -271,7 +271,7 @@ func (stubSpeedLabSource) Start(speedlab.Request) (speedlab.ActiveRef, error) {
 func (stubSpeedLabSource) Status(string) (speedlab.State, speedlab.Summary, error) {
 	return speedlab.StateFailed, speedlab.Summary{}, errors.New("speedlab: agent is unavailable")
 }
-func (stubSpeedLabSource) Cancel(string) error { return errors.New("speedlab: agent is unavailable") }
+func (stubSpeedLabSource) Cancel(string) error        { return errors.New("speedlab: agent is unavailable") }
 func (stubSpeedLabSource) List() []speedlab.ActiveRef { return nil }
 
 type stubSpeedLabAccess struct{}

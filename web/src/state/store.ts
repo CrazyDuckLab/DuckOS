@@ -148,7 +148,10 @@ export type PrefsAction =
   | { type: "removePending"; id: string }
   | { type: "clearPending" };
 
-export function prefsReducer(state: PrefsState, action: PrefsAction): PrefsState {
+export function prefsReducer(
+  state: PrefsState,
+  action: PrefsAction,
+): PrefsState {
   switch (action.type) {
     case "setLocale":
       return { ...state, locale: action.locale };

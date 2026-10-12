@@ -72,7 +72,8 @@ export function SystemOverviewV2({
   const observationState: ObservationState = derived.observation;
 
   const cpuCores = safe(ov?.cpu.logicalCores, 0);
-  const cpuUsage = typeof ov?.cpu.usagePercent === "number" ? ov.cpu.usagePercent : null;
+  const cpuUsage =
+    typeof ov?.cpu.usagePercent === "number" ? ov.cpu.usagePercent : null;
   const memUsedBytes = safe(ov?.memory.usedBytes, 0);
   const memTotalBytes = safe(ov?.memory.totalBytes, 0);
   const memPct = safePct(memUsedBytes, memTotalBytes);
@@ -84,7 +85,12 @@ export function SystemOverviewV2({
   const dnsCount = (ov?.dns?.nameservers ?? []).length;
   const uptimeSeconds = safe(ov?.system.uptimeSeconds, 0);
 
-  const findings: Array<{ id: string; severity: string; title: string; detail?: string }> = [];
+  const findings: Array<{
+    id: string;
+    severity: string;
+    title: string;
+    detail?: string;
+  }> = [];
   // We don't pull doctor from SystemOverviewV2 here to avoid double fetching;
   // recent findings come from /api/v1/doctor in P091, not from this page.
   // This page only surfaces observation-derived signals honestly.
@@ -120,7 +126,11 @@ export function SystemOverviewV2({
             ? v4t(locale, "health.observationFresh")
             : v4t(locale, "health.observationUntrusted")}
         </span>
-        <span style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500 }}>{headline}</span>
+        <span
+          style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500 }}
+        >
+          {headline}
+        </span>
       </div>
 
       {/* Resources 2x2 */}
@@ -135,50 +145,80 @@ export function SystemOverviewV2({
             {v4t(locale, "sys.coresFormat", cpuCores)}
           </div>
           {cpuUsage !== null && (
-            <div className="v4-stat-bar"><span style={{ width: `${Math.min(100, Math.max(0, cpuUsage))}%` }} /></div>
+            <div className="v4-stat-bar">
+              <span
+                style={{ width: `${Math.min(100, Math.max(0, cpuUsage))}%` }}
+              />
+            </div>
           )}
         </article>
 
         <article className="v4-stat" data-featured="true">
           <div className="v4-stat-label">{v4t(locale, "sys.cardMemory")}</div>
           <div className="v4-stat-value">
-            {memTotalBytes === 0 ? "—" :
-              `${v4t(locale, "v4.units.bytes", memUsedBytes)} / ${v4t(locale, "v4.units.bytes", memTotalBytes)}`}
+            {memTotalBytes === 0
+              ? "—"
+              : `${v4t(locale, "v4.units.bytes", memUsedBytes)} / ${v4t(locale, "v4.units.bytes", memTotalBytes)}`}
           </div>
-          <div className="v4-stat-foot">{v4t(locale, "sys.percentFormat", memPct)}</div>
+          <div className="v4-stat-foot">
+            {v4t(locale, "sys.percentFormat", memPct)}
+          </div>
           {memTotalBytes > 0 && (
-            <div className="v4-stat-bar"><span style={{ width: `${memPct}%` }} /></div>
+            <div className="v4-stat-bar">
+              <span style={{ width: `${memPct}%` }} />
+            </div>
           )}
         </article>
 
         <article className="v4-stat" data-featured="true">
-          <div className="v4-stat-label">{v4t(locale, "sys.cardInterfaces")}</div>
+          <div className="v4-stat-label">
+            {v4t(locale, "sys.cardInterfaces")}
+          </div>
           <div className="v4-stat-value">{interfaces.length}</div>
-          <div className="v4-stat-foot">{upCount} of {totalCount} administratively up</div>
+          <div className="v4-stat-foot">
+            {upCount} of {totalCount} administratively up
+          </div>
         </article>
 
         <article className="v4-stat" data-featured="true">
           <div className="v4-stat-label">{v4t(locale, "sys.cardUptime")}</div>
-          <div className="v4-stat-value">{formatUptime(uptimeSeconds, locale)}</div>
-          <div className="v4-stat-foot">{v4t(locale, "v4.since")} {ov?.system.os ?? "—"}</div>
+          <div className="v4-stat-value">
+            {formatUptime(uptimeSeconds, locale)}
+          </div>
+          <div className="v4-stat-foot">
+            {v4t(locale, "v4.since")} {ov?.system.os ?? "—"}
+          </div>
         </article>
       </div>
 
       <h2 className="v4-section-title">Identity</h2>
       <div className="v4-keyvalue">
-        <dt>Hostname</dt><dd>{ov?.system.hostname ?? "—"}</dd>
-        <dt>OS</dt><dd>{ov?.system.os ?? "—"}</dd>
-        <dt>Kernel</dt><dd>{ov?.system.kernel ?? "—"}</dd>
-        <dt>Architecture</dt><dd>{ov?.system.architecture ?? "—"}</dd>
-        <dt>Environment</dt><dd>{ov?.environment ?? "—"}</dd>
-        <dt>Last observed</dt><dd>{ov?.observedAt ? new Date(ov.observedAt).toLocaleString() : "—"}</dd>
+        <dt>Hostname</dt>
+        <dd>{ov?.system.hostname ?? "—"}</dd>
+        <dt>OS</dt>
+        <dd>{ov?.system.os ?? "—"}</dd>
+        <dt>Kernel</dt>
+        <dd>{ov?.system.kernel ?? "—"}</dd>
+        <dt>Architecture</dt>
+        <dd>{ov?.system.architecture ?? "—"}</dd>
+        <dt>Environment</dt>
+        <dd>{ov?.environment ?? "—"}</dd>
+        <dt>Last observed</dt>
+        <dd>
+          {ov?.observedAt ? new Date(ov.observedAt).toLocaleString() : "—"}
+        </dd>
       </div>
 
       <h2 className="v4-section-title">Storage</h2>
       {ov && ov.storage.length > 0 ? (
         <table className="v4-table">
           <thead>
-            <tr><th>Mountpoint</th><th>Filesystem</th><th>Used</th><th>Available</th></tr>
+            <tr>
+              <th>Mountpoint</th>
+              <th>Filesystem</th>
+              <th>Used</th>
+              <th>Available</th>
+            </tr>
           </thead>
           <tbody>
             {ov.storage.map((s: Overview["storage"][number]) => {
@@ -187,22 +227,30 @@ export function SystemOverviewV2({
                 <tr key={s.mountpoint}>
                   <td style={{ fontWeight: 500 }}>{s.mountpoint}</td>
                   <td className="v4-mono">{s.filesystem}</td>
-                  <td className="v4-mono">{v4t(locale, "v4.units.bytes", s.usedBytes)} ({pct}%)</td>
-                  <td className="v4-mono">{v4t(locale, "v4.units.bytes", s.availableBytes)}</td>
+                  <td className="v4-mono">
+                    {v4t(locale, "v4.units.bytes", s.usedBytes)} ({pct}%)
+                  </td>
+                  <td className="v4-mono">
+                    {v4t(locale, "v4.units.bytes", s.availableBytes)}
+                  </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       ) : (
-        <p style={{ color: "var(--text-muted)" }}>No filesystem data available yet.</p>
+        <p style={{ color: "var(--text-muted)" }}>
+          No filesystem data available yet.
+        </p>
       )}
 
       <h2 className="v4-section-title">{v4t(locale, "sys.recentFindings")}</h2>
       {/* The /api/v1/health payload doesn't carry per-component findings.
          We surface the honest "no findings available from the health probe"
          message and route the user to Doctor for real findings. */}
-      <p style={{ color: "var(--text-muted)" }}>{v4t(locale, "sys.noCurrentFindings")}</p>
+      <p style={{ color: "var(--text-muted)" }}>
+        {v4t(locale, "sys.noCurrentFindings")}
+      </p>
       <div>
         <button
           type="button"
@@ -249,7 +297,10 @@ export function SystemOverviewV2({
   );
 }
 
-function formatUptime(seconds: number, locale: import("../i18n/messages").Locale): string {
+function formatUptime(
+  seconds: number,
+  locale: import("../i18n/messages").Locale,
+): string {
   if (!Number.isFinite(seconds) || seconds <= 0) return "—";
   const total = Math.floor(seconds);
   const days = Math.floor(total / 86400);

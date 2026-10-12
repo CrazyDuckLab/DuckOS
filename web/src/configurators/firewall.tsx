@@ -36,12 +36,21 @@ export function FirewallRulesPage({
     client.fetchOverview({ signal: ctl.signal }).then(setResult);
     return () => ctl.abort();
   }, [client]);
-  if (!result) return <PageFrame page={page} bundle={bundle}><StatePanel state="loading" /></PageFrame>;
-  if (!result.ok) return (
-    <PageFrame page={page} bundle={bundle}>
-      <StatePanel state={result.reason === "missing" ? "missing-contract" : "error"} body={result.message} />
-    </PageFrame>
-  );
+  if (!result)
+    return (
+      <PageFrame page={page} bundle={bundle}>
+        <StatePanel state="loading" />
+      </PageFrame>
+    );
+  if (!result.ok)
+    return (
+      <PageFrame page={page} bundle={bundle}>
+        <StatePanel
+          state={result.reason === "missing" ? "missing-contract" : "error"}
+          body={result.message}
+        />
+      </PageFrame>
+    );
   const nft = result.data.nftables;
   return (
     <PageFrame page={page} bundle={bundle}>
@@ -61,16 +70,37 @@ export function FirewallRulesPage({
         </div>
         <p className="v1-mute">
           The live firewall workspace needs a typed /api/v1/firewall/rules
-          endpoint that returns chains and rules with these columns. Until
-          then the page renders here as a contract-gap stub.
+          endpoint that returns chains and rules with these columns. Until then
+          the page renders here as a contract-gap stub.
         </p>
-        <ul className="v1-row" style={{ gap: "var(--v1-s2)", flexWrap: "wrap", listStyle: "none", padding: 0 }}>
+        <ul
+          className="v1-row"
+          style={{
+            gap: "var(--v1-s2)",
+            flexWrap: "wrap",
+            listStyle: "none",
+            padding: 0,
+          }}
+        >
           {[
-            "chain", "rule_id", "match", "action", "direction", "from", "to",
-            "protocol", "src_ports", "dst_ports", "interfaces", "comment",
-            "packets", "bytes",
+            "chain",
+            "rule_id",
+            "match",
+            "action",
+            "direction",
+            "from",
+            "to",
+            "protocol",
+            "src_ports",
+            "dst_ports",
+            "interfaces",
+            "comment",
+            "packets",
+            "bytes",
           ].map((c) => (
-            <li key={c} className="v1-pill"><strong>{c}</strong></li>
+            <li key={c} className="v1-pill">
+              <strong>{c}</strong>
+            </li>
           ))}
         </ul>
       </div>
@@ -83,7 +113,17 @@ export function FirewallRulesPage({
   );
 }
 
-export const FirewallSubareaSpecs: Record<string, { columns: ReadonlyArray<{ key: string; label: string; description?: string }>; endpoint: string }> = {
+export const FirewallSubareaSpecs: Record<
+  string,
+  {
+    columns: ReadonlyArray<{
+      key: string;
+      label: string;
+      description?: string;
+    }>;
+    endpoint: string;
+  }
+> = {
   P041: {
     endpoint: "/api/v1/firewall/policies",
     columns: [
@@ -135,7 +175,14 @@ export function FirewallSubareaStub({
 }: {
   page: PageMeta;
   bundle: Messages;
-  spec: { columns: ReadonlyArray<{ key: string; label: string; description?: string }>; endpoint: string };
+  spec: {
+    columns: ReadonlyArray<{
+      key: string;
+      label: string;
+      description?: string;
+    }>;
+    endpoint: string;
+  };
 }) {
   return (
     <UnsupportedFeature

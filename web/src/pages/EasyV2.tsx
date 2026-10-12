@@ -16,7 +16,11 @@
  * Destructive actions always redirect to Full mode.
  */
 import { useContext, useEffect, useState } from "react";
-import { type APIClient, type FetchResult, type HealthPayload } from "../api/client";
+import {
+  type APIClient,
+  type FetchResult,
+  type HealthPayload,
+} from "../api/client";
 import type { Overview } from "../../../shared/api/types";
 import type { WireguardServerView, XrayServerView } from "../api/types";
 import { type Messages, type Locale, detectLocale } from "../i18n/messages";
@@ -33,9 +37,13 @@ function useLocale(): Locale {
   // localStorage hydration, so it always reflects the user's pick.
   if (typeof document !== "undefined") {
     const html = document.documentElement.getAttribute("data-locale");
-    if (html === "ru" || html === "de" || html === "es" || html === "en") return html;
-    const shell = document.querySelector(".duck-shell")?.getAttribute("data-locale");
-    if (shell === "ru" || shell === "de" || shell === "es" || shell === "en") return shell;
+    if (html === "ru" || html === "de" || html === "es" || html === "en")
+      return html;
+    const shell = document
+      .querySelector(".duck-shell")
+      ?.getAttribute("data-locale");
+    if (shell === "ru" || shell === "de" || shell === "es" || shell === "en")
+      return shell;
   }
   // Then the prefs context (covers components rendered before the
   // AppShell writes data-locale on first mount).
@@ -126,8 +134,7 @@ export function EasyHomePage({
         ? "easyHome.statusUnavailable"
         : "easyHome.statusIncomplete";
   const headlineLabel = v4t(locale, headlineKey);
-  const headlineIcon =
-    derived.overall === "attention" ? "warn" : "info";
+  const headlineIcon = derived.overall === "attention" ? "warn" : "info";
 
   // System tile — STRICTLY consumed from the centralized verdict.
   // No local positive derivation here. The verdict is the verdict;
@@ -138,9 +145,7 @@ export function EasyHomePage({
   // to "warn" only on real attention, else "muted" with the
   // honest incomplete label.
   const systemTileState: "good" | "warn" | "muted" =
-    derived.overall === "attention"
-      ? "warn"
-      : "muted";
+    derived.overall === "attention" ? "warn" : "muted";
   const systemStateLabel =
     derived.overall === "attention"
       ? v4t(locale, "easyHome.statusAttention")
@@ -185,11 +190,15 @@ export function EasyHomePage({
               borderRadius: "var(--radius-pill)",
               fontWeight: 500,
               cursor: "pointer",
-              display: "inline-flex", gap: 6, alignItems: "center",
-              fontFamily: "inherit", fontSize: "var(--fs-s)",
+              display: "inline-flex",
+              gap: 6,
+              alignItems: "center",
+              fontFamily: "inherit",
+              fontSize: "var(--fs-s)",
             }}
           >
-            <Icon name="doctor" size={16} /> {v4t(locale, "easyHome.systemOpen")}
+            <Icon name="doctor" size={16} />{" "}
+            {v4t(locale, "easyHome.systemOpen")}
           </button>
         </div>
       </div>
@@ -279,7 +288,9 @@ export function EasyHomePage({
         </div>
         <div>
           <dt>{v4t(locale, "easyHome.aboutArchitecture")}</dt>
-          <dd>{ov?.system.architecture ?? v4t(locale, "easyHome.unknownValue")}</dd>
+          <dd>
+            {ov?.system.architecture ?? v4t(locale, "easyHome.unknownValue")}
+          </dd>
         </div>
       </dl>
     </div>
@@ -302,22 +313,33 @@ function EasyTile(props: {
         <Icon name={props.icon} size={20} />
         <h3>{props.title}</h3>
       </div>
-      <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "var(--fs-s)" }}>
+      <p
+        style={{
+          margin: 0,
+          color: "var(--text-muted)",
+          fontSize: "var(--fs-s)",
+        }}
+      >
         {props.body}
       </p>
       {props.meta && (
-        <div className="tile-meta" style={{ color: "var(--text)" }}>{props.meta}</div>
+        <div className="tile-meta" style={{ color: "var(--text)" }}>
+          {props.meta}
+        </div>
       )}
       <div className="tile-state">{props.stateLabel}</div>
       <div className="tile-actions">
-        <button type="button" onClick={props.onPrimary}>{props.primaryLabel} →</button>
+        <button type="button" onClick={props.onPrimary}>
+          {props.primaryLabel} →
+        </button>
       </div>
     </div>
   );
 }
 
 function formatUptime(seconds: number, locale: Locale): string {
-  if (!Number.isFinite(seconds) || seconds <= 0) return v4t(locale, "easyHome.unknownValue");
+  if (!Number.isFinite(seconds) || seconds <= 0)
+    return v4t(locale, "easyHome.unknownValue");
   const total = Math.floor(seconds);
   const days = Math.floor(total / 86400);
   const hours = Math.floor((total % 86400) / 3600);
@@ -342,8 +364,12 @@ export function EasyInternetPage({
   const locale = useLocale();
   const overview = useOverview(client);
   const ov = overview?.ok ? overview.data : null;
-  const interfaces = (ov?.interfaces ?? []).filter((i) => i.name?.startsWith("wan"));
-  const defaultRoute = (ov?.routes ?? []).find((r) => r.destination === "default");
+  const interfaces = (ov?.interfaces ?? []).filter((i) =>
+    i.name?.startsWith("wan"),
+  );
+  const defaultRoute = (ov?.routes ?? []).find(
+    (r) => r.destination === "default",
+  );
   const gateway = defaultRoute?.gateway ?? "";
   const dns = ov?.dns?.nameservers ?? [];
 
@@ -352,30 +378,55 @@ export function EasyInternetPage({
       <h1 className="v4-page-title">{v4t(locale, "easyHome.internetCard")}</h1>
       <p className="v4-page-subtitle">{v4t(locale, "easyHome.internetSub")}</p>
       <div className="v4-page-meta">
-        <span className="v4-pill" data-kind="muted">live</span>
-        <span>{v4t(locale, "sys.cardInterfaces")} {interfaces.length}</span>
+        <span className="v4-pill" data-kind="muted">
+          live
+        </span>
+        <span>
+          {v4t(locale, "sys.cardInterfaces")} {interfaces.length}
+        </span>
       </div>
 
       <div className="v4-grid-2">
         <article className="v4-card">
           <div className="v4-card-head">
-            <span className="v4-card-icon"><Icon name="router" size={18} /></span>
+            <span className="v4-card-icon">
+              <Icon name="router" size={18} />
+            </span>
             <h3>Gateway</h3>
           </div>
-          <div className="v4-mono" style={{ fontSize: "var(--fs-l)", color: "var(--text-strong)" }}>{gateway || v4t(locale, "easyHome.unknownValue")}</div>
-          <div style={{ marginTop: 8, fontSize: "var(--fs-s)", color: "var(--text-muted)" }}>
+          <div
+            className="v4-mono"
+            style={{ fontSize: "var(--fs-l)", color: "var(--text-strong)" }}
+          >
+            {gateway || v4t(locale, "easyHome.unknownValue")}
+          </div>
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: "var(--fs-s)",
+              color: "var(--text-muted)",
+            }}
+          >
             default route via {interfaces[0]?.name ?? "—"}
           </div>
         </article>
         <article className="v4-card">
           <div className="v4-card-head">
-            <span className="v4-card-icon"><Icon name="dns" size={18} /></span>
+            <span className="v4-card-icon">
+              <Icon name="dns" size={18} />
+            </span>
             <h3>DNS</h3>
           </div>
           <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
-            {dns.length === 0 && <li style={{ color: "var(--text-muted)" }}>{v4t(locale, "easyHome.unknownValue")}</li>}
+            {dns.length === 0 && (
+              <li style={{ color: "var(--text-muted)" }}>
+                {v4t(locale, "easyHome.unknownValue")}
+              </li>
+            )}
             {dns.map((d) => (
-              <li key={d} className="v4-mono" style={{ padding: "4px 0" }}>{d}</li>
+              <li key={d} className="v4-mono" style={{ padding: "4px 0" }}>
+                {d}
+              </li>
             ))}
           </ul>
         </article>
@@ -406,7 +457,10 @@ export function EasyInternetPage({
                 <td style={{ fontWeight: 500 }}>{i.name}</td>
                 <td className="v4-mono">{i.addresses[0]?.address ?? "—"}</td>
                 <td>
-                  <span className="v4-status-pill" data-tone={i.state === "up" ? "good" : "bad"}>
+                  <span
+                    className="v4-status-pill"
+                    data-tone={i.state === "up" ? "good" : "bad"}
+                  >
                     {i.state}
                   </span>
                 </td>
@@ -434,7 +488,9 @@ export function EasyNetworksPage({
   const locale = useLocale();
   const overview = useOverview(client);
   const ov = overview?.ok ? overview.data : null;
-  const lanIfaces = (ov?.interfaces ?? []).filter((i) => i.name?.startsWith("lan") || i.name?.startsWith("wlan"));
+  const lanIfaces = (ov?.interfaces ?? []).filter(
+    (i) => i.name?.startsWith("lan") || i.name?.startsWith("wlan"),
+  );
   return (
     <div className="v4-page">
       <h1 className="v4-page-title">Networks</h1>
@@ -450,14 +506,25 @@ export function EasyNetworksPage({
       ) : (
         <table className="v4-table">
           <thead>
-            <tr><th>Interface</th><th>Address</th><th>State</th></tr>
+            <tr>
+              <th>Interface</th>
+              <th>Address</th>
+              <th>State</th>
+            </tr>
           </thead>
           <tbody>
             {lanIfaces.map((i) => (
               <tr key={i.name}>
                 <td style={{ fontWeight: 500 }}>{i.name}</td>
                 <td className="v4-mono">{i.addresses[0]?.address ?? "—"}</td>
-                <td><span className="v4-status-pill" data-tone={i.state === "up" ? "good" : "bad"}>{i.state}</span></td>
+                <td>
+                  <span
+                    className="v4-status-pill"
+                    data-tone={i.state === "up" ? "good" : "bad"}
+                  >
+                    {i.state}
+                  </span>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -469,7 +536,14 @@ export function EasyNetworksPage({
 
 /* — Easy Devices — */
 
-export function EasyDevicesPage({ client }: { page: PageMeta; bundle: Messages; navigate: (r: string) => void; client: APIClient }) {
+export function EasyDevicesPage({
+  client,
+}: {
+  page: PageMeta;
+  bundle: Messages;
+  navigate: (r: string) => void;
+  client: APIClient;
+}) {
   const locale = useLocale();
   const overview = useOverview(client);
   const ov = overview?.ok ? overview.data : null;
@@ -483,19 +557,35 @@ export function EasyDevicesPage({ client }: { page: PageMeta; bundle: Messages; 
       <h1 className="v4-page-title">{v4t(locale, "easyHome.devicesCard")}</h1>
       <p className="v4-page-subtitle">{v4t(locale, "easyHome.devicesSub")}</p>
       <div className="v4-page-meta">
-        <span className="v4-pill" data-kind="muted">{realInterfaces.length} interfaces</span>
-        <span>{realInterfaces.filter((i) => i.addresses.length > 0).length} with addresses</span>
+        <span className="v4-pill" data-kind="muted">
+          {realInterfaces.length} interfaces
+        </span>
+        <span>
+          {realInterfaces.filter((i) => i.addresses.length > 0).length} with
+          addresses
+        </span>
       </div>
       <table className="v4-table">
         <thead>
-          <tr><th>Interface</th><th>Address</th><th>State</th></tr>
+          <tr>
+            <th>Interface</th>
+            <th>Address</th>
+            <th>State</th>
+          </tr>
         </thead>
         <tbody>
           {realInterfaces.map((i) => (
             <tr key={i.name}>
               <td style={{ fontWeight: 500 }}>{i.name}</td>
               <td className="v4-mono">{i.addresses[0]?.address ?? "—"}</td>
-              <td><span className="v4-status-pill" data-tone={i.state === "up" ? "good" : "bad"}>{i.state}</span></td>
+              <td>
+                <span
+                  className="v4-status-pill"
+                  data-tone={i.state === "up" ? "good" : "bad"}
+                >
+                  {i.state}
+                </span>
+              </td>
             </tr>
           ))}
         </tbody>
@@ -506,7 +596,14 @@ export function EasyDevicesPage({ client }: { page: PageMeta; bundle: Messages; 
 
 /* — Easy Publish — */
 
-export function EasyPublishPage({ client }: { page: PageMeta; bundle: Messages; navigate: (r: string) => void; client: APIClient }) {
+export function EasyPublishPage({
+  client,
+}: {
+  page: PageMeta;
+  bundle: Messages;
+  navigate: (r: string) => void;
+  client: APIClient;
+}) {
   const locale = useLocale();
   const [wg, setWg] = useState<FetchResult<WireguardServerView[]> | null>(null);
   const [xray, setXray] = useState<FetchResult<XrayServerView[]> | null>(null);
@@ -517,14 +614,20 @@ export function EasyPublishPage({ client }: { page: PageMeta; bundle: Messages; 
   return (
     <div className="v4-page">
       <h1 className="v4-page-title">Publish</h1>
-      <p className="v4-page-subtitle">Tell this device which services are reachable from outside.</p>
+      <p className="v4-page-subtitle">
+        Tell this device which services are reachable from outside.
+      </p>
       <div className="v4-page-meta">
-        <span className="v4-pill" data-kind="muted">{wg?.ok ? wg.data.length : 0} VPN servers</span>
+        <span className="v4-pill" data-kind="muted">
+          {wg?.ok ? wg.data.length : 0} VPN servers
+        </span>
       </div>
       <div className="v4-grid-2">
         <article className="v4-card">
           <div className="v4-card-head">
-            <span className="v4-card-icon"><Icon name="vpn" size={18} /></span>
+            <span className="v4-card-icon">
+              <Icon name="vpn" size={18} />
+            </span>
             <h3>VPN</h3>
           </div>
           {(wg?.ok ? wg.data : []).length === 0 ? (
@@ -532,23 +635,45 @@ export function EasyPublishPage({ client }: { page: PageMeta; bundle: Messages; 
               icon="vpn"
               title={v4t(locale, "empty.vpn.title")}
               body={v4t(locale, "empty.vpn.body")}
-              action={v4t(locale, "empty.vpn.body") ? "Configure VPN" : "Configure"}
-              onAction={() => { window.location.hash = "#/tunnels/wireguard"; }}
+              action={
+                v4t(locale, "empty.vpn.body") ? "Configure VPN" : "Configure"
+              }
+              onAction={() => {
+                window.location.hash = "#/tunnels/wireguard";
+              }}
             />
           ) : (
             <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
-              {wg?.ok && wg.data.map((s) => (
-                <li key={s.ref.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid var(--line-soft)" }}>
-                  <span>{s.displayName}</span>
-                  <span className="v4-status-pill" data-tone={s.availability === "available" ? "good" : "muted"}>{s.availability}</span>
-                </li>
-              ))}
+              {wg?.ok &&
+                wg.data.map((s) => (
+                  <li
+                    key={s.ref.id}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      padding: "6px 0",
+                      borderBottom: "1px solid var(--line-soft)",
+                    }}
+                  >
+                    <span>{s.displayName}</span>
+                    <span
+                      className="v4-status-pill"
+                      data-tone={
+                        s.availability === "available" ? "good" : "muted"
+                      }
+                    >
+                      {s.availability}
+                    </span>
+                  </li>
+                ))}
             </ul>
           )}
         </article>
         <article className="v4-card">
           <div className="v4-card-head">
-            <span className="v4-card-icon"><Icon name="tunnel" size={18} /></span>
+            <span className="v4-card-icon">
+              <Icon name="tunnel" size={18} />
+            </span>
             <h3>Xray</h3>
           </div>
           {(xray?.ok ? xray.data : []).length === 0 ? (
@@ -557,16 +682,29 @@ export function EasyPublishPage({ client }: { page: PageMeta; bundle: Messages; 
               title={v4t(locale, "empty.xray.title")}
               body={v4t(locale, "empty.xray.body")}
               action={v4t(locale, "empty.xray.action")}
-              onAction={() => { window.location.hash = "#/tunnels/xray"; }}
+              onAction={() => {
+                window.location.hash = "#/tunnels/xray";
+              }}
             />
           ) : (
             <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
-              {xray?.ok && xray.data.map((s) => (
-                <li key={s.ref.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid var(--line-soft)" }}>
-                  <span>{s.displayName}</span>
-                  <span className="v4-status-pill" data-tone="muted">{s.availability}</span>
-                </li>
-              ))}
+              {xray?.ok &&
+                xray.data.map((s) => (
+                  <li
+                    key={s.ref.id}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      padding: "6px 0",
+                      borderBottom: "1px solid var(--line-soft)",
+                    }}
+                  >
+                    <span>{s.displayName}</span>
+                    <span className="v4-status-pill" data-tone="muted">
+                      {s.availability}
+                    </span>
+                  </li>
+                ))}
             </ul>
           )}
         </article>
@@ -629,7 +767,10 @@ export function EasyCarePage({
       <h1 className="v4-page-title">{v4t(locale, "easyCare.title")}</h1>
       <p className="v4-page-subtitle">{v4t(locale, "easyCare.subtitle")}</p>
       <div className="v4-page-meta">
-        <span className="v4-pill" data-kind={healthReachable ? undefined : "warn"}>
+        <span
+          className="v4-pill"
+          data-kind={healthReachable ? undefined : "warn"}
+        >
           {healthReachable
             ? v4t(locale, "easyCare.apiReachable")
             : v4t(locale, "easyCare.apiUnreachable")}
@@ -674,12 +815,21 @@ export function EasyCarePage({
       ) : (
         <div className="v4-grid-2">
           {(findings ?? []).map((f, idx) => (
-            <article key={`${f.component}-${f.code}-${idx}`} className="v4-card">
+            <article
+              key={`${f.component}-${f.code}-${idx}`}
+              className="v4-card"
+            >
               <div className="v4-card-head">
-                <span className="v4-card-icon"><Icon name="warn" size={18} /></span>
+                <span className="v4-card-icon">
+                  <Icon name="warn" size={18} />
+                </span>
                 <div>
-                  <h3>{f.component} · {f.code}</h3>
-                  <p style={{ margin: 0 }}>{f.message ?? f.description ?? ""}</p>
+                  <h3>
+                    {f.component} · {f.code}
+                  </h3>
+                  <p style={{ margin: 0 }}>
+                    {f.message ?? f.description ?? ""}
+                  </p>
                 </div>
               </div>
               <button

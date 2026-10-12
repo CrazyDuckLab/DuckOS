@@ -66,7 +66,13 @@ function makeHealth(over: Partial<HealthSummary> = {}): HealthSummary {
 describe("HealthChip semantics", () => {
   it("reports Healthy only when reachable + observed + fresh + doctor=good + overview=good", () => {
     const result = chipFor(
-      makeHealth({ doctor: "good", overview: "good", timeTrust: "trusted", lastObservedAt: Date.now(), reachable: true }),
+      makeHealth({
+        doctor: "good",
+        overview: "good",
+        timeTrust: "trusted",
+        lastObservedAt: Date.now(),
+        reachable: true,
+      }),
     );
     expect(result.tone).toBe("good");
     expect(result.label).toBe("Healthy");
@@ -74,7 +80,13 @@ describe("HealthChip semantics", () => {
 
   it("refuses to say Healthy when API is not reachable", () => {
     const result = chipFor(
-      makeHealth({ doctor: "good", overview: "good", timeTrust: "trusted", lastObservedAt: Date.now(), reachable: false }),
+      makeHealth({
+        doctor: "good",
+        overview: "good",
+        timeTrust: "trusted",
+        lastObservedAt: Date.now(),
+        reachable: false,
+      }),
     );
     expect(result.tone).not.toBe("good");
     expect(result.label).toBe("Status incomplete");
@@ -82,7 +94,12 @@ describe("HealthChip semantics", () => {
 
   it("refuses to say Healthy when observation timeTrust is untrusted", () => {
     const result = chipFor(
-      makeHealth({ doctor: "good", overview: "good", timeTrust: "untrusted", lastObservedAt: Date.now() }),
+      makeHealth({
+        doctor: "good",
+        overview: "good",
+        timeTrust: "untrusted",
+        lastObservedAt: Date.now(),
+      }),
     );
     expect(result.tone).not.toBe("good");
     // observed && !fresh → "Status check incomplete" (per health.observationUntrusted)
@@ -91,7 +108,12 @@ describe("HealthChip semantics", () => {
 
   it("refuses to say Healthy when observation has not been trusted yet", () => {
     const result = chipFor(
-      makeHealth({ doctor: "good", overview: "good", timeTrust: "unknown", lastObservedAt: Date.now() }),
+      makeHealth({
+        doctor: "good",
+        overview: "good",
+        timeTrust: "unknown",
+        lastObservedAt: Date.now(),
+      }),
     );
     expect(result.tone).not.toBe("good");
     expect(result.label).toBe("Status check incomplete");
@@ -99,7 +121,12 @@ describe("HealthChip semantics", () => {
 
   it("refuses to say Healthy when there has been no observation yet", () => {
     const result = chipFor(
-      makeHealth({ doctor: "good", overview: "good", timeTrust: "unknown", lastObservedAt: null }),
+      makeHealth({
+        doctor: "good",
+        overview: "good",
+        timeTrust: "unknown",
+        lastObservedAt: null,
+      }),
     );
     expect(result.tone).toBe("unknown");
     expect(result.label).toBe("Status incomplete");
@@ -107,7 +134,12 @@ describe("HealthChip semantics", () => {
 
   it("reports Needs attention when doctor is warn and observation is fresh", () => {
     const result = chipFor(
-      makeHealth({ doctor: "warn", overview: "good", timeTrust: "trusted", lastObservedAt: Date.now() }),
+      makeHealth({
+        doctor: "warn",
+        overview: "good",
+        timeTrust: "trusted",
+        lastObservedAt: Date.now(),
+      }),
     );
     expect(result.tone).toBe("warn");
     expect(result.label).toBe("Needs attention");
@@ -115,7 +147,12 @@ describe("HealthChip semantics", () => {
 
   it("reports Unavailable when doctor is bad and observation is fresh", () => {
     const result = chipFor(
-      makeHealth({ doctor: "bad", overview: "good", timeTrust: "trusted", lastObservedAt: Date.now() }),
+      makeHealth({
+        doctor: "bad",
+        overview: "good",
+        timeTrust: "trusted",
+        lastObservedAt: Date.now(),
+      }),
     );
     expect(result.tone).toBe("bad");
     expect(result.label).toBe("Unavailable");

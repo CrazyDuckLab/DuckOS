@@ -235,16 +235,16 @@ func xraySnapshotID[T any](kind string, items []T) string {
 // (the catalog stores a vault KeyRef only).
 func wireguardServerToView(s wireguard.Server) object.ViewObject {
 	return object.ViewObject{
-		Ref:          object.ObjectRef{Kind: "wireguard.server", ID: s.ID},
-		DisplayName:  s.Name,
+		Ref:         object.ObjectRef{Kind: "wireguard.server", ID: s.ID},
+		DisplayName: s.Name,
 		Desired: map[string]any{
-			"id":        s.ID,
-			"name":      s.Name,
-			"interface": s.Interface,
+			"id":         s.ID,
+			"name":       s.Name,
+			"interface":  s.Interface,
 			"listenPort": s.ListenPort,
-			"addresses": s.Addresses,
-			"publicKey": s.PublicKey,
-			"updatedAt": s.UpdatedAt,
+			"addresses":  s.Addresses,
+			"publicKey":  s.PublicKey,
+			"updatedAt":  s.UpdatedAt,
 		},
 		Availability: object.Available,
 		SupportedActions: object.SupportedActions{
@@ -256,18 +256,18 @@ func wireguardServerToView(s wireguard.Server) object.ViewObject {
 
 func wireguardPeerToView(p wireguard.Peer) object.ViewObject {
 	return object.ViewObject{
-		Ref:          object.ObjectRef{Kind: "wireguard.peer", ID: p.ID},
-		DisplayName:  p.Name,
+		Ref:         object.ObjectRef{Kind: "wireguard.peer", ID: p.ID},
+		DisplayName: p.Name,
 		Desired: map[string]any{
-			"id":          p.ID,
-			"serverId":    p.ServerID,
-			"name":        p.Name,
-			"publicKey":   p.PublicKey,
-			"allowedIPs":  p.AllowedIPs,
-			"endpoint":    p.Endpoint,
-			"enabled":     p.Enabled,
-			"intent":      p.Intent,
-			"updatedAt":   p.UpdatedAt,
+			"id":         p.ID,
+			"serverId":   p.ServerID,
+			"name":       p.Name,
+			"publicKey":  p.PublicKey,
+			"allowedIPs": p.AllowedIPs,
+			"endpoint":   p.Endpoint,
+			"enabled":    p.Enabled,
+			"intent":     p.Intent,
+			"updatedAt":  p.UpdatedAt,
 		},
 		Availability: object.Available,
 		SupportedActions: object.SupportedActions{
@@ -279,8 +279,8 @@ func wireguardPeerToView(p wireguard.Peer) object.ViewObject {
 
 func xrayServerToView(s xray.Server) object.ViewObject {
 	return object.ViewObject{
-		Ref:          object.ObjectRef{Kind: "xray.server", ID: s.ID},
-		DisplayName:  s.Name,
+		Ref:         object.ObjectRef{Kind: "xray.server", ID: s.ID},
+		DisplayName: s.Name,
 		Desired: map[string]any{
 			"id":        s.ID,
 			"name":      s.Name,
@@ -302,8 +302,8 @@ func xrayServerToView(s xray.Server) object.ViewObject {
 
 func xrayUserToView(u xray.User) object.ViewObject {
 	return object.ViewObject{
-		Ref:          object.ObjectRef{Kind: "xray.user", ID: u.ID},
-		DisplayName:  u.Name,
+		Ref:         object.ObjectRef{Kind: "xray.user", ID: u.ID},
+		DisplayName: u.Name,
 		Desired: map[string]any{
 			"id":        u.ID,
 			"serverId":  u.ServerID,
@@ -322,8 +322,8 @@ func xrayUserToView(u xray.User) object.ViewObject {
 
 func xrayProfileToView(p xray.Profile) object.ViewObject {
 	return object.ViewObject{
-		Ref:          object.ObjectRef{Kind: "xray.profile", ID: p.ID},
-		DisplayName:  p.Name,
+		Ref:         object.ObjectRef{Kind: "xray.profile", ID: p.ID},
+		DisplayName: p.Name,
 		Desired: map[string]any{
 			"id":        p.ID,
 			"name":      p.Name,
@@ -343,8 +343,8 @@ func xrayProfileToView(p xray.Profile) object.ViewObject {
 
 func xraySubscriptionToView(s xray.Subscription) object.ViewObject {
 	return object.ViewObject{
-		Ref:          object.ObjectRef{Kind: "xray.subscription", ID: s.ID},
-		DisplayName:  s.Name,
+		Ref:         object.ObjectRef{Kind: "xray.subscription", ID: s.ID},
+		DisplayName: s.Name,
 		Desired: map[string]any{
 			"id":         s.ID,
 			"name":       s.Name,

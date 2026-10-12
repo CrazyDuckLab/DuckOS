@@ -24,7 +24,12 @@ export function ApiStatusBanner({
 }) {
   const { state, dispatch } = useContext(PrefsContext)!;
   const { health } = state;
-  const known = [health.overview, health.doctor, health.topology, health.readiness];
+  const known = [
+    health.overview,
+    health.doctor,
+    health.topology,
+    health.readiness,
+  ];
   const good = known.filter((t) => t === "good").length;
   const bad = known.filter((t) => t === "bad").length;
   const unknown = known.length - good - bad;
@@ -40,7 +45,10 @@ export function ApiStatusBanner({
 
   return (
     <div className="v1-banner" role="status" aria-live="polite">
-      <span className="v1-dot" data-state={tone === "unreachable" ? "bad" : "warn"} />
+      <span
+        className="v1-dot"
+        data-state={tone === "unreachable" ? "bad" : "warn"}
+      />
       <span className="v1-strong">
         {tone === "unreachable"
           ? t(bundle, "health.apiUnreachable")
@@ -49,7 +57,12 @@ export function ApiStatusBanner({
       <span className="v1-subtle">
         {good} reachable · {bad} unreachable · {unknown} unknown
       </span>
-      <button type="button" className="v1-btn" data-variant="ghost" onClick={refresh}>
+      <button
+        type="button"
+        className="v1-btn"
+        data-variant="ghost"
+        onClick={refresh}
+      >
         Refresh
       </button>
       <button

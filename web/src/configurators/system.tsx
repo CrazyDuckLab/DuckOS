@@ -37,15 +37,31 @@ export function SitesLivePage({
     client.fetchSites({ signal: ctl.signal }).then(setResult);
     return () => ctl.abort();
   }, [client]);
-  if (!result) return <PageFrame page={page} bundle={bundle}><StatePanel state="loading" /></PageFrame>;
-  if (!result.ok) return (
-    <PageFrame page={page} bundle={bundle}>
-      <StatePanel state={result.reason === "missing" ? "missing-contract" : "error"} body={result.message} />
-    </PageFrame>
-  );
+  if (!result)
+    return (
+      <PageFrame page={page} bundle={bundle}>
+        <StatePanel state="loading" />
+      </PageFrame>
+    );
+  if (!result.ok)
+    return (
+      <PageFrame page={page} bundle={bundle}>
+        <StatePanel
+          state={result.reason === "missing" ? "missing-contract" : "error"}
+          body={result.message}
+        />
+      </PageFrame>
+    );
 
-  const sites = ((result.data as { sites?: Array<Record<string, unknown>> }).sites ?? []) as Array<Record<string, unknown>>;
-  const filtered = sites.filter((s) => !query || `${s.name ?? s.hostname ?? ""}`.toLowerCase().includes(query.toLowerCase()));
+  const sites = ((result.data as { sites?: Array<Record<string, unknown>> })
+    .sites ?? []) as Array<Record<string, unknown>>;
+  const filtered = sites.filter(
+    (s) =>
+      !query ||
+      `${s.name ?? s.hostname ?? ""}`
+        .toLowerCase()
+        .includes(query.toLowerCase()),
+  );
   return (
     <PageFrame page={page} bundle={bundle}>
       <RuntimeEvidencePanel rows={[{ key: "sites", value: sites.length }]} />
@@ -56,7 +72,11 @@ export function SitesLivePage({
         pageSize={20}
         emptyState="No sites configured."
         columns={[
-          { key: "name", label: "Site", render: (s) => <strong>{String(s.name ?? s.id ?? "—")}</strong> },
+          {
+            key: "name",
+            label: "Site",
+            render: (s) => <strong>{String(s.name ?? s.id ?? "—")}</strong>,
+          },
           { key: "role", label: "Role", render: (s) => String(s.role ?? "—") },
           {
             key: "state",
@@ -64,13 +84,22 @@ export function SitesLivePage({
             render: (s) => (
               <span
                 className="v1-pill"
-                data-state={String(s.state ?? "").toLowerCase() === "active" ? "good" : "warn"}
+                data-state={
+                  String(s.state ?? "").toLowerCase() === "active"
+                    ? "good"
+                    : "warn"
+                }
               >
                 {String(s.state ?? "—")}
               </span>
             ),
           },
-          { key: "lag", label: "Lag", mono: true, render: (s) => String(s.lag ?? "—") },
+          {
+            key: "lag",
+            label: "Lag",
+            mono: true,
+            render: (s) => String(s.lag ?? "—"),
+          },
         ]}
       />
     </PageFrame>
@@ -89,38 +118,70 @@ export function BackupPage({
   const [result, setResult] = useState<FetchResult<unknown> | null>(null);
   useEffect(() => {
     const ctl = new AbortController();
-    client.fetchBackup({ signal: ctl.signal, fallbackToMissing: true }).then(setResult);
+    client
+      .fetchBackup({ signal: ctl.signal, fallbackToMissing: true })
+      .then(setResult);
     return () => ctl.abort();
   }, [client]);
-  if (!result) return <PageFrame page={page} bundle={bundle}><StatePanel state="loading" /></PageFrame>;
-  if (!result.ok) return (
-    <PageFrame page={page} bundle={bundle}>
-      <StatePanel state={result.reason === "missing" ? "missing-contract" : "error"} body={result.message} />
-    </PageFrame>
-  );
+  if (!result)
+    return (
+      <PageFrame page={page} bundle={bundle}>
+        <StatePanel state="loading" />
+      </PageFrame>
+    );
+  if (!result.ok)
+    return (
+      <PageFrame page={page} bundle={bundle}>
+        <StatePanel
+          state={result.reason === "missing" ? "missing-contract" : "error"}
+          body={result.message}
+        />
+      </PageFrame>
+    );
 
-  const backups = ((result.data as { backups?: Array<Record<string, unknown>> }).backups ?? []) as Array<Record<string, unknown>>;
+  const backups = ((result.data as { backups?: Array<Record<string, unknown>> })
+    .backups ?? []) as Array<Record<string, unknown>>;
   return (
     <PageFrame page={page} bundle={bundle}>
-      <RuntimeEvidencePanel rows={[{ key: "backups", value: backups.length }]} />
+      <RuntimeEvidencePanel
+        rows={[{ key: "backups", value: backups.length }]}
+      />
       <DataTable
         rows={backups}
         rowKey={(b, i) => String(b.id ?? b.createdAt ?? i)}
         pageSize={20}
         emptyState="No backups on file."
         columns={[
-          { key: "id", label: "Backup", mono: true, render: (b) => <strong>{String(b.id ?? "—")}</strong> },
-          { key: "createdAt", label: "Created", render: (b) => String(b.createdAt ?? "—") },
+          {
+            key: "id",
+            label: "Backup",
+            mono: true,
+            render: (b) => <strong>{String(b.id ?? "—")}</strong>,
+          },
+          {
+            key: "createdAt",
+            label: "Created",
+            render: (b) => String(b.createdAt ?? "—"),
+          },
           {
             key: "verified",
             label: "Verified",
             render: (b) => (
-              <span className="v1-pill" data-state={b.verified ? "good" : "warn"}>
+              <span
+                className="v1-pill"
+                data-state={b.verified ? "good" : "warn"}
+              >
                 {b.verified ? "verified" : "unverified"}
               </span>
             ),
           },
-          { key: "size", label: "Size", mono: true, numeric: true, render: (b) => String(b.size ?? "—") },
+          {
+            key: "size",
+            label: "Size",
+            mono: true,
+            numeric: true,
+            render: (b) => String(b.size ?? "—"),
+          },
         ]}
       />
       <p className="v1-subtle v1-fs-xs">
@@ -143,16 +204,29 @@ export function UpsPage({
   const [result, setResult] = useState<FetchResult<unknown> | null>(null);
   useEffect(() => {
     const ctl = new AbortController();
-    client.fetchUps({ signal: ctl.signal, fallbackToMissing: true }).then(setResult);
+    client
+      .fetchUps({ signal: ctl.signal, fallbackToMissing: true })
+      .then(setResult);
     return () => ctl.abort();
   }, [client]);
-  if (!result) return <PageFrame page={page} bundle={bundle}><StatePanel state="loading" /></PageFrame>;
-  if (!result.ok) return (
-    <PageFrame page={page} bundle={bundle}>
-      <StatePanel state={result.reason === "missing" ? "missing-contract" : "error"} body={result.message} />
-    </PageFrame>
-  );
-  const ups = (result.data && typeof result.data === "object" ? result.data : {}) as Record<string, unknown>;
+  if (!result)
+    return (
+      <PageFrame page={page} bundle={bundle}>
+        <StatePanel state="loading" />
+      </PageFrame>
+    );
+  if (!result.ok)
+    return (
+      <PageFrame page={page} bundle={bundle}>
+        <StatePanel
+          state={result.reason === "missing" ? "missing-contract" : "error"}
+          body={result.message}
+        />
+      </PageFrame>
+    );
+  const ups = (
+    result.data && typeof result.data === "object" ? result.data : {}
+  ) as Record<string, unknown>;
   return (
     <PageFrame page={page} bundle={bundle}>
       <RuntimeEvidencePanel
@@ -179,103 +253,169 @@ export function UsersPage({
   const [result, setResult] = useState<FetchResult<unknown> | null>(null);
   useEffect(() => {
     const ctl = new AbortController();
-    client.fetchAuthMe({ signal: ctl.signal, fallbackToMissing: true }).then(setResult);
+    client
+      .fetchAuthMe({ signal: ctl.signal, fallbackToMissing: true })
+      .then(setResult);
     return () => ctl.abort();
   }, [client]);
-  if (!result) return <PageFrame page={page} bundle={bundle}><StatePanel state="loading" /></PageFrame>;
-  if (!result.ok) return (
-    <PageFrame page={page} bundle={bundle}>
-      <StatePanel state={result.reason === "missing" ? "missing-contract" : "error"} body={result.message} />
-    </PageFrame>
-  );
+  if (!result)
+    return (
+      <PageFrame page={page} bundle={bundle}>
+        <StatePanel state="loading" />
+      </PageFrame>
+    );
+  if (!result.ok)
+    return (
+      <PageFrame page={page} bundle={bundle}>
+        <StatePanel
+          state={result.reason === "missing" ? "missing-contract" : "error"}
+          body={result.message}
+        />
+      </PageFrame>
+    );
   return (
     <PageFrame page={page} bundle={bundle}>
       <p className="v1-mute v1-fs-sm">
         The Users and Roles view shows the currently-authenticated user via
-        /api/v1/auth/me. A typed users list endpoint is part of the design
-        and tracked under docs/ui/BACKEND_INTEGRATION_GAPS.md.
+        /api/v1/auth/me. A typed users list endpoint is part of the design and
+        tracked under docs/ui/BACKEND_INTEGRATION_GAPS.md.
       </p>
       <pre className="v1-code">{JSON.stringify(result.data, null, 2)}</pre>
     </PageFrame>
   );
 }
 
-export const SystemSubareaSpecs: Record<string, { columns: ReadonlyArray<{ key: string; label: string; description?: string }>; endpoint: string }> = {
-  P003: { endpoint: "/api/v1/revision", columns: [
-    { key: "revision", label: "Revision" },
-    { key: "actor", label: "Actor" },
-    { key: "changed", label: "Changed" },
-    { key: "result", label: "Result" },
-  ] },
-  P004: { endpoint: "/api/v1/objects", columns: [
-    { key: "object", label: "Object" },
-    { key: "owner", label: "Owner" },
-    { key: "dependents", label: "Dependents" },
-  ] },
-  P005: { endpoint: "/api/v1/templates", columns: [
-    { key: "template", label: "Template" },
-    { key: "target", label: "Target" },
-    { key: "parameters", label: "Parameters" },
-  ] },
-  P068: { endpoint: "/api/v1/backup", columns: [
-    { key: "id", label: "Backup" },
-    { key: "size", label: "Size" },
-    { key: "verified", label: "Verified" },
-  ] },
-  P069: { endpoint: "/api/v1/upgrade", columns: [
-    { key: "release", label: "Release" },
-    { key: "size", label: "Size" },
-    { key: "impact", label: "Impact" },
-  ] },
-  P070: { endpoint: "/api/v1/license", columns: [
-    { key: "field", label: "Field" },
-    { key: "value", label: "Value" },
-  ] },
-  P071: { endpoint: "/api/v1/hardware", columns: [
-    { key: "component", label: "Component" },
-    { key: "value", label: "Value" },
-    { key: "state", label: "State" },
-  ] },
-  P072: { endpoint: "/api/v1/ups", columns: [
-    { key: "property", label: "Property" },
-    { key: "value", label: "Value" },
-    { key: "state", label: "State" },
-  ] },
-  P074: { endpoint: "/api/v1/ztp", columns: [
-    { key: "device", label: "Device" },
-    { key: "state", label: "State" },
-    { key: "result", label: "Result" },
-  ] },
-  P075: { endpoint: "/api/v1/migrate", columns: [
-    { key: "migration", label: "Migration" },
-    { key: "stage", label: "Stage" },
-    { key: "result", label: "Result" },
-  ] },
-  P076: { endpoint: "/api/v1/time", columns: [
-    { key: "source", label: "Source" },
-    { key: "offset", label: "Offset" },
-    { key: "trust", label: "Trust" },
-  ] },
-  P077: { endpoint: "/api/v1/api-surface", columns: [
-    { key: "endpoint", label: "Endpoint" },
-    { key: "method", label: "Method" },
-    { key: "schema", label: "Schema" },
-  ] },
-  P078: { endpoint: "/api/v1/migration-help", columns: [
-    { key: "migration", label: "Migration" },
-    { key: "recommendation", label: "Recommendation" },
-    { key: "risk", label: "Risk" },
-  ] },
-  P079: { endpoint: "/api/v1/privacy", columns: [
-    { key: "destination", label: "Destination" },
-    { key: "purpose", label: "Purpose" },
-    { key: "status", label: "Status" },
-  ] },
-  P080: { endpoint: "/api/v1/webhooks", columns: [
-    { key: "target", label: "Target" },
-    { key: "events", label: "Events" },
-    { key: "last_delivery", label: "Last delivery" },
-  ] },
+export const SystemSubareaSpecs: Record<
+  string,
+  {
+    columns: ReadonlyArray<{
+      key: string;
+      label: string;
+      description?: string;
+    }>;
+    endpoint: string;
+  }
+> = {
+  P003: {
+    endpoint: "/api/v1/revision",
+    columns: [
+      { key: "revision", label: "Revision" },
+      { key: "actor", label: "Actor" },
+      { key: "changed", label: "Changed" },
+      { key: "result", label: "Result" },
+    ],
+  },
+  P004: {
+    endpoint: "/api/v1/objects",
+    columns: [
+      { key: "object", label: "Object" },
+      { key: "owner", label: "Owner" },
+      { key: "dependents", label: "Dependents" },
+    ],
+  },
+  P005: {
+    endpoint: "/api/v1/templates",
+    columns: [
+      { key: "template", label: "Template" },
+      { key: "target", label: "Target" },
+      { key: "parameters", label: "Parameters" },
+    ],
+  },
+  P068: {
+    endpoint: "/api/v1/backup",
+    columns: [
+      { key: "id", label: "Backup" },
+      { key: "size", label: "Size" },
+      { key: "verified", label: "Verified" },
+    ],
+  },
+  P069: {
+    endpoint: "/api/v1/upgrade",
+    columns: [
+      { key: "release", label: "Release" },
+      { key: "size", label: "Size" },
+      { key: "impact", label: "Impact" },
+    ],
+  },
+  P070: {
+    endpoint: "/api/v1/license",
+    columns: [
+      { key: "field", label: "Field" },
+      { key: "value", label: "Value" },
+    ],
+  },
+  P071: {
+    endpoint: "/api/v1/hardware",
+    columns: [
+      { key: "component", label: "Component" },
+      { key: "value", label: "Value" },
+      { key: "state", label: "State" },
+    ],
+  },
+  P072: {
+    endpoint: "/api/v1/ups",
+    columns: [
+      { key: "property", label: "Property" },
+      { key: "value", label: "Value" },
+      { key: "state", label: "State" },
+    ],
+  },
+  P074: {
+    endpoint: "/api/v1/ztp",
+    columns: [
+      { key: "device", label: "Device" },
+      { key: "state", label: "State" },
+      { key: "result", label: "Result" },
+    ],
+  },
+  P075: {
+    endpoint: "/api/v1/migrate",
+    columns: [
+      { key: "migration", label: "Migration" },
+      { key: "stage", label: "Stage" },
+      { key: "result", label: "Result" },
+    ],
+  },
+  P076: {
+    endpoint: "/api/v1/time",
+    columns: [
+      { key: "source", label: "Source" },
+      { key: "offset", label: "Offset" },
+      { key: "trust", label: "Trust" },
+    ],
+  },
+  P077: {
+    endpoint: "/api/v1/api-surface",
+    columns: [
+      { key: "endpoint", label: "Endpoint" },
+      { key: "method", label: "Method" },
+      { key: "schema", label: "Schema" },
+    ],
+  },
+  P078: {
+    endpoint: "/api/v1/migration-help",
+    columns: [
+      { key: "migration", label: "Migration" },
+      { key: "recommendation", label: "Recommendation" },
+      { key: "risk", label: "Risk" },
+    ],
+  },
+  P079: {
+    endpoint: "/api/v1/privacy",
+    columns: [
+      { key: "destination", label: "Destination" },
+      { key: "purpose", label: "Purpose" },
+      { key: "status", label: "Status" },
+    ],
+  },
+  P080: {
+    endpoint: "/api/v1/webhooks",
+    columns: [
+      { key: "target", label: "Target" },
+      { key: "events", label: "Events" },
+      { key: "last_delivery", label: "Last delivery" },
+    ],
+  },
 };
 
 export function SystemSubareaStub({
@@ -285,7 +425,14 @@ export function SystemSubareaStub({
 }: {
   page: PageMeta;
   bundle: Messages;
-  spec: { columns: ReadonlyArray<{ key: string; label: string; description?: string }>; endpoint: string };
+  spec: {
+    columns: ReadonlyArray<{
+      key: string;
+      label: string;
+      description?: string;
+    }>;
+    endpoint: string;
+  };
 }) {
   return (
     <UnsupportedFeature

@@ -58,7 +58,7 @@ func adoptionOwnedBinding(id, name, mac string) PhysicalBinding {
 	}
 }
 
-func emptyConfig() Config                  { return Config{Version: 1} }
+func emptyConfig() Config { return Config{Version: 1} }
 func singleInterface(iface Interface) Config {
 	return Config{Version: 1, Interfaces: []Interface{iface}}
 }

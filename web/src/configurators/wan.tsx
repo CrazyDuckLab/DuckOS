@@ -53,7 +53,9 @@ export function WanConnectionsPage({
   useEffect(() => {
     const ctl = new AbortController();
     client.fetchOverview({ signal: ctl.signal }).then(setOverview);
-    client.fetchMultiwan({ signal: ctl.signal, fallbackToMissing: true }).then(setMultiwan);
+    client
+      .fetchMultiwan({ signal: ctl.signal, fallbackToMissing: true })
+      .then(setMultiwan);
     return () => ctl.abort();
   }, [client]);
 
@@ -67,13 +69,19 @@ export function WanConnectionsPage({
   if (!overview.ok) {
     return (
       <PageFrame page={page} bundle={bundle}>
-        <StatePanel state={overview.reason === "missing" ? "missing-contract" : "error"} body={overview.message} />
+        <StatePanel
+          state={overview.reason === "missing" ? "missing-contract" : "error"}
+          body={overview.message}
+        />
       </PageFrame>
     );
   }
 
   const uplinks = multiwan?.ok
-    ? ((multiwan.data as { uplinks?: Array<Record<string, unknown>> }).uplinks ?? []).map(asUplink)
+    ? (
+        (multiwan.data as { uplinks?: Array<Record<string, unknown>> })
+          .uplinks ?? []
+      ).map(asUplink)
     : [];
   const defaultRoute = overview.data.routes.find(
     (r) => r.destination === "default" || r.destination === "0.0.0.0/0",
@@ -83,7 +91,11 @@ export function WanConnectionsPage({
     <PageFrame page={page} bundle={bundle}>
       <RuntimeEvidencePanel
         rows={[
-          { key: "uplinks", value: uplinks.length || "—", observed: multiwan?.ok ? undefined : "via /overview" },
+          {
+            key: "uplinks",
+            value: uplinks.length || "—",
+            observed: multiwan?.ok ? undefined : "via /overview",
+          },
           { key: "default gateway", value: defaultRoute?.gateway ?? "—" },
           { key: "default route device", value: defaultRoute?.device ?? "—" },
         ]}
@@ -91,21 +103,32 @@ export function WanConnectionsPage({
       />
       <p className="v1-mute v1-fs-sm">
         Read-only observation. Edit endpoints for uplink configuration are
-        scheduled behind a typed contract — see docs/ui/BACKEND_INTEGRATION_GAPS.md.
+        scheduled behind a typed contract — see
+        docs/ui/BACKEND_INTEGRATION_GAPS.md.
       </p>
       <DataTable<Uplink>
         rows={uplinks}
         rowKey={(u) => u.name}
         pageSize={20}
         initialSort={{ key: "name", direction: "asc" }}
-        emptyState={multiwan?.ok ? "No uplinks configured." : "/api/v1/multiwan is not exposed — falling back to /overview.interfaces."}
+        emptyState={
+          multiwan?.ok
+            ? "No uplinks configured."
+            : "/api/v1/multiwan is not exposed — falling back to /overview.interfaces."
+        }
         columns={[
-          { key: "name", label: "Interface", render: (u) => <strong>{u.name}</strong> },
+          {
+            key: "name",
+            label: "Interface",
+            render: (u) => <strong>{u.name}</strong>,
+          },
           { key: "type", label: "Type", render: (u) => u.type ?? "—" },
           {
             key: "role",
             label: "Role",
-            render: (u) => <span className="v1-pill">{u.role ?? "primary"}</span>,
+            render: (u) => (
+              <span className="v1-pill">{u.role ?? "primary"}</span>
+            ),
           },
           {
             key: "ipv4",
@@ -175,12 +198,19 @@ export function MultiwanPage({
   if (!result.ok) {
     return (
       <PageFrame page={page} bundle={bundle}>
-        <StatePanel state={result.reason === "missing" ? "missing-contract" : "error"} body={result.message} />
+        <StatePanel
+          state={result.reason === "missing" ? "missing-contract" : "error"}
+          body={result.message}
+        />
       </PageFrame>
     );
   }
 
-  const data = result.data as { uplinks?: Array<Record<string, unknown>>; active?: string; mode?: string };
+  const data = result.data as {
+    uplinks?: Array<Record<string, unknown>>;
+    active?: string;
+    mode?: string;
+  };
   const uplinks = (data.uplinks ?? []).map(asUplink);
 
   return (
@@ -195,8 +225,8 @@ export function MultiwanPage({
       />
       <p className="v1-mute v1-fs-sm">
         The active uplink is per the most recent probe. Edit endpoints for
-        failover order and policy rules are part of the design and tracked
-        under docs/ui/BACKEND_INTEGRATION_GAPS.md.
+        failover order and policy rules are part of the design and tracked under
+        docs/ui/BACKEND_INTEGRATION_GAPS.md.
       </p>
       <DataTable<Uplink>
         rows={uplinks}
@@ -205,7 +235,11 @@ export function MultiwanPage({
         initialSort={{ key: "name", direction: "asc" }}
         emptyState="No uplinks configured."
         columns={[
-          { key: "name", label: "Interface", render: (u) => <strong>{u.name}</strong> },
+          {
+            key: "name",
+            label: "Interface",
+            render: (u) => <strong>{u.name}</strong>,
+          },
           { key: "role", label: "Role", render: (u) => u.role ?? "primary" },
           {
             key: "state",
@@ -213,7 +247,13 @@ export function MultiwanPage({
             render: (u) => (
               <span
                 className="v1-pill"
-                data-state={u.state?.toLowerCase() === "active" ? "good" : u.state?.toLowerCase() === "failed" ? "bad" : "warn"}
+                data-state={
+                  u.state?.toLowerCase() === "active"
+                    ? "good"
+                    : u.state?.toLowerCase() === "failed"
+                      ? "bad"
+                      : "warn"
+                }
               >
                 {u.state ?? "unknown"}
               </span>
@@ -227,7 +267,17 @@ export function MultiwanPage({
 }
 
 /* — P018/P020/P021 stubs — typed contract-gap pages — */
-export const WanSubareaSpecs: Record<string, { columns: ReadonlyArray<{ key: string; label: string; description?: string }>; endpoint: string }> = {
+export const WanSubareaSpecs: Record<
+  string,
+  {
+    columns: ReadonlyArray<{
+      key: string;
+      label: string;
+      description?: string;
+    }>;
+    endpoint: string;
+  }
+> = {
   P018: {
     endpoint: "/api/v1/wan/modems",
     columns: [
@@ -265,7 +315,14 @@ export function WanSubareaStub({
 }: {
   page: PageMeta;
   bundle: Messages;
-  spec: { columns: ReadonlyArray<{ key: string; label: string; description?: string }>; endpoint: string };
+  spec: {
+    columns: ReadonlyArray<{
+      key: string;
+      label: string;
+      description?: string;
+    }>;
+    endpoint: string;
+  };
 }) {
   return (
     <UnsupportedFeature

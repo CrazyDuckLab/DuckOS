@@ -65,13 +65,19 @@ export function V4PageFrame({
           </span>
         ))}
       </div>
-      {actions && <div style={{ display: "flex", gap: 8, margin: "16px 0" }}>{actions}</div>}
+      {actions && (
+        <div style={{ display: "flex", gap: 8, margin: "16px 0" }}>
+          {actions}
+        </div>
+      )}
       {children}
     </div>
   );
 }
 
-function statusToneKind(tone: "good" | "warn" | "bad" | "muted"): "muted" | "warn" | "bad" | undefined {
+function statusToneKind(
+  tone: "good" | "warn" | "bad" | "muted",
+): "muted" | "warn" | "bad" | undefined {
   if (tone === "warn") return "warn";
   if (tone === "bad") return "bad";
   if (tone === "muted") return "muted";
@@ -99,9 +105,11 @@ interface LegacyPageFrameProps {
  * pill row.
  */
 export function PageFrame(props: LegacyPageFrameProps) {
-  const locale = (typeof document !== "undefined"
-    ? ((document.documentElement.getAttribute("data-locale") as Locale) ?? "en")
-    : "en");
+  const locale =
+    typeof document !== "undefined"
+      ? ((document.documentElement.getAttribute("data-locale") as Locale) ??
+        "en")
+      : "en";
   const meta: Array<{ label: string; tone?: "muted" | "warn" | "bad" }> = [];
   if (!props.page.implemented) {
     meta.push({ label: v4t(locale, "pageMeta.designOnly"), tone: "warn" });
@@ -131,7 +139,9 @@ export function PageFrame(props: LegacyPageFrameProps) {
         ))}
       </div>
       {props.headerTools && (
-        <div style={{ display: "flex", gap: 8, margin: "12px 0" }}>{props.headerTools}</div>
+        <div style={{ display: "flex", gap: 8, margin: "12px 0" }}>
+          {props.headerTools}
+        </div>
       )}
       <div className="v4-page-section">{props.children}</div>
     </div>
@@ -147,21 +157,31 @@ export const LegacyPageFrame = PageFrame;
  * import `EmptyState` or use V4PageFrame directly. */
 export function PageState(props: Record<string, unknown>) {
   const kind = String(props.kind ?? "loading");
-  const isError = kind === "error" || kind === "missing-contract" || kind === "contract-missing";
+  const isError =
+    kind === "error" ||
+    kind === "missing-contract" ||
+    kind === "contract-missing";
   const title = typeof props.title === "string" ? props.title : "";
-  const body = typeof props.body === "string"
-    ? props.body
-    : typeof props.desc === "string"
-      ? props.desc
-      : "";
+  const body =
+    typeof props.body === "string"
+      ? props.body
+      : typeof props.desc === "string"
+        ? props.desc
+        : "";
   return (
     <div
       className="duck-empty"
-      style={isError ? { background: "var(--bad-soft)", color: "var(--bad-on)" } : undefined}
+      style={
+        isError
+          ? { background: "var(--bad-soft)", color: "var(--bad-on)" }
+          : undefined
+      }
     >
       {title ? <h3>{title}</h3> : null}
       {body ? <p>{body}</p> : null}
-      {typeof props.actions !== "undefined" && props.actions ? <div>{props.actions as ReactNode}</div> : null}
+      {typeof props.actions !== "undefined" && props.actions ? (
+        <div>{props.actions as ReactNode}</div>
+      ) : null}
     </div>
   );
 }
@@ -177,8 +197,18 @@ interface FormFieldProps {
 /** Legacy form field — V4 substitute. */
 export function FormField({ label, value, onChange, type }: FormFieldProps) {
   return (
-    <label className="v4-form-field" style={{ display: "block", marginBottom: 12 }}>
-      <span style={{ display: "block", fontSize: "var(--fs-xs)", color: "var(--text-muted)", marginBottom: 4 }}>
+    <label
+      className="v4-form-field"
+      style={{ display: "block", marginBottom: 12 }}
+    >
+      <span
+        style={{
+          display: "block",
+          fontSize: "var(--fs-xs)",
+          color: "var(--text-muted)",
+          marginBottom: 4,
+        }}
+      >
         {label}
       </span>
       <input
@@ -201,16 +231,26 @@ export function FormField({ label, value, onChange, type }: FormFieldProps) {
 }
 
 /* — Legacy SegmentedControl. Accepts any prop shape; renders V4 fallback. */
-export function SegmentedControl<T extends string>(props: Record<string, unknown>) {
+export function SegmentedControl<T extends string>(
+  props: Record<string, unknown>,
+) {
   const value = props.value as T;
   const onChange = (v: T) => {
     const cb = props.onChange as ((v: T) => void) | undefined;
     if (cb) cb(v);
   };
-  const options = (props.options ?? []) as ReadonlyArray<{ value: T; label: string }>;
+  const options = (props.options ?? []) as ReadonlyArray<{
+    value: T;
+    label: string;
+  }>;
   const label = typeof props.label === "string" ? props.label : "";
   return (
-    <div className="duck-mode" role="group" aria-label={label} style={{ display: "inline-flex" }}>
+    <div
+      className="duck-mode"
+      role="group"
+      aria-label={label}
+      style={{ display: "inline-flex" }}
+    >
       {options.map((o) => (
         <button
           key={o.value}
@@ -218,8 +258,10 @@ export function SegmentedControl<T extends string>(props: Record<string, unknown
           aria-pressed={value === o.value}
           onClick={() => onChange(o.value)}
           style={{
-            background: value === o.value ? "var(--surface-elevated)" : "transparent",
-            color: value === o.value ? "var(--text-strong)" : "var(--text-muted)",
+            background:
+              value === o.value ? "var(--surface-elevated)" : "transparent",
+            color:
+              value === o.value ? "var(--text-strong)" : "var(--text-muted)",
             border: "none",
             padding: "4px 12px",
             fontFamily: "inherit",
@@ -238,8 +280,12 @@ export function SegmentedControl<T extends string>(props: Record<string, unknown
 /* — Legacy search field. Accepts any prop shape (legacy calls vary). */
 export function SearchField(props: Record<string, unknown>) {
   const value = typeof props.value === "string" ? props.value : "";
-  const onChange = typeof props.onChange === "function" ? (props.onChange as (v: string) => void) : () => undefined;
-  const placeholder = typeof props.placeholder === "string" ? props.placeholder : "Search…";
+  const onChange =
+    typeof props.onChange === "function"
+      ? (props.onChange as (v: string) => void)
+      : () => undefined;
+  const placeholder =
+    typeof props.placeholder === "string" ? props.placeholder : "Search…";
   return (
     <input
       type="search"
@@ -278,7 +324,9 @@ export function PageToolbar(props: Record<string, unknown>) {
       }}
     >
       <div>{props.left as ReactNode}</div>
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>{props.right as ReactNode}</div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        {props.right as ReactNode}
+      </div>
     </div>
   );
 }
@@ -297,7 +345,11 @@ export function PageLink(props: Record<string, unknown>) {
           navigate(page.route);
         }
       }}
-      style={{ color: "var(--accent-ink)", textDecoration: "none", fontWeight: 500 }}
+      style={{
+        color: "var(--accent-ink)",
+        textDecoration: "none",
+        fontWeight: 500,
+      }}
     >
       {props.children as ReactNode}
     </a>
@@ -305,10 +357,15 @@ export function PageLink(props: Record<string, unknown>) {
 }
 
 /** Legacy MissingContractNotice — promoted to EmptyState in V4. */
-export function MissingContractNotice(props: { bundle: Messages; page: PageMeta }) {
-  const locale = (typeof document !== "undefined"
-    ? ((document.documentElement.getAttribute("data-locale") as Locale) ?? "en")
-    : "en");
+export function MissingContractNotice(props: {
+  bundle: Messages;
+  page: PageMeta;
+}) {
+  const locale =
+    typeof document !== "undefined"
+      ? ((document.documentElement.getAttribute("data-locale") as Locale) ??
+        "en")
+      : "en";
   const emptyKey =
     props.page.id === "P047" || props.page.id === "P048"
       ? "empty.wireguardPeers"
@@ -321,7 +378,9 @@ export function MissingContractNotice(props: { bundle: Messages; page: PageMeta 
             : "empty.generic";
   return (
     <div className="duck-empty">
-      <div className="e-icon"><span aria-hidden="true">📭</span></div>
+      <div className="e-icon">
+        <span aria-hidden="true">📭</span>
+      </div>
       <h3>{v4t(locale, `${emptyKey}.title`)}</h3>
       <p>{v4t(locale, `${emptyKey}.body`)}</p>
       {v4t(locale, `${emptyKey}.action`) && (

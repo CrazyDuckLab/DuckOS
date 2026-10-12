@@ -402,11 +402,11 @@ func TestIntegration_TwoPathspacesIndependent(t *testing.T) {
 // NOT create a second daemon. We test this with the
 // rehydrate-and-EXEC interaction:
 //
-//   1. Spawn a fake zebra with a pidfile.
-//   2. Start the launcher; rehydrate picks it up.
-//   3. Send EXEC zebra <ps>. Reply should be OK <same-pid>.
-//   4. Send EXEC zebra <ps> again. Reply should be OK <same-pid>.
-//   5. There is still exactly ONE zebra for <ps>.
+//  1. Spawn a fake zebra with a pidfile.
+//  2. Start the launcher; rehydrate picks it up.
+//  3. Send EXEC zebra <ps>. Reply should be OK <same-pid>.
+//  4. Send EXEC zebra <ps> again. Reply should be OK <same-pid>.
+//  5. There is still exactly ONE zebra for <ps>.
 func TestIntegration_RepeatedEXECIsIdempotent(t *testing.T) {
 	if os.Getuid() != 0 {
 		t.Skip("requires root to write /run/frr")

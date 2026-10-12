@@ -14,9 +14,13 @@ import type { PageMeta } from "../pages/registry";
 function useLocale(): Locale {
   if (typeof document === "undefined") return "en";
   const html = document.documentElement.getAttribute("data-locale");
-  if (html === "ru" || html === "de" || html === "es" || html === "en") return html;
-  const shell = document.querySelector(".duck-shell")?.getAttribute("data-locale");
-  if (shell === "ru" || shell === "de" || shell === "es" || shell === "en") return shell;
+  if (html === "ru" || html === "de" || html === "es" || html === "en")
+    return html;
+  const shell = document
+    .querySelector(".duck-shell")
+    ?.getAttribute("data-locale");
+  if (shell === "ru" || shell === "de" || shell === "es" || shell === "en")
+    return shell;
   return "en";
 }
 
@@ -40,7 +44,12 @@ export function WanConnectionsPage({
 
   if (!overview) {
     return (
-      <V4PageFrame page={page} locale={locale} title={page.name} subtitle={page.question}>
+      <V4PageFrame
+        page={page}
+        locale={locale}
+        title={page.name}
+        subtitle={page.question}
+      >
         <div className="duck-empty">
           <h3>{v4t(locale, "sys.loading")}</h3>
         </div>
@@ -49,9 +58,18 @@ export function WanConnectionsPage({
   }
   if (!overview.ok) {
     return (
-      <V4PageFrame page={page} locale={locale} title={page.name} subtitle={page.question}>
+      <V4PageFrame
+        page={page}
+        locale={locale}
+        title={page.name}
+        subtitle={page.question}
+      >
         <div className="duck-empty">
-          <h3>{overview.reason === "missing" ? v4t(locale, "sys.contractMissing") : v4t(locale, "sys.error")}</h3>
+          <h3>
+            {overview.reason === "missing"
+              ? v4t(locale, "sys.contractMissing")
+              : v4t(locale, "sys.error")}
+          </h3>
           <p>{overview.message}</p>
         </div>
       </V4PageFrame>
@@ -60,7 +78,11 @@ export function WanConnectionsPage({
   const data: Overview = overview.data;
   const uplinks: Overview["interfaces"] = data.interfaces;
   const filtered = uplinks.filter(
-    (u) => !query || `${u.name} ${u.mac} ${u.state}`.toLowerCase().includes(query.toLowerCase()),
+    (u) =>
+      !query ||
+      `${u.name} ${u.mac} ${u.state}`
+        .toLowerCase()
+        .includes(query.toLowerCase()),
   );
   const defaultRoute = data.routes.find(
     (r) => r.destination === "default" || r.destination === "0.0.0.0/0",
@@ -77,7 +99,13 @@ export function WanConnectionsPage({
             className="v4-input-search"
           />
           <span className="v4-subtle v4-fs-xs">
-            {filtered.length} {v4t(locale, "chrome.ofTotal", filtered.length, uplinks.length).replace(/^\d+\s*/, "")}
+            {filtered.length}{" "}
+            {v4t(
+              locale,
+              "chrome.ofTotal",
+              filtered.length,
+              uplinks.length,
+            ).replace(/^\d+\s*/, "")}
           </span>
         </div>
         {defaultRoute && (
@@ -113,16 +141,20 @@ export function WanConnectionsPage({
                     <td>
                       <span
                         className="v4-status-pill"
-                        data-tone={u.state.toLowerCase() === "up" ? "good" : "warn"}
+                        data-tone={
+                          u.state.toLowerCase() === "up" ? "good" : "warn"
+                        }
                       >
                         {u.state}
                       </span>
                     </td>
                     <td className="v4-mono">
-                      {u.addresses.find((a) => a.family === "ipv4")?.address ?? "—"}
+                      {u.addresses.find((a) => a.family === "ipv4")?.address ??
+                        "—"}
                     </td>
                     <td className="v4-mono">
-                      {u.addresses.find((a) => a.family === "ipv6")?.address ?? "—"}
+                      {u.addresses.find((a) => a.family === "ipv6")?.address ??
+                        "—"}
                     </td>
                     <td className="v4-mono">{u.mtu}</td>
                   </tr>
@@ -155,7 +187,12 @@ export function MultiwanPage({
 
   if (!result) {
     return (
-      <V4PageFrame page={page} locale={locale} title={page.name} subtitle={page.question}>
+      <V4PageFrame
+        page={page}
+        locale={locale}
+        title={page.name}
+        subtitle={page.question}
+      >
         <div className="duck-empty">
           <h3>{v4t(locale, "sys.loading")}</h3>
         </div>
@@ -164,9 +201,18 @@ export function MultiwanPage({
   }
   if (!result.ok) {
     return (
-      <V4PageFrame page={page} locale={locale} title={page.name} subtitle={page.question}>
+      <V4PageFrame
+        page={page}
+        locale={locale}
+        title={page.name}
+        subtitle={page.question}
+      >
         <div className="duck-empty">
-          <h3>{result.reason === "missing" ? v4t(locale, "sys.contractMissing") : v4t(locale, "sys.error")}</h3>
+          <h3>
+            {result.reason === "missing"
+              ? v4t(locale, "sys.contractMissing")
+              : v4t(locale, "sys.error")}
+          </h3>
           <p>{result.message}</p>
         </div>
       </V4PageFrame>
@@ -206,7 +252,11 @@ export function MultiwanPage({
                       <td>
                         <span
                           className="v4-status-pill"
-                          data-tone={String(u.state ?? "unknown") === "active" ? "good" : "warn"}
+                          data-tone={
+                            String(u.state ?? "unknown") === "active"
+                              ? "good"
+                              : "warn"
+                          }
                         >
                           {String(u.state ?? "—")}
                         </span>

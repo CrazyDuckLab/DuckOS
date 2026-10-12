@@ -48,7 +48,9 @@ func TestDV03TCOracleApplyRollback(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer runShell(t, "ip", "netns", "del", ns)
-	if _, err := runShell(t, "ip", "link", "add", "dummy0", "type", "dummy"); err != nil { t.Fatal(err) }
+	if _, err := runShell(t, "ip", "link", "add", "dummy0", "type", "dummy"); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := runShell(t, "ip", "link", "set", "dummy0", "netns", ns); err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +93,9 @@ func TestDV03PartialApplyDoesNotCommit(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer runShell(t, "ip", "netns", "del", ns)
-	if _, err := runShell(t, "ip", "link", "add", "dummy0", "type", "dummy"); err != nil { t.Fatal(err) }
+	if _, err := runShell(t, "ip", "link", "add", "dummy0", "type", "dummy"); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := runShell(t, "ip", "link", "set", "dummy0", "netns", ns); err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +142,9 @@ func TestDV03FailedRollbackRecoveryRequired(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer runShell(t, "ip", "netns", "del", ns)
-	if _, err := runShell(t, "ip", "link", "add", "dummy0", "type", "dummy"); err != nil { t.Fatal(err) }
+	if _, err := runShell(t, "ip", "link", "add", "dummy0", "type", "dummy"); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := runShell(t, "ip", "link", "set", "dummy0", "netns", ns); err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +168,9 @@ func TestDV03DenyZeroRuntimeCalls(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer runShell(t, "ip", "netns", "del", ns)
-	if _, err := runShell(t, "ip", "link", "add", "dummy0", "type", "dummy"); err != nil { t.Fatal(err) }
+	if _, err := runShell(t, "ip", "link", "add", "dummy0", "type", "dummy"); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := runShell(t, "ip", "link", "set", "dummy0", "netns", ns); err != nil {
 		t.Fatal(err)
 	}

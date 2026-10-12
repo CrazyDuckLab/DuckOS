@@ -38,7 +38,11 @@ import type { Messages } from "../i18n/messages";
 type SimpleIface = {
   name: string;
   state: "up" | "down";
-  addresses: Array<{ address: string; family: "ipv4" | "ipv6"; prefixLength: number }>;
+  addresses: Array<{
+    address: string;
+    family: "ipv4" | "ipv6";
+    prefixLength: number;
+  }>;
 };
 
 function fakeOverview(ifaces: SimpleIface[]): Overview {
@@ -87,7 +91,10 @@ describe("EasyDevicesPage overlap-fix invariants", () => {
     const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
     const defaultIdx = stripped.indexOf(".v4-table thead th");
     expect(defaultIdx).toBeGreaterThanOrEqual(0);
-    const slice = stripped.slice(defaultIdx, stripped.indexOf("}", defaultIdx) + 1);
+    const slice = stripped.slice(
+      defaultIdx,
+      stripped.indexOf("}", defaultIdx) + 1,
+    );
     expect(slice).not.toMatch(/position:\s*sticky/);
     expect(slice).not.toMatch(/top:\s*56px/);
     // Opt-in rule must exist for tables that genuinely scroll,
@@ -127,12 +134,19 @@ describe("EasyDevicesPage overlap-fix invariants", () => {
         {
           name: "eth0",
           state: "up",
-          addresses: [{ address: "10.0.0.1", family: "ipv4", prefixLength: 24 }],
+          addresses: [
+            { address: "10.0.0.1", family: "ipv4", prefixLength: 24 },
+          ],
         },
       ]),
     );
     const { container } = render(
-      <EasyDevicesPage page={page} bundle={bundle} navigate={navigate} client={c} />,
+      <EasyDevicesPage
+        page={page}
+        bundle={bundle}
+        navigate={navigate}
+        client={c}
+      />,
     );
     await waitFor(() => {
       const ths = container.querySelectorAll(".v4-table thead th");
@@ -151,17 +165,26 @@ describe("EasyDevicesPage overlap-fix invariants", () => {
         {
           name: "eth0",
           state: "up",
-          addresses: [{ address: "10.0.0.1", family: "ipv4", prefixLength: 24 }],
+          addresses: [
+            { address: "10.0.0.1", family: "ipv4", prefixLength: 24 },
+          ],
         },
         {
           name: "wlan0",
           state: "up",
-          addresses: [{ address: "10.0.1.1", family: "ipv4", prefixLength: 24 }],
+          addresses: [
+            { address: "10.0.1.1", family: "ipv4", prefixLength: 24 },
+          ],
         },
       ]),
     );
     const { container } = render(
-      <EasyDevicesPage page={page} bundle={bundle} navigate={navigate} client={c} />,
+      <EasyDevicesPage
+        page={page}
+        bundle={bundle}
+        navigate={navigate}
+        client={c}
+      />,
     );
     await waitFor(() => {
       expect(container.querySelector(".v4-table tbody")).not.toBeNull();
@@ -192,7 +215,9 @@ describe("EasyDevicesPage overlap-fix invariants", () => {
         {
           name: "lo",
           state: "up",
-          addresses: [{ address: "127.0.0.1", family: "ipv4", prefixLength: 8 }],
+          addresses: [
+            { address: "127.0.0.1", family: "ipv4", prefixLength: 8 },
+          ],
         },
         {
           name: "wwan0",
@@ -202,7 +227,12 @@ describe("EasyDevicesPage overlap-fix invariants", () => {
       ]),
     );
     const { container } = render(
-      <EasyDevicesPage page={page} bundle={bundle} navigate={navigate} client={c} />,
+      <EasyDevicesPage
+        page={page}
+        bundle={bundle}
+        navigate={navigate}
+        client={c}
+      />,
     );
     await waitFor(() => {
       const rows = container.querySelectorAll(".v4-table tbody tr");
@@ -225,17 +255,26 @@ describe("EasyDevicesPage overlap-fix invariants", () => {
         {
           name: "eth0",
           state: "up",
-          addresses: [{ address: "10.0.0.1", family: "ipv4", prefixLength: 24 }],
+          addresses: [
+            { address: "10.0.0.1", family: "ipv4", prefixLength: 24 },
+          ],
         },
         {
           name: "lo",
           state: "up",
-          addresses: [{ address: "127.0.0.1", family: "ipv4", prefixLength: 8 }],
+          addresses: [
+            { address: "127.0.0.1", family: "ipv4", prefixLength: 8 },
+          ],
         },
       ]),
     );
     const { container } = render(
-      <EasyDevicesPage page={page} bundle={bundle} navigate={navigate} client={c} />,
+      <EasyDevicesPage
+        page={page}
+        bundle={bundle}
+        navigate={navigate}
+        client={c}
+      />,
     );
     await waitFor(() => {
       const meta = container.querySelector(".v4-page-meta")?.textContent ?? "";
@@ -253,7 +292,12 @@ describe("EasyDevicesPage overlap-fix invariants", () => {
     }));
     const c = fakeClient(fakeOverview(ifaces));
     const { container } = render(
-      <EasyDevicesPage page={page} bundle={bundle} navigate={navigate} client={c} />,
+      <EasyDevicesPage
+        page={page}
+        bundle={bundle}
+        navigate={navigate}
+        client={c}
+      />,
     );
     await waitFor(() => {
       const rows = container.querySelectorAll(".v4-table tbody tr");

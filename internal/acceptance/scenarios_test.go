@@ -183,6 +183,6 @@ func (fakeStore) ReadMeta(id string) (upgrade.ReleaseMeta, error) { return upgra
 func (fakeStore) ReadPayload(id string) ([]byte, error)           { return nil, nil }
 func (fakeStore) Remove(id string) error                          { return nil }
 func (fakeStore) FreeBytes() (int64, error)                       { return 0, nil }
-func (fakeStore) VerifyFingerprint(id string) error                { return nil }
+func (fakeStore) VerifyFingerprint(id string) error               { return nil }
 
 func newFakeStore() fakeStore { return fakeStore{} }

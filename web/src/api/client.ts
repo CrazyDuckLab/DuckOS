@@ -47,7 +47,12 @@ export class APIError extends Error {
 
 export type FetchResult<T> =
   | { ok: true; data: T; age: number }
-  | { ok: false; reason: "missing" | "unauthorized" | "forbidden" | "failed" | "network"; message: string; status?: number };
+  | {
+      ok: false;
+      reason: "missing" | "unauthorized" | "forbidden" | "failed" | "network";
+      message: string;
+      status?: number;
+    };
 
 export interface FetchOptions {
   signal?: AbortSignal;
@@ -171,15 +176,31 @@ export class APIClient {
       });
       if (response.status === 401) {
         this.config.onFetch?.(path, "fail");
-        return { ok: false, reason: "unauthorized", message: "Access was denied. Check your administrator token and reconnect.", status: 401 };
+        return {
+          ok: false,
+          reason: "unauthorized",
+          message:
+            "Access was denied. Check your administrator token and reconnect.",
+          status: 401,
+        };
       }
       if (response.status === 403) {
         this.config.onFetch?.(path, "fail");
-        return { ok: false, reason: "forbidden", message: "You do not have permission for this view.", status: 403 };
+        return {
+          ok: false,
+          reason: "forbidden",
+          message: "You do not have permission for this view.",
+          status: 403,
+        };
       }
       if (response.status === 404 && options.fallbackToMissing) {
         this.config.onFetch?.(path, "fail");
-        return { ok: false, reason: "missing", message: `No contract yet for ${path}.`, status: 404 };
+        return {
+          ok: false,
+          reason: "missing",
+          message: `No contract yet for ${path}.`,
+          status: 404,
+        };
       }
       if (!response.ok) {
         this.config.onFetch?.(path, "fail");
@@ -202,16 +223,28 @@ export class APIClient {
         try {
           const text = await response.text();
           if (text.length > 0) {
-            const parsed = JSON.parse(text) as { code?: string; detail?: string };
+            const parsed = JSON.parse(text) as {
+              code?: string;
+              detail?: string;
+            };
             // Prefer the backend's detail when it gives actionable text.
-            if (parsed.detail && parsed.detail.length > 0 && parsed.detail.length < 200) {
+            if (
+              parsed.detail &&
+              parsed.detail.length > 0 &&
+              parsed.detail.length < 200
+            ) {
               message = parsed.detail;
             }
           }
         } catch {
           // ignore — fall back to generic message
         }
-        return { ok: false, reason: "failed", message, status: response.status };
+        return {
+          ok: false,
+          reason: "failed",
+          message,
+          status: response.status,
+        };
       }
       const text = await response.text();
       const parsed: unknown = text.length === 0 ? null : JSON.parse(text);
@@ -219,10 +252,16 @@ export class APIClient {
         expectedSchemaVersion !== null &&
         typeof parsed === "object" &&
         parsed !== null &&
-        (parsed as { schemaVersion?: unknown }).schemaVersion !== expectedSchemaVersion
+        (parsed as { schemaVersion?: unknown }).schemaVersion !==
+          expectedSchemaVersion
       ) {
         this.config.onFetch?.(path, "fail");
-        return { ok: false, reason: "failed", message: "This API schema is not supported by the installed dashboard." };
+        return {
+          ok: false,
+          reason: "failed",
+          message:
+            "This API schema is not supported by the installed dashboard.",
+        };
       }
       this.config.onFetch?.(path, "ok");
       return { ok: true, data: parsed as T, age: Date.now() - startedAt };
@@ -280,16 +319,32 @@ export class APIClient {
     return this.fetch<unknown>(APIClient.ENDPOINTS.frr, null, options);
   }
   fetchWireguardServers(options: FetchOptions = {}) {
-    return this.fetch<WireguardServerView[]>(`${APIClient.ENDPOINTS.wireguard}/servers`, null, options);
+    return this.fetch<WireguardServerView[]>(
+      `${APIClient.ENDPOINTS.wireguard}/servers`,
+      null,
+      options,
+    );
   }
   fetchWireguardPeers(options: FetchOptions = {}) {
-    return this.fetch<WireguardPeerView[]>(`${APIClient.ENDPOINTS.wireguard}/peers`, null, options);
+    return this.fetch<WireguardPeerView[]>(
+      `${APIClient.ENDPOINTS.wireguard}/peers`,
+      null,
+      options,
+    );
   }
   fetchXrayServers(options: FetchOptions = {}) {
-    return this.fetch<XrayServerView[]>(`${APIClient.ENDPOINTS.xray}/servers`, null, options);
+    return this.fetch<XrayServerView[]>(
+      `${APIClient.ENDPOINTS.xray}/servers`,
+      null,
+      options,
+    );
   }
   fetchXrayUsers(options: FetchOptions = {}) {
-    return this.fetch<XrayUserView[]>(`${APIClient.ENDPOINTS.xray}/users`, null, options);
+    return this.fetch<XrayUserView[]>(
+      `${APIClient.ENDPOINTS.xray}/users`,
+      null,
+      options,
+    );
   }
   fetchAuthStatus(options: FetchOptions = {}) {
     return this.fetch<unknown>(APIClient.ENDPOINTS.authStatus, null, options);
@@ -308,12 +363,20 @@ export class APIClient {
     if (params.limit) qs.set("limit", String(params.limit));
     if (params.after) qs.set("after", params.after);
     const suffix = qs.toString() ? `?${qs.toString()}` : "";
-    return this.fetch<Collection>(`${APIClient.ENDPOINTS.objects}/${kind}${suffix}`, null, options);
+    return this.fetch<Collection>(
+      `${APIClient.ENDPOINTS.objects}/${kind}${suffix}`,
+      null,
+      options,
+    );
   }
 
   /* — Safe Apply / config transaction — */
   fetchConfigStatus(options: FetchOptions = {}) {
-    return this.fetch<ConfigStatus>(APIClient.ENDPOINTS.configStatus, null, options);
+    return this.fetch<ConfigStatus>(
+      APIClient.ENDPOINTS.configStatus,
+      null,
+      options,
+    );
   }
   fetchConfig(options: FetchOptions = {}) {
     return this.fetch<unknown>(APIClient.ENDPOINTS.config, null, options);
@@ -325,14 +388,24 @@ export class APIClient {
       { ...options, method: "POST", body: { desired: intent } },
     );
   }
-  configApply(diffHash: string, intent: ConfigIntent, opts?: { confirmWindowSeconds?: number; note?: string }, options: FetchOptions = {}) {
+  configApply(
+    diffHash: string,
+    intent: ConfigIntent,
+    opts?: { confirmWindowSeconds?: number; note?: string },
+    options: FetchOptions = {},
+  ) {
     return this.fetch<ConfigApplyResponse>(
       APIClient.ENDPOINTS.configApply,
       null,
       {
         ...options,
         method: "POST",
-        body: { diffHash, desired: intent, confirmWindowSeconds: opts?.confirmWindowSeconds, note: opts?.note },
+        body: {
+          diffHash,
+          desired: intent,
+          confirmWindowSeconds: opts?.confirmWindowSeconds,
+          note: opts?.note,
+        },
       },
     );
   }
@@ -343,7 +416,11 @@ export class APIClient {
       { ...options, method: "POST" },
     );
   }
-  configRollback(transactionId: string, reason?: string, options: FetchOptions = {}) {
+  configRollback(
+    transactionId: string,
+    reason?: string,
+    options: FetchOptions = {},
+  ) {
     return this.fetch<ConfigRollbackResponse>(
       `${APIClient.ENDPOINTS.configRollback}/${encodeURIComponent(transactionId)}`,
       null,
@@ -353,66 +430,111 @@ export class APIClient {
 
   /* — Network planner — */
   networkPreview(desired: ConfigIntent, options: FetchOptions = {}) {
-    return this.fetch<unknown>(
-      APIClient.ENDPOINTS.networkPreview,
-      null,
-      { ...options, method: "POST", body: { desired } },
-    );
+    return this.fetch<unknown>(APIClient.ENDPOINTS.networkPreview, null, {
+      ...options,
+      method: "POST",
+      body: { desired },
+    });
   }
   networkSimulate(desired: ConfigIntent, options: FetchOptions = {}) {
-    return this.fetch<unknown>(
-      APIClient.ENDPOINTS.networkSimulate,
-      null,
-      { ...options, method: "POST", body: { desired } },
-    );
+    return this.fetch<unknown>(APIClient.ENDPOINTS.networkSimulate, null, {
+      ...options,
+      method: "POST",
+      body: { desired },
+    });
   }
 
   /* — QoS / FRR apply — */
   qosApply(plan: unknown, options: FetchOptions = {}) {
-    return this.fetch<unknown>(APIClient.ENDPOINTS.qosApply, null, { ...options, method: "POST", body: { plan } });
+    return this.fetch<unknown>(APIClient.ENDPOINTS.qosApply, null, {
+      ...options,
+      method: "POST",
+      body: { plan },
+    });
   }
   qosRollback(options: FetchOptions = {}) {
-    return this.fetch<unknown>(APIClient.ENDPOINTS.qosRollback, null, { ...options, method: "POST" });
+    return this.fetch<unknown>(APIClient.ENDPOINTS.qosRollback, null, {
+      ...options,
+      method: "POST",
+    });
   }
   frrApply(plan: unknown, options: FetchOptions = {}) {
-    return this.fetch<unknown>(APIClient.ENDPOINTS.frrApply, null, { ...options, method: "POST", body: { plan } });
+    return this.fetch<unknown>(APIClient.ENDPOINTS.frrApply, null, {
+      ...options,
+      method: "POST",
+      body: { plan },
+    });
   }
   frrRollback(options: FetchOptions = {}) {
-    return this.fetch<unknown>(APIClient.ENDPOINTS.frrRollback, null, { ...options, method: "POST" });
+    return this.fetch<unknown>(APIClient.ENDPOINTS.frrRollback, null, {
+      ...options,
+      method: "POST",
+    });
   }
 
   /* — Upgrade lifecycle — */
   upgradeStage(payload: unknown, options: FetchOptions = {}) {
-    return this.fetch<unknown>(APIClient.ENDPOINTS.upgradeStage, null, { ...options, method: "POST", body: payload });
+    return this.fetch<unknown>(APIClient.ENDPOINTS.upgradeStage, null, {
+      ...options,
+      method: "POST",
+      body: payload,
+    });
   }
   upgradeActivate(payload: unknown, options: FetchOptions = {}) {
-    return this.fetch<unknown>(APIClient.ENDPOINTS.upgradeActivate, null, { ...options, method: "POST", body: payload });
+    return this.fetch<unknown>(APIClient.ENDPOINTS.upgradeActivate, null, {
+      ...options,
+      method: "POST",
+      body: payload,
+    });
   }
   upgradeRollback(payload: unknown, options: FetchOptions = {}) {
-    return this.fetch<unknown>(APIClient.ENDPOINTS.upgradeRollback, null, { ...options, method: "POST", body: payload });
+    return this.fetch<unknown>(APIClient.ENDPOINTS.upgradeRollback, null, {
+      ...options,
+      method: "POST",
+      body: payload,
+    });
   }
 
   /* — Backup restore — */
   backupRestore(payload: unknown, options: FetchOptions = {}) {
-    return this.fetch<unknown>(APIClient.ENDPOINTS.backupRestore, null, { ...options, method: "POST", body: payload });
+    return this.fetch<unknown>(APIClient.ENDPOINTS.backupRestore, null, {
+      ...options,
+      method: "POST",
+      body: payload,
+    });
   }
 
   /* — UPS probe — */
   upsProbe(options: FetchOptions = {}) {
-    return this.fetch<unknown>(APIClient.ENDPOINTS.upsProbe, null, { ...options, method: "POST" });
+    return this.fetch<unknown>(APIClient.ENDPOINTS.upsProbe, null, {
+      ...options,
+      method: "POST",
+    });
   }
 
   /* — Migration — */
   migrate(payload: unknown, options: FetchOptions = {}) {
-    return this.fetch<unknown>(APIClient.ENDPOINTS.migrate, null, { ...options, method: "POST", body: payload });
+    return this.fetch<unknown>(APIClient.ENDPOINTS.migrate, null, {
+      ...options,
+      method: "POST",
+      body: payload,
+    });
   }
 
   /* — ZTP — */
   ztpIssue(payload: unknown, options: FetchOptions = {}) {
-    return this.fetch<unknown>(APIClient.ENDPOINTS.ztpIssue, null, { ...options, method: "POST", body: payload });
+    return this.fetch<unknown>(APIClient.ENDPOINTS.ztpIssue, null, {
+      ...options,
+      method: "POST",
+      body: payload,
+    });
   }
   ztpRedeem(payload: unknown, options: FetchOptions = {}) {
-    return this.fetch<unknown>(APIClient.ENDPOINTS.ztpRedeem, null, { ...options, method: "POST", body: payload });
+    return this.fetch<unknown>(APIClient.ENDPOINTS.ztpRedeem, null, {
+      ...options,
+      method: "POST",
+      body: payload,
+    });
   }
 
   /* — WireGuard lifecycle — */
@@ -445,11 +567,11 @@ export class APIClient {
     );
   }
   wireguardCreatePeer(peer: unknown, options: FetchOptions = {}) {
-    return this.fetch<unknown>(
-      `${APIClient.ENDPOINTS.wireguard}/peers`,
-      null,
-      { ...options, method: "POST", body: peer },
-    );
+    return this.fetch<unknown>(`${APIClient.ENDPOINTS.wireguard}/peers`, null, {
+      ...options,
+      method: "POST",
+      body: peer,
+    });
   }
   wireguardDeletePeer(peerId: string, options: FetchOptions = {}) {
     return this.fetch<unknown>(
@@ -461,11 +583,11 @@ export class APIClient {
 
   /* — Xray lifecycle — */
   xrayCreateServer(server: unknown, options: FetchOptions = {}) {
-    return this.fetch<unknown>(
-      `${APIClient.ENDPOINTS.xray}/servers`,
-      null,
-      { ...options, method: "POST", body: server },
-    );
+    return this.fetch<unknown>(`${APIClient.ENDPOINTS.xray}/servers`, null, {
+      ...options,
+      method: "POST",
+      body: server,
+    });
   }
   xrayDeleteServer(serverId: string, options: FetchOptions = {}) {
     return this.fetch<unknown>(
@@ -475,11 +597,11 @@ export class APIClient {
     );
   }
   xrayCreateUser(user: unknown, options: FetchOptions = {}) {
-    return this.fetch<unknown>(
-      `${APIClient.ENDPOINTS.xray}/users`,
-      null,
-      { ...options, method: "POST", body: user },
-    );
+    return this.fetch<unknown>(`${APIClient.ENDPOINTS.xray}/users`, null, {
+      ...options,
+      method: "POST",
+      body: user,
+    });
   }
   xrayDeleteUser(userId: string, options: FetchOptions = {}) {
     return this.fetch<unknown>(
@@ -491,7 +613,11 @@ export class APIClient {
 
   /* — Clients export (admin-initiated, never in-app store) — */
   clientsExport(payload: unknown, options: FetchOptions = {}) {
-    return this.fetch<unknown>(APIClient.ENDPOINTS.clientsExport, null, { ...options, method: "POST", body: payload });
+    return this.fetch<unknown>(APIClient.ENDPOINTS.clientsExport, null, {
+      ...options,
+      method: "POST",
+      body: payload,
+    });
   }
 }
 
@@ -511,7 +637,9 @@ export type HealthPayload = {
   schemaVersion: string;
 };
 
-export function toneFromResult(reason?: "missing" | "unauthorized" | "forbidden" | "failed" | "network"): HealthTone {
+export function toneFromResult(
+  reason?: "missing" | "unauthorized" | "forbidden" | "failed" | "network",
+): HealthTone {
   if (!reason) return "good";
   if (reason === "unauthorized" || reason === "forbidden") return "warn";
   return "bad";
@@ -560,7 +688,10 @@ export function emptyHealth(): HealthSummary {
 /** Internal helpers pages may use. */
 export function asUplinks(payload: unknown): UplinkStatus[] {
   if (!payload || typeof payload !== "object") return [];
-  const p = payload as { uplinks?: Array<Record<string, unknown>>; topology?: Array<Record<string, unknown>> };
+  const p = payload as {
+    uplinks?: Array<Record<string, unknown>>;
+    topology?: Array<Record<string, unknown>>;
+  };
   const list = p.uplinks ?? p.topology ?? [];
   return list.map((u) => ({
     name: String(u.name ?? u.iface ?? u.interface ?? "—"),
@@ -579,14 +710,23 @@ export function asDoctorFindings(payload: unknown): DoctorFinding[] {
   if (Array.isArray(payload)) return payload as DoctorFinding[];
   if (!payload || typeof payload !== "object") return [];
   const p = payload as { findings?: unknown; issues?: unknown };
-  const list = Array.isArray(p.findings) ? p.findings : Array.isArray(p.issues) ? p.issues : [];
+  const list = Array.isArray(p.findings)
+    ? p.findings
+    : Array.isArray(p.issues)
+      ? p.issues
+      : [];
   return list as DoctorFinding[];
 }
 
-export function asTopology(payload: unknown): { nodes: TopologyNode[]; edges: TopologyEdge[] } {
+export function asTopology(payload: unknown): {
+  nodes: TopologyNode[];
+  edges: TopologyEdge[];
+} {
   if (!payload || typeof payload !== "object") return { nodes: [], edges: [] };
   const p = payload as { nodes?: unknown; edges?: unknown; links?: unknown };
   const nodes = (Array.isArray(p.nodes) ? p.nodes : []) as TopologyNode[];
-  const edges = (Array.isArray(p.edges) ? p.edges : Array.isArray(p.links) ? p.links : []) as TopologyEdge[];
+  const edges = (
+    Array.isArray(p.edges) ? p.edges : Array.isArray(p.links) ? p.links : []
+  ) as TopologyEdge[];
   return { nodes, edges };
 }

@@ -344,7 +344,7 @@ func TestVaultRotation(t *testing.T) {
 	api := newAPI(t, src, acc)
 	id := random32Hex(t)
 	for i := 0; i < 3; i++ {
-		raw := bytes.Repeat([]byte{byte('a'+i)}, 32)
+		raw := bytes.Repeat([]byte{byte('a' + i)}, 32)
 		body := mustJSON(t, SecretPutRequest{ID: id, Purpose: "wireguard-private", Payload: base64.StdEncoding.EncodeToString(raw)})
 		w, data := doRequest(t, api, http.MethodPost, "/vault/v1/keys", "good", body)
 		if w.Code != http.StatusCreated {

@@ -11,7 +11,11 @@ import { type Messages } from "../i18n/messages";
 import { type PageMeta } from "../pages/registry";
 import { PageFrame } from "../components/PageFrame";
 import { StatePanel } from "../components/forms/States";
-import { DataTable, FilterBar, type DataColumn } from "../components/forms/Table";
+import {
+  DataTable,
+  FilterBar,
+  type DataColumn,
+} from "../components/forms/Table";
 import { RuntimeEvidencePanel } from "../components/forms/Panels";
 import { UnsupportedFeature } from "../components/UnsupportedFeature";
 import { routeToInspector } from "../components/inspector/selectors";
@@ -41,32 +45,59 @@ export function RoutingPage({
     client.fetchOverview({ signal: ctl.signal }).then(setResult);
     return () => ctl.abort();
   }, [client]);
-  if (!result) return <PageFrame page={page} bundle={bundle}><StatePanel state="loading" /></PageFrame>;
-  if (!result.ok) return (
-    <PageFrame page={page} bundle={bundle}>
-      <StatePanel state={result.reason === "missing" ? "missing-contract" : "error"} body={result.message} />
-    </PageFrame>
-  );
+  if (!result)
+    return (
+      <PageFrame page={page} bundle={bundle}>
+        <StatePanel state="loading" />
+      </PageFrame>
+    );
+  if (!result.ok)
+    return (
+      <PageFrame page={page} bundle={bundle}>
+        <StatePanel
+          state={result.reason === "missing" ? "missing-contract" : "error"}
+          body={result.message}
+        />
+      </PageFrame>
+    );
 
   const data = result.data;
-  const protocols = Array.from(new Set(data.routes.map((r) => r.protocol))).sort();
+  const protocols = Array.from(
+    new Set(data.routes.map((r) => r.protocol)),
+  ).sort();
   const q = query.toLowerCase();
   const filtered = data.routes.filter((r) => {
     if (family !== "all" && r.family !== family) return false;
     if (protocol !== "all" && r.protocol !== protocol) return false;
     if (!query) return true;
-    return `${r.destination} ${r.gateway} ${r.device} ${r.table}`.toLowerCase().includes(q);
+    return `${r.destination} ${r.gateway} ${r.device} ${r.table}`
+      .toLowerCase()
+      .includes(q);
   });
 
   const columns: DataColumn<Overview["routes"][number]>[] = [
-    { key: "destination", label: "Destination", mono: true, render: (r) => r.destination || "default" },
-    { key: "gateway", label: "Gateway", mono: true, render: (r) => r.gateway || "—" },
+    {
+      key: "destination",
+      label: "Destination",
+      mono: true,
+      render: (r) => r.destination || "default",
+    },
+    {
+      key: "gateway",
+      label: "Gateway",
+      mono: true,
+      render: (r) => r.gateway || "—",
+    },
     {
       key: "device",
       label: "Interface",
       render: (r) => <span className="v1-pill">{r.device || "—"}</span>,
     },
-    { key: "family", label: "Family", render: (r) => (r.family === "ipv4" ? "IPv4" : "IPv6") },
+    {
+      key: "family",
+      label: "Family",
+      render: (r) => (r.family === "ipv4" ? "IPv4" : "IPv6"),
+    },
     { key: "table", label: "Table", mono: true, render: (r) => r.table || "—" },
     { key: "metric", label: "Metric", mono: true, numeric: true },
     {
@@ -83,7 +114,10 @@ export function RoutingPage({
         title="RIB summary"
         rows={[
           { key: "routes", value: data.routes.length },
-          { key: "tables", value: new Set(data.routes.map((r) => r.table)).size },
+          {
+            key: "tables",
+            value: new Set(data.routes.map((r) => r.table)).size,
+          },
           { key: "protocols", value: protocols.length },
         ]}
         observedAt={data.observedAt}
@@ -112,7 +146,9 @@ export function RoutingPage({
             >
               <option value="all">All protocols</option>
               {protocols.map((p) => (
-                <option key={p} value={p}>{p}</option>
+                <option key={p} value={p}>
+                  {p}
+                </option>
               ))}
             </select>
             <span className="v1-subtle v1-fs-xs">
@@ -123,7 +159,9 @@ export function RoutingPage({
       />
       <DataTable
         rows={filtered}
-        rowKey={(r, i) => `${r.family}-${r.destination}-${r.device}-${r.table}-${i}`}
+        rowKey={(r, i) =>
+          `${r.family}-${r.destination}-${r.device}-${r.table}-${i}`
+        }
         pageSize={25}
         initialSort={{ key: "metric", direction: "asc" }}
         emptyState="No routes match this view."
@@ -152,28 +190,49 @@ export function BgpPage({
   const [result, setResult] = useState<FetchResult<unknown> | null>(null);
   useEffect(() => {
     const ctl = new AbortController();
-    client.fetchFrr({ signal: ctl.signal, fallbackToMissing: true }).then(setResult);
+    client
+      .fetchFrr({ signal: ctl.signal, fallbackToMissing: true })
+      .then(setResult);
     return () => ctl.abort();
   }, [client]);
-  if (!result) return <PageFrame page={page} bundle={bundle}><StatePanel state="loading" /></PageFrame>;
-  if (!result.ok) return (
-    <PageFrame page={page} bundle={bundle}>
-      <StatePanel state={result.reason === "missing" ? "missing-contract" : "error"} body={result.message} />
-    </PageFrame>
-  );
+  if (!result)
+    return (
+      <PageFrame page={page} bundle={bundle}>
+        <StatePanel state="loading" />
+      </PageFrame>
+    );
+  if (!result.ok)
+    return (
+      <PageFrame page={page} bundle={bundle}>
+        <StatePanel
+          state={result.reason === "missing" ? "missing-contract" : "error"}
+          body={result.message}
+        />
+      </PageFrame>
+    );
   return (
     <PageFrame page={page} bundle={bundle}>
       <p className="v1-mute v1-fs-sm">
         /api/v1/frr exposes FRR summary state. A typed BGP-neighbor schema is
-        scheduled and tracked in docs/ui/BACKEND_INTEGRATION_GAPS.md. Until
-        then we render the live payload and flag it.
+        scheduled and tracked in docs/ui/BACKEND_INTEGRATION_GAPS.md. Until then
+        we render the live payload and flag it.
       </p>
       <pre className="v1-code">{JSON.stringify(result.data, null, 2)}</pre>
     </PageFrame>
   );
 }
 
-export const RoutingSubareaSpecs: Record<string, { columns: ReadonlyArray<{ key: string; label: string; description?: string }>; endpoint: string }> = {
+export const RoutingSubareaSpecs: Record<
+  string,
+  {
+    columns: ReadonlyArray<{
+      key: string;
+      label: string;
+      description?: string;
+    }>;
+    endpoint: string;
+  }
+> = {
   P028: {
     endpoint: "/api/v1/routing/policy",
     columns: [
@@ -297,7 +356,14 @@ export function RoutingSubareaStub({
 }: {
   page: PageMeta;
   bundle: Messages;
-  spec: { columns: ReadonlyArray<{ key: string; label: string; description?: string }>; endpoint: string };
+  spec: {
+    columns: ReadonlyArray<{
+      key: string;
+      label: string;
+      description?: string;
+    }>;
+    endpoint: string;
+  };
 }) {
   return (
     <UnsupportedFeature

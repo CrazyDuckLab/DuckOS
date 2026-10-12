@@ -37,10 +37,10 @@ import (
 // public API exposes a filtered view; the channel is for
 // internal subscribers (audit, Agent log, tests).
 type MappingEvent struct {
-	Kind     string // "added" | "removed" | "expired"
-	Mapping  Mapping
-	At       time.Time
-	Source   string
+	Kind    string // "added" | "removed" | "expired"
+	Mapping Mapping
+	At      time.Time
+	Source  string
 }
 
 // Runtime owns the Manager plus a NetworkBackend plus the
@@ -369,8 +369,8 @@ func (r *Runtime) sweep() {
 // noopBackend is the test / default backend.
 type noopBackend struct{}
 
-func (noopBackend) Add(Mapping) error                { return nil }
-func (noopBackend) Remove(string) error              { return nil }
+func (noopBackend) Add(Mapping) error                 { return nil }
+func (noopBackend) Remove(string) error               { return nil }
 func (noopBackend) AllowListen(string, net.Addr) bool { return false }
 func (noopBackend) TrustIface(string)                 {}
 func (noopBackend) UntrustIface(string)               {}

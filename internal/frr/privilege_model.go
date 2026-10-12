@@ -20,15 +20,15 @@
 //     CAP_NET_BIND_SERVICE CAP_SYS_ADMIN with
 //     NoNewPrivileges=no. For each EXEC command the
 //     launcher re-execs a child that:
-//       1. PR_SET_KEEPCAPS=1,
-//      2. PR_CAPBSET_DROP CAP_SETUID + CAP_SETGID from
-//         the bounding set (BEFORE setresuid so the
-//         effective set still contains CAP_SETPCAP
-//         which PR_CAPBSET_DROP needs),
-//      3. setgroups([]) + setresgid + setresuid to
-//         drop to uid=frr,
-//      4. mkdir /etc/frr/<ps>/ + write vtysh.conf,
-//      5. exec /usr/lib/frr/{zebra,bgpd}.
+//     1. PR_SET_KEEPCAPS=1,
+//     2. PR_CAPBSET_DROP CAP_SETUID + CAP_SETGID from
+//     the bounding set (BEFORE setresuid so the
+//     effective set still contains CAP_SETPCAP
+//     which PR_CAPBSET_DROP needs),
+//     3. setgroups([]) + setresgid + setresuid to
+//     drop to uid=frr,
+//     4. mkdir /etc/frr/<ps>/ + write vtysh.conf,
+//     5. exec /usr/lib/frr/{zebra,bgpd}.
 //
 //   - /usr/lib/frr/zebra and /usr/lib/frr/bgpd have file
 //     caps

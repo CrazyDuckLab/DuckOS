@@ -27,13 +27,13 @@ func reloadFixture(t *testing.T) (*NetworkdReloadHost, Config, *int) {
 	e.NetworkdReload = true
 	calls := new(int)
 	h := &NetworkdReloadHost{enrollment: e, files: d,
-		qualify:       func(context.Context, Config, Config) error { return nil },
-		verifyRuntime: func(context.Context, Config) error { return nil },
-		protected:     func(context.Context, Config) (string, error) { return "unchanged", nil },
-		inventory:     func(context.Context) ([]NetworkdLink, error) { return syntheticNetworkdInventory(), nil },
+		qualify:        func(context.Context, Config, Config) error { return nil },
+		verifyRuntime:  func(context.Context, Config) error { return nil },
+		protected:      func(context.Context, Config) (string, error) { return "unchanged", nil },
+		inventory:      func(context.Context) ([]NetworkdLink, error) { return syntheticNetworkdInventory(), nil },
 		runReload:      func(context.Context) error { *calls++; return nil },
 		runReconfigure: func(context.Context, []string) error { return nil },
-		wait:          func(context.Context) error { return nil }}
+		wait:           func(context.Context) error { return nil }}
 	return h, c, calls
 }
 

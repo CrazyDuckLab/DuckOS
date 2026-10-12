@@ -70,7 +70,11 @@ export function App({ identityMode }: AppProps) {
       <AppShell
         token={token}
         client={client}
-        initialRoute={PAGES_BY_ROUTE.has("/system/overview") ? "/system/overview" : ALL_PAGES[0].route}
+        initialRoute={
+          PAGES_BY_ROUTE.has("/system/overview")
+            ? "/system/overview"
+            : ALL_PAGES[0].route
+        }
         signOut={() => {
           persistToken(null);
           setToken(null);
@@ -150,7 +154,8 @@ function LegacyLogin({
             <span>A calmer network.</span>
           </h1>
           <p>
-            Your system, interfaces, and services — together in one considered workspace.
+            Your system, interfaces, and services — together in one considered
+            workspace.
           </p>
         </div>
         <section className="login-card glass" aria-labelledby="connect-title">
@@ -160,7 +165,8 @@ function LegacyLogin({
           <div className="eyebrow">WELCOME TO DUCKOS</div>
           <h2 id="connect-title">Connect to your system</h2>
           <p>
-            Use the administrator token from your DuckOS installation to view live Linux state.
+            Use the administrator token from your DuckOS installation to view
+            live Linux state.
           </p>
           <form onSubmit={submit}>
             <label htmlFor="access-token">Administrator token</label>
@@ -193,7 +199,8 @@ function LegacyLogin({
           <div id="token-help" className="token-help">
             <Icon name="lock" />
             <span>
-              Your token stays in this tab's memory. Closing or refreshing the tab ends the session.
+              Your token stays in this tab's memory. Closing or refreshing the
+              tab ends the session.
             </span>
           </div>
         </section>

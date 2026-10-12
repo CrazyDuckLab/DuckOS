@@ -16,11 +16,7 @@
 import type { Overview } from "../../../shared/api/types";
 
 export type ObjectKind =
-  | "interface"
-  | "address"
-  | "vlan"
-  | "device"
-  | "service";
+  "interface" | "address" | "vlan" | "device" | "service";
 
 export interface ObjectHit {
   /** Stable object id (e.g. "eth0", "10.0.0.1"). */
@@ -41,8 +37,24 @@ export interface ObjectHit {
 }
 
 const STOP = new Set([
-  "the", "and", "for", "with", "this", "that", "from", "your",
-  "is", "of", "to", "in", "on", "at", "as", "by", "an", "a",
+  "the",
+  "and",
+  "for",
+  "with",
+  "this",
+  "that",
+  "from",
+  "your",
+  "is",
+  "of",
+  "to",
+  "in",
+  "on",
+  "at",
+  "as",
+  "by",
+  "an",
+  "a",
 ]);
 
 /** Normalise an IP-ish string so users can paste "172.18.4.149/16". */
@@ -105,7 +117,8 @@ function interfaceHits(iface: Overview["interfaces"][number]): ObjectHit[] {
     });
   }
   // vlan id when present in the name (e.g. "eth0.10", "vlan100")
-  const m = /^(.+?)\.(\d+)$/.exec(iface.name) || /^vlan(\d+)$/i.exec(iface.name);
+  const m =
+    /^(.+?)\.(\d+)$/.exec(iface.name) || /^vlan(\d+)$/i.exec(iface.name);
   if (m) {
     const vlan = m[2] || m[1];
     out.push({
@@ -133,7 +146,10 @@ function scoreText(query: string, haystack: string): number {
 
 /** Public entry point. Returns ranked hits across all real objects
  *  the current Overview knows about. */
-export function searchObjects(query: string, overview: Overview | null): ObjectHit[] {
+export function searchObjects(
+  query: string,
+  overview: Overview | null,
+): ObjectHit[] {
   const q = normalise(query);
   if (q.length < 2) return [];
   const tokens = tokenise(query);
@@ -200,6 +216,8 @@ export function searchObjects(query: string, overview: Overview | null): ObjectH
     if (!existing || h.score > existing.score) byId.set(h.id, h);
   }
   return Array.from(byId.values())
-    .sort((a, b) => b.score - a.score || a.displayName.localeCompare(b.displayName))
+    .sort(
+      (a, b) => b.score - a.score || a.displayName.localeCompare(b.displayName),
+    )
     .slice(0, 8);
 }

@@ -174,8 +174,8 @@ func TestDV08KillAtPhaseBoundary(t *testing.T) {
 		}
 	}
 	plan := backup.RestorePlan{
-		BackupID: "test-restore-3",
-		Adds:     []string{"a.conf", "b.conf"},
+		BackupID:    "test-restore-3",
+		Adds:        []string{"a.conf", "b.conf"},
 		SafeToApply: true,
 	}
 	journal, err := backup.OpenJournalStore(filepath.Join(dir, "journal"))

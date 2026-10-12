@@ -374,22 +374,22 @@ func ssigname(sig os.Signal) string {
 // command. It reconciles the tracker with the requested
 // (binary, pathspace, sockDir):
 //
-//   1. If the tracker already has an entry for the
-//      (pathspace, binary) AND the PID is still alive AND
-//      the identity matches /usr/lib/frr/<bin> with -N
-//      <pathspace>, return the existing PID. The runtime's
-//      subsequent pidfile poll will confirm; no fork happens.
+//  1. If the tracker already has an entry for the
+//     (pathspace, binary) AND the PID is still alive AND
+//     the identity matches /usr/lib/frr/<bin> with -N
+//     <pathspace>, return the existing PID. The runtime's
+//     subsequent pidfile poll will confirm; no fork happens.
 //
-//   2. If the tracker has a stale entry (PID exited,
-//      wrong identity, or wrong pathspace), reap it
-//      identity-gated. A stale PID that does NOT match
-//      the recorded (binary, pathspace) is left alone —
-//      a recycled PID may be a legitimate unrelated
-//      process.
+//  2. If the tracker has a stale entry (PID exited,
+//     wrong identity, or wrong pathspace), reap it
+//     identity-gated. A stale PID that does NOT match
+//     the recorded (binary, pathspace) is left alone —
+//     a recycled PID may be a legitimate unrelated
+//     process.
 //
-//   3. Else, fork+exec the re-exec launcher, wait for
-//      FRR to write its pidfile, verify identity, and
-//      track. Return the daemon PID.
+//  3. Else, fork+exec the re-exec launcher, wait for
+//     FRR to write its pidfile, verify identity, and
+//     track. Return the daemon PID.
 //
 // The wire protocol reply is `OK <pid>\n` where pid is
 // the FRR daemon's PID (NOT the re-exec launcher PID).
@@ -575,8 +575,8 @@ func execFRR(args []string, frrUid, frrGid int) (int, error) {
 	// to the agent. The child performs the drop and
 	// execs FRR.
 	type forkResult struct {
-		pid  int
-		err  error
+		pid int
+		err error
 	}
 	resCh := make(chan forkResult, 1)
 
@@ -635,14 +635,14 @@ func execFRR(args []string, frrUid, frrGid int) (int, error) {
 
 		envv := []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin"}
 		// Pass nil for stderr so the re-exec'd child's
-// os.Stderr writes (die(), log lines from the
-// re-exec'd launcher's drop time) land in the
-// daemon's stderr (journal) instead of the FRR
-// log file that gets cleaned up by the runtime on
-// failure. w is the pipe write-end used by the
-// re-exec'd child to ack its drop result; the
-// daemon ignores it for now.
-pid, err := forkExecWithFds(selfPath, argv, envv, w, nil)
+		// os.Stderr writes (die(), log lines from the
+		// re-exec'd launcher's drop time) land in the
+		// daemon's stderr (journal) instead of the FRR
+		// log file that gets cleaned up by the runtime on
+		// failure. w is the pipe write-end used by the
+		// re-exec'd child to ack its drop result; the
+		// daemon ignores it for now.
+		pid, err := forkExecWithFds(selfPath, argv, envv, w, nil)
 		_ = w.Close()
 		if err != nil {
 			resCh <- forkResult{0, err}
@@ -817,30 +817,30 @@ func dropAndExecFRR(binary, pathspace, conf, logPath, pidFile string, passthroug
 //
 // Sequence:
 //
-//   1. PR_SET_KEEPCAPS=1 — preserves P (and E) across
-//      the root→frr uid transition.
-//   2. PR_CAPBSET_DROP SETUID + SETGID from the bounding
-//      set. This MUST run BEFORE setresuid: Linux clears
-//      the effective set on uid transition, and
-//      PR_CAPBSET_DROP requires CAP_SETPCAP in E. CAP_SETPCAP
-//      is INTENTIONALLY retained in Bnd so the FRR child
-//      inherits it at exec and can itself call
-//      cap_set_proc (Debian FRR 10.3 zebra's privs_init
-//      uses cap_set_proc; that call requires CAP_SETPCAP
-//      in E).
-//   3. setgroups([]), setresgid, setresuid → uid=frr.
-//   4. mkdir /etc/frr/<ps>/ + write vtysh.conf as
-//      uid=frr; /etc/frr is frr:frr 0751 so the frr
-//      user can write.
-//   5. Caller exec's /usr/lib/frr/{zebra,bgpd}.
-//      The launcher does NOT call cap_set_proc: kernel
-//      exec semantics (parent P ∩ parent Bnd, then
-//      file_caps OR'd in) hand the FRR child exactly
-//      the cap set {NET_ADMIN, NET_RAW, NET_BIND_SERVICE,
-//      SYS_ADMIN, SETPCAP}, the file caps installed by
-//      install.sh include cap_setpcap so the child's E
-//      has CAP_SETPCAP and FRR's own privs_init can
-//      narrow further.
+//  1. PR_SET_KEEPCAPS=1 — preserves P (and E) across
+//     the root→frr uid transition.
+//  2. PR_CAPBSET_DROP SETUID + SETGID from the bounding
+//     set. This MUST run BEFORE setresuid: Linux clears
+//     the effective set on uid transition, and
+//     PR_CAPBSET_DROP requires CAP_SETPCAP in E. CAP_SETPCAP
+//     is INTENTIONALLY retained in Bnd so the FRR child
+//     inherits it at exec and can itself call
+//     cap_set_proc (Debian FRR 10.3 zebra's privs_init
+//     uses cap_set_proc; that call requires CAP_SETPCAP
+//     in E).
+//  3. setgroups([]), setresgid, setresuid → uid=frr.
+//  4. mkdir /etc/frr/<ps>/ + write vtysh.conf as
+//     uid=frr; /etc/frr is frr:frr 0751 so the frr
+//     user can write.
+//  5. Caller exec's /usr/lib/frr/{zebra,bgpd}.
+//     The launcher does NOT call cap_set_proc: kernel
+//     exec semantics (parent P ∩ parent Bnd, then
+//     file_caps OR'd in) hand the FRR child exactly
+//     the cap set {NET_ADMIN, NET_RAW, NET_BIND_SERVICE,
+//     SYS_ADMIN, SETPCAP}, the file caps installed by
+//     install.sh include cap_setpcap so the child's E
+//     has CAP_SETPCAP and FRR's own privs_init can
+//     narrow further.
 func dropPrivilegesAndCap(uid, gid int, pathspace string) error {
 	// PR_SET_KEEPCAPS preserves P/E across the uid
 	// transition from 0 to a non-zero uid.

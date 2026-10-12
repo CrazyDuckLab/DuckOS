@@ -192,6 +192,7 @@ func Render(c Config) (Plan, error) {
 	}
 	return p, nil
 }
+
 // joinQuoted formats a list of interface names for an nftables set literal.
 // Names are emitted as double-quoted strings (nftables accepts both quoted
 // and bare words; quoted is safer against names containing dashes or other

@@ -864,7 +864,8 @@ const en: V4Bundle = {
 
   /* Speed Lab (P090) */
   "speedlab.title": "Duck Speed Lab",
-  "speedlab.subtitle": "Bounded latency, HTTP, and throughput probes against an allow-listed target set. Each probe is sandboxed by the Agent.",
+  "speedlab.subtitle":
+    "Bounded latency, HTTP, and throughput probes against an allow-listed target set. Each probe is sandboxed by the Agent.",
   "speedlab.newProbe": "New probe",
   "speedlab.kind": "Probe type",
   "speedlab.kindLatency": "Latency (TCP handshake RTT)",
@@ -896,7 +897,8 @@ const en: V4Bundle = {
   "speedlab.resultSeconds": "Elapsed (seconds)",
   "speedlab.resultBps": "Throughput (bytes/sec)",
   "speedlab.resultMbps": "Throughput (Mbps)",
-  "speedlab.caveat": "This is the throughput to the configured target, not Internet bandwidth.",
+  "speedlab.caveat":
+    "This is the throughput to the configured target, not Internet bandwidth.",
   "speedlab.emptyState": "Configure a probe and press Start.",
   "speedlab.colMetric": "Metric",
   "speedlab.colValue": "Value",
@@ -911,7 +913,8 @@ const en: V4Bundle = {
 
   /* UPnP / NAT-PMP / PCP / Wake (P065) */
   "upnp.title": "Service discovery",
-  "upnp.subtitle": "Dynamic port mapping and Wake-on-LAN, disabled by default. Only enable on a trusted LAN/VLAN.",
+  "upnp.subtitle":
+    "Dynamic port mapping and Wake-on-LAN, disabled by default. Only enable on a trusted LAN/VLAN.",
   "upnp.serviceStatus": "Service status",
   "upnp.protocolUpnp": "UPnP IGD",
   "upnp.protocolNatpmp": "NAT-PMP",
@@ -929,7 +932,8 @@ const en: V4Bundle = {
   "upnp.wakeMac": "Target MAC",
   "upnp.wakeNetwork": "Network interface",
   "upnp.wakeSent": "Packet sent",
-  "upnp.warning": "Dynamic port mapping is disabled by default and must only be enabled on trusted LANs.",
+  "upnp.warning":
+    "Dynamic port mapping is disabled by default and must only be enabled on trusted LANs.",
   "upnp.mappingProtocol": "Protocol",
   "upnp.mappingClient": "Client",
   "upnp.mappingExternalPort": "External port",
@@ -945,7 +949,8 @@ const en: V4Bundle = {
   "upnp.noMappings": "No active mappings on this network.",
   "upnp.macInvalid": "MAC must be six colon-separated hex octets.",
   "upnp.sendWake": "Send magic packet",
-  "upnp.notOnline": "Wake only confirms packet transmission, not that the device is online.",
+  "upnp.notOnline":
+    "Wake only confirms packet transmission, not that the device is online.",
 };
 
 const ru: V4Bundle = {
@@ -1174,8 +1179,7 @@ const ru: V4Bundle = {
   "empty.interfaces.body":
     "Сейчас не видно ни одного интерфейса. Проверьте, что ядро сообщает хотя бы об одном устройстве.",
   "empty.routes.title": "Маршрутов нет",
-  "empty.routes.body":
-    "Маршруты появятся здесь, как только ядро узнает о них.",
+  "empty.routes.body": "Маршруты появятся здесь, как только ядро узнает о них.",
   "empty.dns.title": "DNS не настроен",
   "empty.dns.body":
     "Добавьте резолвер, чтобы устройство знало, куда отправлять DNS-запросы.",
@@ -1384,7 +1388,8 @@ const ru: V4Bundle = {
 
   /* Speed Lab (P090) */
   "speedlab.title": "Duck Speed Lab",
-  "speedlab.subtitle": "Ограниченные замеры задержки, HTTP и пропускной способности по списку разрешённых целей. Каждый запуск изолирован на стороне агента.",
+  "speedlab.subtitle":
+    "Ограниченные замеры задержки, HTTP и пропускной способности по списку разрешённых целей. Каждый запуск изолирован на стороне агента.",
   "speedlab.newProbe": "Новый замер",
   "speedlab.kind": "Тип замера",
   "speedlab.kindLatency": "Задержка (RTT TCP-хэндшейка)",
@@ -1416,7 +1421,8 @@ const ru: V4Bundle = {
   "speedlab.resultSeconds": "Прошло (секунды)",
   "speedlab.resultBps": "Пропускная способность (байт/с)",
   "speedlab.resultMbps": "Пропускная способность (Мбит/с)",
-  "speedlab.caveat": "Это пропускная способность до выбранной цели, а не скорость Интернета.",
+  "speedlab.caveat":
+    "Это пропускная способность до выбранной цели, а не скорость Интернета.",
   "speedlab.emptyState": "Настройте замер и нажмите «Запуск».",
   "speedlab.colMetric": "Метрика",
   "speedlab.colValue": "Значение",
@@ -1431,7 +1437,8 @@ const ru: V4Bundle = {
 
   /* UPnP / NAT-PMP / PCP / Wake (P065) */
   "upnp.title": "Обнаружение сервисов",
-  "upnp.subtitle": "Динамические пробросы портов и Wake-on-LAN. По умолчанию отключено. Включайте только на доверенной LAN/VLAN.",
+  "upnp.subtitle":
+    "Динамические пробросы портов и Wake-on-LAN. По умолчанию отключено. Включайте только на доверенной LAN/VLAN.",
   "upnp.serviceStatus": "Состояние сервиса",
   "upnp.protocolUpnp": "UPnP IGD",
   "upnp.protocolNatpmp": "NAT-PMP",
@@ -1449,7 +1456,8 @@ const ru: V4Bundle = {
   "upnp.wakeMac": "MAC-адрес цели",
   "upnp.wakeNetwork": "Сетевой интерфейс",
   "upnp.wakeSent": "Пакет отправлен",
-  "upnp.warning": "Динамические пробросы портов по умолчанию отключены. Включайте только на доверенных LAN.",
+  "upnp.warning":
+    "Динамические пробросы портов по умолчанию отключены. Включайте только на доверенных LAN.",
   "upnp.mappingProtocol": "Протокол",
   "upnp.mappingClient": "Клиент",
   "upnp.mappingExternalPort": "Внешний порт",
@@ -1463,9 +1471,11 @@ const ru: V4Bundle = {
   "upnp.runtimeState": "Состояние среды исполнения",
   "upnp.disabledByChoice": "Отключено оператором — это не сбой.",
   "upnp.noMappings": "На этой сети нет активных пробросов.",
-  "upnp.macInvalid": "MAC должен состоять из шести hex-октетов через двоеточие.",
+  "upnp.macInvalid":
+    "MAC должен состоять из шести hex-октетов через двоеточие.",
   "upnp.sendWake": "Отправить magic-пакет",
-  "upnp.notOnline": "Wake только подтверждает отправку пакета, а не то, что устройство включилось.",
+  "upnp.notOnline":
+    "Wake только подтверждает отправку пакета, а не то, что устройство включилось.",
 };
 
 const de: V4Bundle = {
@@ -1670,8 +1680,7 @@ const de: V4Bundle = {
     "Im aktuellen Beobachtungsfenster hat kein Client eine Adresse erhalten.",
   "empty.dhcpLeases.action": "DHCP-Bereiche anzeigen",
   "empty.xray.title": "Keine Xray-Profile",
-  "empty.xray.body":
-    "Erstellen Sie ein Profil, um Client-Zugang auszustellen.",
+  "empty.xray.body": "Erstellen Sie ein Profil, um Client-Zugang auszustellen.",
   "empty.xray.action": "Xray-Profil erstellen",
   "empty.sites.title": "Keine Replikationsstandorte",
   "empty.sites.body":
@@ -1893,7 +1902,8 @@ const de: V4Bundle = {
 
   /* Speed Lab (P090) */
   "speedlab.title": "Duck Speed Lab",
-  "speedlab.subtitle": "Begrenzte Latenz-, HTTP- und Durchsatz-Messungen gegen eine Allow-list. Jede Messung wird im Agenten isoliert ausgeführt.",
+  "speedlab.subtitle":
+    "Begrenzte Latenz-, HTTP- und Durchsatz-Messungen gegen eine Allow-list. Jede Messung wird im Agenten isoliert ausgeführt.",
   "speedlab.newProbe": "Neue Messung",
   "speedlab.kind": "Messtyp",
   "speedlab.kindLatency": "Latenz (TCP-Handshake-RTT)",
@@ -1925,7 +1935,8 @@ const de: V4Bundle = {
   "speedlab.resultSeconds": "Dauer (Sekunden)",
   "speedlab.resultBps": "Durchsatz (Bytes/s)",
   "speedlab.resultMbps": "Durchsatz (Mbit/s)",
-  "speedlab.caveat": "Das ist der Durchsatz zum konfigurierten Ziel, nicht die Internet-Bandbreite.",
+  "speedlab.caveat":
+    "Das ist der Durchsatz zum konfigurierten Ziel, nicht die Internet-Bandbreite.",
   "speedlab.emptyState": "Messung konfigurieren und Start drücken.",
   "speedlab.colMetric": "Metrik",
   "speedlab.colValue": "Wert",
@@ -1940,7 +1951,8 @@ const de: V4Bundle = {
 
   /* UPnP / NAT-PMP / PCP / Wake (P065) */
   "upnp.title": "Service-Erkennung",
-  "upnp.subtitle": "Dynamische Portfreigaben und Wake-on-LAN. Standardmäßig deaktiviert. Nur auf vertrauenswürdigem LAN/VLAN aktivieren.",
+  "upnp.subtitle":
+    "Dynamische Portfreigaben und Wake-on-LAN. Standardmäßig deaktiviert. Nur auf vertrauenswürdigem LAN/VLAN aktivieren.",
   "upnp.serviceStatus": "Dienststatus",
   "upnp.protocolUpnp": "UPnP IGD",
   "upnp.protocolNatpmp": "NAT-PMP",
@@ -1958,7 +1970,8 @@ const de: V4Bundle = {
   "upnp.wakeMac": "Ziel-MAC",
   "upnp.wakeNetwork": "Netzwerkschnittstelle",
   "upnp.wakeSent": "Paket gesendet",
-  "upnp.warning": "Dynamische Portfreigaben sind standardmäßig deaktiviert und nur auf vertrauenswürdigen LANs zu aktivieren.",
+  "upnp.warning":
+    "Dynamische Portfreigaben sind standardmäßig deaktiviert und nur auf vertrauenswürdigen LANs zu aktivieren.",
   "upnp.mappingProtocol": "Protokoll",
   "upnp.mappingClient": "Client",
   "upnp.mappingExternalPort": "Externer Port",
@@ -1972,9 +1985,11 @@ const de: V4Bundle = {
   "upnp.runtimeState": "Laufzeit-Zustand",
   "upnp.disabledByChoice": "Vom der Operator deaktiviert — kein Fehler.",
   "upnp.noMappings": "Keine aktiven Freigaben in diesem Netz.",
-  "upnp.macInvalid": "MAC muss sechs hex-Oktette durch Doppelpunkt getrennt enthalten.",
+  "upnp.macInvalid":
+    "MAC muss sechs hex-Oktette durch Doppelpunkt getrennt enthalten.",
   "upnp.sendWake": "Magic-Paket senden",
-  "upnp.notOnline": "Wake bestätigt nur den Versand des Pakets, nicht dass das Gerät online ist.",
+  "upnp.notOnline":
+    "Wake bestätigt nur den Versand des Pakets, nicht dass das Gerät online ist.",
 };
 
 const es: V4Bundle = {
@@ -2102,8 +2117,7 @@ const es: V4Bundle = {
   "sys.uptimeDaysHours": (d: number, h: number) =>
     `${d}d ${h}h desde el último arranque`,
   "sys.uptimeHours": (h: number) => `${h}h desde el último arranque`,
-  "sys.uptimeMinutes": (m: number) =>
-    `${m}min desde el último arranque`,
+  "sys.uptimeMinutes": (m: number) => `${m}min desde el último arranque`,
   "sys.recentFindings": "Hallazgos recientes",
   "sys.noCurrentFindings": "No hay detalles de hallazgos disponibles.",
   "sys.dataStale":
@@ -2161,8 +2175,7 @@ const es: V4Bundle = {
   "search.placeholder": "Buscar páginas y ayuda",
   "search.openHint": "Cerrar · Esc",
   "search.empty": "Sin coincidencias",
-  "search.emptyHint":
-    "Pruebe con otro nombre, rol o sección.",
+  "search.emptyHint": "Pruebe con otro nombre, rol o sección.",
   "search.tooShort": "Sigue escribiendo",
   "search.tooShortHint": "Escribe al menos dos caracteres.",
   "search.resultsHint": (n: number) =>
@@ -2176,13 +2189,13 @@ const es: V4Bundle = {
   "empty.firewallRules.body":
     "El tráfico sigue la política por defecto. Añada una regla para permitir, rechazar o bloquear flujos específicos.",
   "empty.firewallRules.action": "Crear regla de cortafuegos",
-  "empty.dhcpLeases.title": "Ningún dispositivo ha pedido una dirección todavía",
+  "empty.dhcpLeases.title":
+    "Ningún dispositivo ha pedido una dirección todavía",
   "empty.dhcpLeases.body":
     "Ningún cliente ha obtenido dirección en la ventana de observación actual.",
   "empty.dhcpLeases.action": "Ver ámbitos DHCP",
   "empty.xray.title": "Sin perfiles Xray",
-  "empty.xray.body":
-    "Cree un perfil para emitir acceso de cliente.",
+  "empty.xray.body": "Cree un perfil para emitir acceso de cliente.",
   "empty.xray.action": "Crear perfil Xray",
   "empty.sites.title": "Sin sitios de replicación",
   "empty.sites.body":
@@ -2213,8 +2226,7 @@ const es: V4Bundle = {
   "inspector.tabs.example": "Ejemplo",
   "inspector.openCTA": "Abrir ayuda de la página",
   "inspector.technicalDetails": "Detalles técnicos",
-  "inspector.noObjectSelected":
-    "Seleccione una fila para ver sus detalles.",
+  "inspector.noObjectSelected": "Seleccione una fila para ver sus detalles.",
   "inspector.kind": "Tipo",
   "inspector.snapshot": "Instantánea",
   "inspector.objectId": "ID del objeto",
@@ -2404,7 +2416,8 @@ const es: V4Bundle = {
 
   /* Speed Lab (P090) */
   "speedlab.title": "Duck Speed Lab",
-  "speedlab.subtitle": "Mediciones acotadas de latencia, HTTP y rendimiento contra una lista de destinos permitidos. Cada sonda se ejecuta aislada en el agente.",
+  "speedlab.subtitle":
+    "Mediciones acotadas de latencia, HTTP y rendimiento contra una lista de destinos permitidos. Cada sonda se ejecuta aislada en el agente.",
   "speedlab.newProbe": "Nueva sonda",
   "speedlab.kind": "Tipo de sonda",
   "speedlab.kindLatency": "Latencia (RTT de handshake TCP)",
@@ -2436,7 +2449,8 @@ const es: V4Bundle = {
   "speedlab.resultSeconds": "Transcurrido (segundos)",
   "speedlab.resultBps": "Rendimiento (bytes/s)",
   "speedlab.resultMbps": "Rendimiento (Mbps)",
-  "speedlab.caveat": "Esto es el rendimiento hacia el destino configurado, no el ancho de banda de Internet.",
+  "speedlab.caveat":
+    "Esto es el rendimiento hacia el destino configurado, no el ancho de banda de Internet.",
   "speedlab.emptyState": "Configure una sonda y pulse Iniciar.",
   "speedlab.colMetric": "Métrica",
   "speedlab.colValue": "Valor",
@@ -2451,7 +2465,8 @@ const es: V4Bundle = {
 
   /* UPnP / NAT-PMP / PCP / Wake (P065) */
   "upnp.title": "Descubrimiento de servicios",
-  "upnp.subtitle": "Mapeos dinámicos de puertos y Wake-on-LAN. Desactivado por defecto. Actívelo solo en LAN/VLAN de confianza.",
+  "upnp.subtitle":
+    "Mapeos dinámicos de puertos y Wake-on-LAN. Desactivado por defecto. Actívelo solo en LAN/VLAN de confianza.",
   "upnp.serviceStatus": "Estado del servicio",
   "upnp.protocolUpnp": "UPnP IGD",
   "upnp.protocolNatpmp": "NAT-PMP",
@@ -2469,7 +2484,8 @@ const es: V4Bundle = {
   "upnp.wakeMac": "MAC destino",
   "upnp.wakeNetwork": "Interfaz de red",
   "upnp.wakeSent": "Paquete enviado",
-  "upnp.warning": "Los mapeos dinámicos están desactivados por defecto y solo deben activarse en LAN de confianza.",
+  "upnp.warning":
+    "Los mapeos dinámicos están desactivados por defecto y solo deben activarse en LAN de confianza.",
   "upnp.mappingProtocol": "Protocolo",
   "upnp.mappingClient": "Cliente",
   "upnp.mappingExternalPort": "Puerto externo",
@@ -2481,11 +2497,14 @@ const es: V4Bundle = {
   "upnp.ttlLabel": "TTL del mapeo (segundos)",
   "upnp.allowListLabel": "Clientes permitidos (CIDR)",
   "upnp.runtimeState": "Estado de ejecución",
-  "upnp.disabledByChoice": "Desactivado por decisión del operador — no es un fallo.",
+  "upnp.disabledByChoice":
+    "Desactivado por decisión del operador — no es un fallo.",
   "upnp.noMappings": "No hay mapeos activos en esta red.",
-  "upnp.macInvalid": "La MAC debe tener seis octetos hexadecimales separados por dos puntos.",
+  "upnp.macInvalid":
+    "La MAC debe tener seis octetos hexadecimales separados por dos puntos.",
   "upnp.sendWake": "Enviar paquete mágico",
-  "upnp.notOnline": "Wake solo confirma el envío del paquete, no que el dispositivo esté en línea.",
+  "upnp.notOnline":
+    "Wake solo confirma el envío del paquete, no que el dispositivo esté en línea.",
 };
 
 const v4: V4Messages = { en, ru, de, es };
@@ -2503,7 +2522,9 @@ for (const loc of ["ru", "de", "es"] as const) {
     const eVal = (en as Record<string, unknown>)[k];
     const rVal = (v4[loc] as Record<string, unknown>)[k];
     if (typeof eVal === "function" && typeof rVal !== "function") {
-      throw new Error(`v4-strings: locale "${loc}" key "${k}" must be a function`);
+      throw new Error(
+        `v4-strings: locale "${loc}" key "${k}" must be a function`,
+      );
     }
   }
 }

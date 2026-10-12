@@ -46,8 +46,7 @@ export default defineConfig({
         // Local development only: match the API's strict same-origin boundary.
         // Production assets are served by the API and do not use this proxy.
         headers: {
-          origin:
-            process.env.DUCKOS_API_ORIGIN ?? "http://127.0.0.1:8080",
+          origin: process.env.DUCKOS_API_ORIGIN ?? "http://127.0.0.1:8080",
         },
       },
     },

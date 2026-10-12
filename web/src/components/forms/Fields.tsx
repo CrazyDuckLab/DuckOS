@@ -47,7 +47,12 @@ export function Field({
     <div className={`v1-form-field ${error ? "v1-form-field-error" : ""}`}>
       <label>
         {label}
-        {required ? <span aria-hidden="true" className="v1-required"> *</span> : null}
+        {required ? (
+          <span aria-hidden="true" className="v1-required">
+            {" "}
+            *
+          </span>
+        ) : null}
       </label>
       {children}
       {help && !error && <div className="help">{help}</div>}
@@ -255,7 +260,9 @@ export function VlanIdInput({
     <TextInput
       value={value === "" ? "" : String(value)}
       onChange={(next, ok) => onChange(next === "" ? "" : Number(next), ok)}
-      validator={(raw) => (raw === "" ? { ok: false, reason: "Empty" } : validateVlanId(raw))}
+      validator={(raw) =>
+        raw === "" ? { ok: false, reason: "Empty" } : validateVlanId(raw)
+      }
       placeholder="20"
       spellCheck={false}
       autoComplete="off"
@@ -280,7 +287,9 @@ export function PortInput({
     <TextInput
       value={value === "" ? "" : String(value)}
       onChange={(next, ok) => onChange(next === "" ? "" : Number(next), ok)}
-      validator={(raw) => (raw === "" ? { ok: false, reason: "Empty" } : validatePort(raw))}
+      validator={(raw) =>
+        raw === "" ? { ok: false, reason: "Empty" } : validatePort(raw)
+      }
       placeholder="51820"
       spellCheck={false}
       autoComplete="off"
@@ -332,7 +341,9 @@ export function SecondsInput({
     <TextInput
       value={value === "" ? "" : String(value)}
       onChange={(next, ok) => onChange(next === "" ? "" : Number(next), ok)}
-      validator={(raw) => (raw === "" ? { ok: false, reason: "Empty" } : validateSeconds(raw))}
+      validator={(raw) =>
+        raw === "" ? { ok: false, reason: "Empty" } : validateSeconds(raw)
+      }
       placeholder="30"
       spellCheck={false}
       autoComplete="off"
@@ -431,7 +442,9 @@ export function MultiSelect<T extends string>({
           />
           <span>
             <strong>{o.label}</strong>
-            {o.description && <div className="v1-subtle v1-fs-xs">{o.description}</div>}
+            {o.description && (
+              <div className="v1-subtle v1-fs-xs">{o.description}</div>
+            )}
           </span>
         </label>
       ))}
@@ -474,8 +487,13 @@ export function ListEditor<T>({
       {items.map((it, idx) => {
         const ok = validator ? validator(it).ok : true;
         return (
-          <div key={idx} className={`v1-list-row ${ok ? "" : "v1-list-row-error"}`}>
-            <div className="v1-list-row-body">{renderItem(it, (next) => update(idx, next))}</div>
+          <div
+            key={idx}
+            className={`v1-list-row ${ok ? "" : "v1-list-row-error"}`}
+          >
+            <div className="v1-list-row-body">
+              {renderItem(it, (next) => update(idx, next))}
+            </div>
             {canRemove(it) && (
               <button
                 type="button"
@@ -527,7 +545,13 @@ export function useFormState<T extends Record<string, unknown>>(
 }
 
 /* — Severity & state pills — existing CSS already supports these — */
-export function SeverityPill({ state, label }: { state: "good" | "warn" | "bad" | "unknown"; label: string }) {
+export function SeverityPill({
+  state,
+  label,
+}: {
+  state: "good" | "warn" | "bad" | "unknown";
+  label: string;
+}) {
   return (
     <span className="v1-pill" data-state={state}>
       <span className="v1-dot" data-state={state} />
@@ -536,7 +560,13 @@ export function SeverityPill({ state, label }: { state: "good" | "warn" | "bad" 
   );
 }
 
-export function RiskBadge({ risk, bundle }: { risk: "R" | "C" | "I"; bundle?: Messages }) {
+export function RiskBadge({
+  risk,
+  bundle,
+}: {
+  risk: "R" | "C" | "I";
+  bundle?: Messages;
+}) {
   const label =
     risk === "R"
       ? "Read-only"
@@ -638,7 +668,10 @@ export function NumericInput({
           const delta = event.key === "ArrowUp" ? 1 : -1;
           const cur = typeof value === "number" ? value : 0;
           const next = cur + delta;
-          if ((min === undefined || next >= min) && (max === undefined || next <= max)) {
+          if (
+            (min === undefined || next >= min) &&
+            (max === undefined || next <= max)
+          ) {
             onChange(next, true);
           }
         }

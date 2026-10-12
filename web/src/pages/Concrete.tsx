@@ -21,9 +21,12 @@ import { usePrefs } from "../state/store";
 function useLocale(): import("../i18n/messages").Locale {
   if (typeof document === "undefined") return "en";
   const html = document.documentElement.getAttribute("data-locale");
-  if (html === "ru" || html === "de" || html === "es" || html === "en") return html;
-  const shell = document.querySelector(".duck-shell")?.getAttribute("data-locale") ?? null;
-  if (shell === "ru" || shell === "de" || shell === "es" || shell === "en") return shell;
+  if (html === "ru" || html === "de" || html === "es" || html === "en")
+    return html;
+  const shell =
+    document.querySelector(".duck-shell")?.getAttribute("data-locale") ?? null;
+  if (shell === "ru" || shell === "de" || shell === "es" || shell === "en")
+    return shell;
   return "en";
 }
 
@@ -50,7 +53,12 @@ export function TopologyPage({
   }, [client]);
   if (!overview) {
     return (
-      <V4PageFrame page={page} locale={locale} title={page.name} subtitle={page.question}>
+      <V4PageFrame
+        page={page}
+        locale={locale}
+        title={page.name}
+        subtitle={page.question}
+      >
         <div className="duck-empty">
           <h3>{v4t(locale, "sys.loading")}</h3>
         </div>
@@ -59,7 +67,12 @@ export function TopologyPage({
   }
   if (!overview.ok) {
     return (
-      <V4PageFrame page={page} locale={locale} title={page.name} subtitle={page.question}>
+      <V4PageFrame
+        page={page}
+        locale={locale}
+        title={page.name}
+        subtitle={page.question}
+      >
         <div className="duck-empty">
           <h3>
             {overview.reason === "missing"

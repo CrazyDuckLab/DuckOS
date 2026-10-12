@@ -79,9 +79,9 @@ describe("icons library", () => {
       registryIcons.add(n);
     }
 
-    const fallbackSvg = render(<Icon name="network" />).container
-      .querySelector("svg")!
-      .outerHTML;
+    const fallbackSvg = render(<Icon name="network" />).container.querySelector(
+      "svg",
+    )!.outerHTML;
 
     for (const name of registryIcons) {
       const { container } = render(<Icon name={name} />);
@@ -110,7 +110,10 @@ describe("registry icon assignments", () => {
     // (sorted by their order in the registry, which matches the sidebar
     // order) never resolve to the same IconName. This is the regression
     // that motivated the iconography pass.
-    const bySection = new Map<string, { id: string; name: string; icon: string }[]>();
+    const bySection = new Map<
+      string,
+      { id: string; name: string; icon: string }[]
+    >();
     for (const p of ALL_PAGES) {
       const list = bySection.get(p.section) ?? [];
       list.push({ id: p.id, name: p.name, icon: p.icon });
@@ -136,7 +139,10 @@ describe("registry icon assignments", () => {
   it("easy nav entries resolve to distinct icons", () => {
     const seen = new Map<string, string>();
     for (const e of EASY_NAV) {
-      expect(seen.has(e.icon), `Easy nav "${e.key}" duplicates icon ${e.icon} already used by ${seen.get(e.icon)}`).toBe(false);
+      expect(
+        seen.has(e.icon),
+        `Easy nav "${e.key}" duplicates icon ${e.icon} already used by ${seen.get(e.icon)}`,
+      ).toBe(false);
       seen.set(e.icon, e.key);
     }
   });

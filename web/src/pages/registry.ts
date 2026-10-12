@@ -245,7 +245,8 @@ const WAN: PageMeta[] = [
     route: "/wan/connections",
     section: "wan",
     icon: "wan",
-    question: "Which WAN uplinks exist, and what is their administrative state?",
+    question:
+      "Which WAN uplinks exist, and what is their administrative state?",
     implemented: true,
     features: "uplink list; IP; gateway; type",
     packages: "model network wan",
@@ -318,7 +319,8 @@ const WAN: PageMeta[] = [
     route: "/wan/ddns",
     section: "wan",
     icon: "ddns",
-    question: "Which DDNS providers are configured, and when did they last update?",
+    question:
+      "Which DDNS providers are configured, and when did they last update?",
     implemented: false,
     features: "provider list; hostname; last update",
     packages: "model wan ddns",
@@ -377,7 +379,8 @@ const LAN: PageMeta[] = [
     route: "/lan/clients",
     section: "lan",
     icon: "devices",
-    question: "Which devices are seen on each VLAN, and what is their lease age?",
+    question:
+      "Which devices are seen on each VLAN, and what is their lease age?",
     implemented: true,
     features: "device list; lease age; MAC; hostname",
     packages: "model dhcp",
@@ -395,7 +398,8 @@ const LAN: PageMeta[] = [
     route: "/lan/wifi",
     section: "lan",
     icon: "wifi",
-    question: "Which Wi-Fi networks are broadcast, and which clients are on them?",
+    question:
+      "Which Wi-Fi networks are broadcast, and which clients are on them?",
     implemented: true,
     features: "SSID list; client count; channel; security",
     packages: "model wifi",
@@ -464,7 +468,8 @@ const ROUTING: PageMeta[] = [
     dependencies: "model.routing.policy",
     runtime: "evaluation order follows priority, then index",
     diagnostics: "Explain Why",
-    easyHint: "Send traffic by source, port, or mark — not just by destination.",
+    easyHint:
+      "Send traffic by source, port, or mark — not just by destination.",
   },
   {
     id: "P029",
@@ -757,7 +762,8 @@ const FIREWALL: PageMeta[] = [
     dependencies: "model.firewall.nat",
     runtime: "DNAT order is the evaluation order",
     diagnostics: "Explain Why",
-    easyHint: "Reach a device on your LAN from the Internet (when you mean to).",
+    easyHint:
+      "Reach a device on your LAN from the Internet (when you mean to).",
   },
   {
     id: "P044",
@@ -1206,7 +1212,8 @@ const SYSTEM: PageMeta[] = [
     filters: "component; severity",
     risk: "R",
     dependencies: "observations; incidents; transaction",
-    runtime: "CPU usage may be null; load is not usage; health endpoint is not Internet",
+    runtime:
+      "CPU usage may be null; load is not usage; health endpoint is not Internet",
     diagnostics: "Doctor; probe layer details",
     easyHint: "What is failing now, what still works, what is waiting.",
     isSectionHome: true,
@@ -1217,15 +1224,18 @@ const SYSTEM: PageMeta[] = [
     route: "/system/changes",
     section: "system",
     icon: "candidate",
-    question: "What will change, can management survive, and what must I confirm?",
+    question:
+      "What will change, can management survive, and what must I confirm?",
     implemented: true,
-    features: "candidate; diff; commit; commit-confirmed; locks; conflicts; canary",
+    features:
+      "candidate; diff; commit; commit-confirmed; locks; conflicts; canary",
     packages: "safeapply state engine agent canary secpolicy",
     columns: "Object; operation; owner; before; after; risk",
     filters: "actor; object type; risk",
     risk: "C",
     dependencies: "revision; management evidence; journal",
-    runtime: "transaction id, phase, deadline and reconciliation are authoritative",
+    runtime:
+      "transaction id, phase, deadline and reconciliation are authoritative",
     diagnostics: "Before/after path; management probe; validation evidence",
     easyHint: "Review changes with concrete effects and a global timer.",
   },
@@ -1461,7 +1471,8 @@ const SYSTEM: PageMeta[] = [
     dependencies: "model.time",
     runtime: "trust per the last drift check",
     diagnostics: "Doctor",
-    easyHint: "What time the system thinks it is — and whether you can rely on it.",
+    easyHint:
+      "What time the system thinks it is — and whether you can rely on it.",
   },
   {
     id: "P077",
@@ -1938,9 +1949,7 @@ export const SECTION_ORDER: ReadonlyArray<SectionId> = [
 export const EASY_ORDER: ReadonlyArray<SectionId> = ["easy"];
 
 /** Group pages (not Easy) for sidebar. Section home comes first. */
-export function pagesBySection(
-  section: SectionId,
-): ReadonlyArray<PageMeta> {
+export function pagesBySection(section: SectionId): ReadonlyArray<PageMeta> {
   return ALL_PAGES.filter((p) => p.section === section);
 }
 

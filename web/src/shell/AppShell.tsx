@@ -64,7 +64,10 @@ export interface AppShellProps {
   reloadApi?: () => void;
   signOut?: () => void;
   initialRoute?: string;
-  renderRoute?: (route: string, navigate: (r: string) => void) => React.ReactNode;
+  renderRoute?: (
+    route: string,
+    navigate: (r: string) => void,
+  ) => React.ReactNode;
   children?: React.ReactNode;
 }
 
@@ -222,10 +225,7 @@ function setHtmlLocale(l: Locale): void {
 
 function persistPrefs(p: { theme: "light" | "dark"; locale: Locale }): void {
   try {
-    window.localStorage.setItem(
-      "duckos.v1.prefs.v1",
-      JSON.stringify(p),
-    );
+    window.localStorage.setItem("duckos.v1.prefs.v1", JSON.stringify(p));
   } catch {
     /* swallow */
   }
@@ -247,12 +247,14 @@ export function AppShell(props: AppShellProps) {
   const [innerRoute, setInnerRoute] = useState<string>(
     initialRoute ?? routeProp ?? "/system/overview",
   );
-  const navigate = navigateProp ?? ((r: string) => {
-    setInnerRoute(r);
-    if (typeof window !== "undefined") {
-      window.location.hash = "#" + r;
-    }
-  });
+  const navigate =
+    navigateProp ??
+    ((r: string) => {
+      setInnerRoute(r);
+      if (typeof window !== "undefined") {
+        window.location.hash = "#" + r;
+      }
+    });
 
   /* listen to hash changes when we're self-managing the route */
   useEffect(() => {
@@ -268,7 +270,8 @@ export function AppShell(props: AppShellProps) {
   }, [navigateProp, innerRoute]);
 
   const route = routeProp ?? innerRoute;
-  const page = pageProp ?? PAGES_BY_ROUTE.get(route) ?? PAGES_BY_ID.get("P001")!;
+  const page =
+    pageProp ?? PAGES_BY_ROUTE.get(route) ?? PAGES_BY_ID.get("P001")!;
   // Navigation clears any Inspector selection: keeping a stale
   // reference would render the wrong object on the next page.
   // The Inspector itself stays open across pages (operator may
@@ -311,8 +314,7 @@ export function AppShell(props: AppShellProps) {
 
   const locale = state.locale;
   const theme = state.theme;
-  const mode: "easy" | "full" =
-    page.section === "easy" ? "easy" : "full";
+  const mode: "easy" | "full" = page.section === "easy" ? "easy" : "full";
 
   /* health chip */
   useEffect(() => {
@@ -423,11 +425,14 @@ export function AppShell(props: AppShellProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, [page.id, state.inspection]);
 
-  const changeLocale = useCallback((next: Locale) => {
-    dispatch({ type: "setLocale", locale: next });
-    setHtmlLocale(next);
-    persistPrefs({ theme: state.theme, locale: next });
-  }, [state.theme]);
+  const changeLocale = useCallback(
+    (next: Locale) => {
+      dispatch({ type: "setLocale", locale: next });
+      setHtmlLocale(next);
+      persistPrefs({ theme: state.theme, locale: next });
+    },
+    [state.theme],
+  );
 
   const changeTheme = useCallback(() => {
     const next = theme === "dark" ? "light" : "dark";
@@ -447,124 +452,135 @@ export function AppShell(props: AppShellProps) {
   const prefsState = useReducer(prefsReducer, initialPrefs);
 
   return (
-    <PrefsContext.Provider value={{ state: prefsState[0], dispatch: prefsState[1] }}>
-    <div
-      className="duck-shell"
-      data-mode={mode}
-      data-theme={theme}
-      data-locale={locale}
+    <PrefsContext.Provider
+      value={{ state: prefsState[0], dispatch: prefsState[1] }}
     >
-      <a href="#duck-main" className="duck-skip">{v4t(locale, "shell.skipToMain")}</a>
+      <div
+        className="duck-shell"
+        data-mode={mode}
+        data-theme={theme}
+        data-locale={locale}
+      >
+        <a href="#duck-main" className="duck-skip">
+          {v4t(locale, "shell.skipToMain")}
+        </a>
 
-      <TopBar
-        locale={locale}
-        theme={theme}
-        mode={mode}
-        page={page}
-        healthFetch={state.healthFetch}
-        doctorFetch={state.doctor}
-        overviewFetch={state.overviewFetch}
-        onOpenSearch={() => dispatch({ type: "openSearch" })}
-        onOpenInspector={() => dispatch({ type: "openInspector", pageId: page.id })}
-        onToggleTheme={changeTheme}
-        onChangeLocale={changeLocale}
-        onSetMode={(m) => {
-          const target =
-            m === "easy" ? "/easy/home" : "/system/overview";
-          onSelectRoute(target);
-        }}
-        onSignOut={signOut}
-        onSelectRoute={onSelectRoute}
-      />
-
-      <SideRail
-        locale={locale}
-        mode={mode}
-        page={page}
-        onSelectRoute={onSelectRoute}
-      />
-
-      <main className="duck-main" id="duck-main" tabIndex={-1}>
-        {renderRoute ? renderRoute(route, navigate) : children}
-      </main>
-
-      <ActionBar
-        locale={locale}
-        pending={state.pending}
-        observationStale={state.health.timeTrust !== "trusted"}
-        failed={state.pendingFailed}
-        applying={state.pendingApplying}
-        awaitConfirm={state.pendingAwaitConfirm}
-        page={page}
-        onApply={() => dispatch({ type: "set", part: {} })}
-        onDiscard={() => dispatch({ type: "set", part: {} })}
-      />
-
-      {/* Easy-mode horizontal nav for ≤920px */}
-      {mode === "easy" && (
-        <nav className="duck-easytop" aria-label={v4t(locale, "shell.primaryNav")}>
-          {EASY_NAV.map((item) => {
-            // item.key is "easy-home", "easy-internet"... map to "easy.home", "easy.internet"
-            const i18nKey = item.key.replace("-", ".");
-            return (
-              <a
-                key={item.key}
-                href={`#${item.route}`}
-                className="duck-easytop-item"
-                aria-current={page.route === item.route ? "page" : undefined}
-                onClick={(e) => {
-                  e.preventDefault();
-                  onSelectRoute(item.route);
-                }}
-              >
-                <Icon name={item.icon} size={16} />
-                <span>{v4t(locale, i18nKey)}</span>
-              </a>
-            );
-          })}
-        </nav>
-      )}
-
-      <SearchOverlay
-        locale={locale}
-        open={state.searchOpen}
-        query={state.searchQuery}
-        focus={state.searchFocus}
-        overview={state.overview}
-        onQuery={(q) => dispatch({ type: "searchQuery", q })}
-        onPick={(r) => onSelectRoute(r.route)}
-        onPickObject={(o) => {
-          // Selecting a real object routes to its page and primes
-          // the Inspector with the row so the user lands on context.
-          if (o.ref) {
-            dispatch({ type: "selectObject", obj: {
-              pageId: routeToPageId(o.route),
-              kind: o.ref.kind,
-              ref: o.ref.id,
-              displayName: o.displayName,
-              status: undefined,
-              fields: [],
-            } as InspectorObject });
+        <TopBar
+          locale={locale}
+          theme={theme}
+          mode={mode}
+          page={page}
+          healthFetch={state.healthFetch}
+          doctorFetch={state.doctor}
+          overviewFetch={state.overviewFetch}
+          onOpenSearch={() => dispatch({ type: "openSearch" })}
+          onOpenInspector={() =>
+            dispatch({ type: "openInspector", pageId: page.id })
           }
-          dispatch({ type: "closeSearch" });
-          onSelectRoute(o.route);
-        }}
-        onClose={() => dispatch({ type: "closeSearch" })}
-        onNext={() => dispatch({ type: "searchNext" })}
-        onPrev={() => dispatch({ type: "searchPrev" })}
-      />
+          onToggleTheme={changeTheme}
+          onChangeLocale={changeLocale}
+          onSetMode={(m) => {
+            const target = m === "easy" ? "/easy/home" : "/system/overview";
+            onSelectRoute(target);
+          }}
+          onSignOut={signOut}
+          onSelectRoute={onSelectRoute}
+        />
 
-      <InspectorDrawer
-        locale={locale}
-        open={state.inspection}
-        page={page}
-        selection={state.selection}
-        tab={state.inspectorTab}
-        onTab={(t) => dispatch({ type: "set", part: { inspectorTab: t } })}
-        onClose={() => dispatch({ type: "closeInspector" })}
-        onClearSelection={() => dispatch({ type: "selectObject", obj: null })}
-      />
-    </div>
+        <SideRail
+          locale={locale}
+          mode={mode}
+          page={page}
+          onSelectRoute={onSelectRoute}
+        />
+
+        <main className="duck-main" id="duck-main" tabIndex={-1}>
+          {renderRoute ? renderRoute(route, navigate) : children}
+        </main>
+
+        <ActionBar
+          locale={locale}
+          pending={state.pending}
+          observationStale={state.health.timeTrust !== "trusted"}
+          failed={state.pendingFailed}
+          applying={state.pendingApplying}
+          awaitConfirm={state.pendingAwaitConfirm}
+          page={page}
+          onApply={() => dispatch({ type: "set", part: {} })}
+          onDiscard={() => dispatch({ type: "set", part: {} })}
+        />
+
+        {/* Easy-mode horizontal nav for ≤920px */}
+        {mode === "easy" && (
+          <nav
+            className="duck-easytop"
+            aria-label={v4t(locale, "shell.primaryNav")}
+          >
+            {EASY_NAV.map((item) => {
+              // item.key is "easy-home", "easy-internet"... map to "easy.home", "easy.internet"
+              const i18nKey = item.key.replace("-", ".");
+              return (
+                <a
+                  key={item.key}
+                  href={`#${item.route}`}
+                  className="duck-easytop-item"
+                  aria-current={page.route === item.route ? "page" : undefined}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onSelectRoute(item.route);
+                  }}
+                >
+                  <Icon name={item.icon} size={16} />
+                  <span>{v4t(locale, i18nKey)}</span>
+                </a>
+              );
+            })}
+          </nav>
+        )}
+
+        <SearchOverlay
+          locale={locale}
+          open={state.searchOpen}
+          query={state.searchQuery}
+          focus={state.searchFocus}
+          overview={state.overview}
+          onQuery={(q) => dispatch({ type: "searchQuery", q })}
+          onPick={(r) => onSelectRoute(r.route)}
+          onPickObject={(o) => {
+            // Selecting a real object routes to its page and primes
+            // the Inspector with the row so the user lands on context.
+            if (o.ref) {
+              dispatch({
+                type: "selectObject",
+                obj: {
+                  pageId: routeToPageId(o.route),
+                  kind: o.ref.kind,
+                  ref: o.ref.id,
+                  displayName: o.displayName,
+                  status: undefined,
+                  fields: [],
+                } as InspectorObject,
+              });
+            }
+            dispatch({ type: "closeSearch" });
+            onSelectRoute(o.route);
+          }}
+          onClose={() => dispatch({ type: "closeSearch" })}
+          onNext={() => dispatch({ type: "searchNext" })}
+          onPrev={() => dispatch({ type: "searchPrev" })}
+        />
+
+        <InspectorDrawer
+          locale={locale}
+          open={state.inspection}
+          page={page}
+          selection={state.selection}
+          tab={state.inspectorTab}
+          onTab={(t) => dispatch({ type: "set", part: { inspectorTab: t } })}
+          onClose={() => dispatch({ type: "closeInspector" })}
+          onClearSelection={() => dispatch({ type: "selectObject", obj: null })}
+        />
+      </div>
     </PrefsContext.Provider>
   );
 }
@@ -613,7 +629,12 @@ function TopBar(props: {
           type="button"
           className="duck-search"
           onClick={props.onOpenSearch}
-          style={{ background: "transparent", border: "none", padding: 0, width: "min(560px, 100%)" }}
+          style={{
+            background: "transparent",
+            border: "none",
+            padding: 0,
+            width: "min(560px, 100%)",
+          }}
           aria-label={v4t(locale, "topbar.openSearchHint")}
         >
           <span
@@ -634,13 +655,21 @@ function TopBar(props: {
             <span className="search-icon" aria-hidden="true">
               <Icon name="search" size={16} />
             </span>
-            <span style={{ marginLeft: 8 }}>{v4t(locale, "topbar.openSearchHint")}</span>
-            <span className="kbd" aria-hidden="true">⌘K</span>
+            <span style={{ marginLeft: 8 }}>
+              {v4t(locale, "topbar.openSearchHint")}
+            </span>
+            <span className="kbd" aria-hidden="true">
+              ⌘K
+            </span>
           </span>
         </button>
       </div>
 
-      <div className="duck-tools" role="toolbar" aria-label={v4t(locale, "shell.primaryNav")}>
+      <div
+        className="duck-tools"
+        role="toolbar"
+        aria-label={v4t(locale, "shell.primaryNav")}
+      >
         <HealthChip
           locale={locale}
           health={props.healthFetch}
@@ -648,7 +677,11 @@ function TopBar(props: {
           overview={props.overviewFetch}
         />
 
-        <div className="duck-mode" role="group" aria-label={v4t(locale, "topbar.modeEasy")}>
+        <div
+          className="duck-mode"
+          role="group"
+          aria-label={v4t(locale, "topbar.modeEasy")}
+        >
           <button
             type="button"
             aria-pressed={props.mode === "easy"}
@@ -672,7 +705,9 @@ function TopBar(props: {
           onClick={props.onOpenInspector}
         >
           <Icon name="help" size={18} />
-          <span className="duck-tooltip">{v4t(locale, "topbar.openInspector")}</span>
+          <span className="duck-tooltip">
+            {v4t(locale, "topbar.openInspector")}
+          </span>
         </button>
 
         <button
@@ -682,12 +717,19 @@ function TopBar(props: {
           onClick={props.onToggleTheme}
         >
           <Icon name={props.theme === "dark" ? "sun" : "moon"} size={18} />
-          <span className="duck-tooltip">{v4t(locale, "topbar.themeToggle")}</span>
+          <span className="duck-tooltip">
+            {v4t(locale, "topbar.themeToggle")}
+          </span>
         </button>
 
-        <label className="duck-tool" aria-label={v4t(locale, "topbar.localeSelect")}>
+        <label
+          className="duck-tool"
+          aria-label={v4t(locale, "topbar.localeSelect")}
+        >
           <Icon name="globe" size={18} />
-          <span className="duck-tooltip">{v4t(locale, "topbar.localeSelect")}</span>
+          <span className="duck-tooltip">
+            {v4t(locale, "topbar.localeSelect")}
+          </span>
           <select
             aria-label={v4t(locale, "topbar.localeSelect")}
             value={props.locale}
@@ -701,7 +743,11 @@ function TopBar(props: {
           </select>
         </label>
 
-        <button type="button" className="duck-end-session" onClick={props.onSignOut}>
+        <button
+          type="button"
+          className="duck-end-session"
+          onClick={props.onSignOut}
+        >
           {v4t(locale, "topbar.endSession")}
         </button>
       </div>
@@ -825,8 +871,7 @@ function SideRail({
         // Auto-expand the group that contains the current page;
         // otherwise fall back to the stored preference; the very
         // first render defaults to expanded.
-        const isOpen =
-          containsCurrent || stored === undefined ? true : stored;
+        const isOpen = containsCurrent || stored === undefined ? true : stored;
         return (
           <div
             className={`duck-rail-group${isOpen ? "" : " duck-rail-group-collapsed"}`}
@@ -844,21 +889,22 @@ function SideRail({
               </span>
               {v4t(locale, `rail.${g.key}`)}
             </button>
-            {isOpen && pages.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                className="duck-rail-item"
-                aria-current={page.id === p.id ? "page" : undefined}
-                onClick={() => onSelectRoute(p.route)}
-                title={p.name}
-              >
-                <span className="duck-rail-icon">
-                  <Icon name={p.icon} size={18} />
-                </span>
-                <span className="duck-rail-name">{p.name}</span>
-              </button>
-            ))}
+            {isOpen &&
+              pages.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className="duck-rail-item"
+                  aria-current={page.id === p.id ? "page" : undefined}
+                  onClick={() => onSelectRoute(p.route)}
+                  title={p.name}
+                >
+                  <span className="duck-rail-icon">
+                    <Icon name={p.icon} size={18} />
+                  </span>
+                  <span className="duck-rail-name">{p.name}</span>
+                </button>
+              ))}
           </div>
         );
       })}
@@ -945,7 +991,9 @@ function SearchOverlay({
     <div className="duck-search-overlay" role="dialog" aria-modal="true">
       <div className="scrim" onClick={onClose} />
       <div className="panel" onKeyDown={onKey}>
-        <div style={{ padding: "var(--space-s) var(--space-l) var(--space-2xs)" }}>
+        <div
+          style={{ padding: "var(--space-s) var(--space-l) var(--space-2xs)" }}
+        >
           <div style={{ position: "relative" }}>
             <span
               style={{
@@ -977,19 +1025,36 @@ function SearchOverlay({
           </div>
         </div>
         {query.trim().length < 2 && (
-          <div style={{ padding: "var(--space-m) var(--space-l)", color: "var(--text-subtle)" }}>
-            {v4t(locale, "search.tooShort")} — {v4t(locale, "search.tooShortHint")}
+          <div
+            style={{
+              padding: "var(--space-m) var(--space-l)",
+              color: "var(--text-subtle)",
+            }}
+          >
+            {v4t(locale, "search.tooShort")} —{" "}
+            {v4t(locale, "search.tooShortHint")}
           </div>
         )}
         {query.trim().length >= 2 && total === 0 && (
-          <div style={{ padding: "var(--space-m) var(--space-l)", color: "var(--text-subtle)" }}>
-            <strong style={{ color: "var(--text)" }}>{v4t(locale, "search.empty")}</strong>
-            <div style={{ marginTop: 4 }}>{v4t(locale, "search.emptyHint")}</div>
+          <div
+            style={{
+              padding: "var(--space-m) var(--space-l)",
+              color: "var(--text-subtle)",
+            }}
+          >
+            <strong style={{ color: "var(--text)" }}>
+              {v4t(locale, "search.empty")}
+            </strong>
+            <div style={{ marginTop: 4 }}>
+              {v4t(locale, "search.emptyHint")}
+            </div>
           </div>
         )}
         {query.trim().length >= 2 && objectResults.length > 0 && (
           <>
-            <div className="group-head">{v4t(locale, "search.headingObjects")}</div>
+            <div className="group-head">
+              {v4t(locale, "search.headingObjects")}
+            </div>
             {objectResults.map((o, idx) => {
               const realIdx = pages.length + idx;
               return (
@@ -1016,7 +1081,9 @@ function SearchOverlay({
         )}
         {query.trim().length >= 2 && pages.length > 0 && (
           <>
-            <div className="group-head">{v4t(locale, "search.headingPages")}</div>
+            <div className="group-head">
+              {v4t(locale, "search.headingPages")}
+            </div>
             {pages.map((p, idx) => {
               const sectionLabel = sectionBreadcrumbLabel(p, locale);
               return (
@@ -1042,16 +1109,16 @@ function SearchOverlay({
           </>
         )}
         {query.trim().length >= 2 && total > 0 && (
-          <div className="hint">
-            {v4t(locale, "search.resultsHint", total)}
-          </div>
+          <div className="hint">{v4t(locale, "search.resultsHint", total)}</div>
         )}
       </div>
     </div>
   );
 }
 
-function iconForObjectKind(kind: "interface" | "address" | "vlan" | "device" | "service"): string {
+function iconForObjectKind(
+  kind: "interface" | "address" | "vlan" | "device" | "service",
+): string {
   if (kind === "interface") return "ethernet";
   if (kind === "address") return "resolver";
   if (kind === "vlan") return "vlan";
@@ -1070,7 +1137,11 @@ function routeToPageId(route: string): string {
 }
 
 function sectionBreadcrumbLabel(p: PageMeta, _locale: Locale): string {
-  return v4t(_locale, `rail.${v4GroupFor(p.section) ?? "system"}`) + " › " + p.section;
+  return (
+    v4t(_locale, `rail.${v4GroupFor(p.section) ?? "system"}`) +
+    " › " +
+    p.section
+  );
 }
 
 /* — ActionBar — */
@@ -1097,14 +1168,23 @@ function ActionBar({
   onDiscard: () => void;
 }) {
   const status = page.section === "easy" ? "easy" : "full";
-  let visualState: "idle-quiet" | "idle-stale" | "pending" | "applying" | "confirm" | "failed" = "idle-quiet";
+  let visualState:
+    | "idle-quiet"
+    | "idle-stale"
+    | "pending"
+    | "applying"
+    | "confirm"
+    | "failed" = "idle-quiet";
   let message = v4t(locale, "actionbar.idleQuiet");
   let primary: { label: string; disabled: boolean } | null = null;
   let secondary: { label: string } | null = null;
   if (failed) {
     visualState = "failed";
     message = v4t(locale, "actionbar.failed");
-    primary = { label: v4t(locale, "actionbar.failedRecovery"), disabled: false };
+    primary = {
+      label: v4t(locale, "actionbar.failedRecovery"),
+      disabled: false,
+    };
   } else if (applying) {
     visualState = "applying";
     message = v4t(locale, "actionbar.applying");
@@ -1117,7 +1197,10 @@ function ActionBar({
   } else if (pending.length > 0) {
     visualState = "pending";
     message = v4t(locale, "actionbar.pending", pending.length);
-    primary = { label: v4t(locale, "actionbar.apply"), disabled: observationStale };
+    primary = {
+      label: v4t(locale, "actionbar.apply"),
+      disabled: observationStale,
+    };
     secondary = { label: v4t(locale, "actionbar.discard") };
   } else if (observationStale) {
     visualState = "idle-stale";
@@ -1224,23 +1307,40 @@ function InspectorDrawer({
       <div className="drawer-body">
         {selection ? (
           <>
-            <p style={{ marginTop: 0, color: "var(--text-muted)" }}>{page.question}</p>
+            <p style={{ marginTop: 0, color: "var(--text-muted)" }}>
+              {page.question}
+            </p>
             <button
               type="button"
               onClick={onClearSelection}
               className="duck-tool"
-              style={{ border: "1px solid var(--line)", width: "auto", padding: "6px 12px", height: "auto" }}
+              style={{
+                border: "1px solid var(--line)",
+                width: "auto",
+                padding: "6px 12px",
+                height: "auto",
+              }}
             >
               <Icon name="close" size={14} />
               <span style={{ marginLeft: 6 }}>Clear selection</span>
             </button>
           </>
         ) : (
-          <p style={{ color: "var(--text-muted)" }}>{v4t(locale, "inspector.noObjectSelected")}</p>
+          <p style={{ color: "var(--text-muted)" }}>
+            {v4t(locale, "inspector.noObjectSelected")}
+          </p>
         )}
 
         <div className="tech">
-          <h4 style={{ margin: "0 0 var(--space-s)", fontSize: "var(--fs-s)", color: "var(--text-subtle)", letterSpacing: "var(--track-caps)", textTransform: "uppercase" }}>
+          <h4
+            style={{
+              margin: "0 0 var(--space-s)",
+              fontSize: "var(--fs-s)",
+              color: "var(--text-subtle)",
+              letterSpacing: "var(--track-caps)",
+              textTransform: "uppercase",
+            }}
+          >
             {v4t(locale, "inspector.technicalDetails")}
           </h4>
           {selection && (

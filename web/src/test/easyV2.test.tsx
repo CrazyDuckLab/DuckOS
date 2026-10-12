@@ -86,9 +86,24 @@ class FakeClient extends APIClient {
       onFetch: () => {},
     } as never);
     this.overview = opts.overview ?? { ok: true, data: mkOverview(), age: 0 };
-    this.multiwan = opts.multiwan ?? { ok: false, reason: "missing", message: "n/a", status: 0 };
-    this.wifi = opts.wifi ?? { ok: false, reason: "missing", message: "n/a", status: 0 };
-    this.sites = opts.sites ?? { ok: false, reason: "missing", message: "n/a", status: 0 };
+    this.multiwan = opts.multiwan ?? {
+      ok: false,
+      reason: "missing",
+      message: "n/a",
+      status: 0,
+    };
+    this.wifi = opts.wifi ?? {
+      ok: false,
+      reason: "missing",
+      message: "n/a",
+      status: 0,
+    };
+    this.sites = opts.sites ?? {
+      ok: false,
+      reason: "missing",
+      message: "n/a",
+      status: 0,
+    };
     this.doctor = opts.doctor ?? {
       ok: true,
       data: {

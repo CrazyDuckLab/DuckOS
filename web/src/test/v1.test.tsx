@@ -51,7 +51,19 @@ describe("page registry integrity", () => {
     }
   });
   it("every page route resolves under one of the ten sections", () => {
-    const valid = new Set(["interfaces", "wan", "lan", "routing", "firewall", "tunnels", "dns", "services", "system", "logs", "easy"]);
+    const valid = new Set([
+      "interfaces",
+      "wan",
+      "lan",
+      "routing",
+      "firewall",
+      "tunnels",
+      "dns",
+      "services",
+      "system",
+      "logs",
+      "easy",
+    ]);
     for (const p of ALL_PAGES) {
       expect(valid.has(p.section)).toBe(true);
     }

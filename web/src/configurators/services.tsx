@@ -46,25 +46,44 @@ export function ServicesLivePage({
     return () => ctl.abort();
   }, [client]);
 
-  if (!result) return <PageFrame page={page} bundle={bundle}><StatePanel state="loading" /></PageFrame>;
-  if (!result.ok) return (
-    <PageFrame page={page} bundle={bundle}>
-      <StatePanel state={result.reason === "missing" ? "missing-contract" : "error"} body={result.message} />
-    </PageFrame>
-  );
+  if (!result)
+    return (
+      <PageFrame page={page} bundle={bundle}>
+        <StatePanel state="loading" />
+      </PageFrame>
+    );
+  if (!result.ok)
+    return (
+      <PageFrame page={page} bundle={bundle}>
+        <StatePanel
+          state={result.reason === "missing" ? "missing-contract" : "error"}
+          body={result.message}
+        />
+      </PageFrame>
+    );
 
   const q = query.toLowerCase();
   const filtered = result.data.services.filter((s) => {
     if (filter === "active" && s.activeState !== "active") return false;
-    if (filter === "failed" && s.activeState !== "failed" && s.subState !== "failed") return false;
+    if (
+      filter === "failed" &&
+      s.activeState !== "failed" &&
+      s.subState !== "failed"
+    )
+      return false;
     if (!q) return true;
-    return `${s.name} ${s.loadState} ${s.activeState} ${s.subState}`.toLowerCase().includes(q);
+    return `${s.name} ${s.loadState} ${s.activeState} ${s.subState}`
+      .toLowerCase()
+      .includes(q);
   });
 
   const counts = {
     total: result.data.services.length,
-    active: result.data.services.filter((s) => s.activeState === "active").length,
-    failed: result.data.services.filter((s) => s.activeState === "failed" || s.subState === "failed").length,
+    active: result.data.services.filter((s) => s.activeState === "active")
+      .length,
+    failed: result.data.services.filter(
+      (s) => s.activeState === "failed" || s.subState === "failed",
+    ).length,
   };
 
   return (
@@ -115,12 +134,22 @@ export function ServicesLivePage({
           });
         }}
         columns={[
-          { key: "name", label: "Service", mono: true, render: (s) => <strong>{s.name}</strong> },
+          {
+            key: "name",
+            label: "Service",
+            mono: true,
+            render: (s) => <strong>{s.name}</strong>,
+          },
           {
             key: "loadState",
             label: "Load",
             render: (s) => (
-              <span className="v1-pill" data-state={s.loadState === "loaded" ? "good" : "warn"}>{s.loadState}</span>
+              <span
+                className="v1-pill"
+                data-state={s.loadState === "loaded" ? "good" : "warn"}
+              >
+                {s.loadState}
+              </span>
             ),
           },
           {
@@ -130,7 +159,11 @@ export function ServicesLivePage({
               <span
                 className="v1-pill"
                 data-state={
-                  s.activeState === "active" ? "good" : s.activeState === "failed" ? "bad" : "warn"
+                  s.activeState === "active"
+                    ? "good"
+                    : s.activeState === "failed"
+                      ? "bad"
+                      : "warn"
                 }
               >
                 {s.activeState}
@@ -156,42 +189,79 @@ export function SubscriptionsPage({
   const [result, setResult] = useState<FetchResult<unknown> | null>(null);
   useEffect(() => {
     const ctl = new AbortController();
-    client.fetchConfig({ signal: ctl.signal, fallbackToMissing: true }).then(setResult);
+    client
+      .fetchConfig({ signal: ctl.signal, fallbackToMissing: true })
+      .then(setResult);
     return () => ctl.abort();
   }, [client]);
-  if (!result) return <PageFrame page={page} bundle={bundle}><StatePanel state="loading" /></PageFrame>;
-  if (!result.ok) return (
-    <PageFrame page={page} bundle={bundle}>
-      <StatePanel state={result.reason === "missing" ? "missing-contract" : "error"} body={result.message} />
-    </PageFrame>
-  );
-  const subs = (result.data as { subscriptions?: Array<Record<string, unknown>> }).subscriptions ?? [];
+  if (!result)
+    return (
+      <PageFrame page={page} bundle={bundle}>
+        <StatePanel state="loading" />
+      </PageFrame>
+    );
+  if (!result.ok)
+    return (
+      <PageFrame page={page} bundle={bundle}>
+        <StatePanel
+          state={result.reason === "missing" ? "missing-contract" : "error"}
+          body={result.message}
+        />
+      </PageFrame>
+    );
+  const subs =
+    (result.data as { subscriptions?: Array<Record<string, unknown>> })
+      .subscriptions ?? [];
   return (
     <PageFrame page={page} bundle={bundle}>
-      <RuntimeEvidencePanel rows={[{ key: "subscriptions", value: subs.length }]} />
+      <RuntimeEvidencePanel
+        rows={[{ key: "subscriptions", value: subs.length }]}
+      />
       <DataTable
         rows={subs as Array<Record<string, unknown>>}
         rowKey={(s, i) => String(s.id ?? s.name ?? i)}
         pageSize={20}
         emptyState="No subscriptions on file."
         columns={[
-          { key: "name", label: "Subscription", render: (s) => <strong>{String(s.name ?? s.id ?? "—")}</strong> },
-          { key: "status", label: "Status", render: (s) => String(s.status ?? "—") },
-          { key: "expires", label: "Expires", render: (s) => String(s.expires ?? "—") },
+          {
+            key: "name",
+            label: "Subscription",
+            render: (s) => <strong>{String(s.name ?? s.id ?? "—")}</strong>,
+          },
+          {
+            key: "status",
+            label: "Status",
+            render: (s) => String(s.status ?? "—"),
+          },
+          {
+            key: "expires",
+            label: "Expires",
+            render: (s) => String(s.expires ?? "—"),
+          },
         ]}
       />
       {subs.length === 0 && (
         <p className="v1-subtle v1-fs-xs">
-          A typed subscriptions surface is not exposed by the public API
-          today. The dashboard will populate this list as soon as the agent
-          publishes it.
+          A typed subscriptions surface is not exposed by the public API today.
+          The dashboard will populate this list as soon as the agent publishes
+          it.
         </p>
       )}
     </PageFrame>
   );
 }
 
-export const ServicesSubareaSpecs: Record<string, { columns: ReadonlyArray<{ key: string; label: string; description?: string }>; endpoint: string }> = {
+export const ServicesSubareaSpecs: Record<
+  string,
+  {
+    columns: ReadonlyArray<{
+      key: string;
+      label: string;
+      description?: string;
+    }>;
+    endpoint: string;
+  }
+> = {
   P059: {
     endpoint: "/api/v1/sites",
     columns: [
@@ -265,7 +335,14 @@ export function ServicesSubareaStub({
 }: {
   page: PageMeta;
   bundle: Messages;
-  spec: { columns: ReadonlyArray<{ key: string; label: string; description?: string }>; endpoint: string };
+  spec: {
+    columns: ReadonlyArray<{
+      key: string;
+      label: string;
+      description?: string;
+    }>;
+    endpoint: string;
+  };
 }) {
   return (
     <UnsupportedFeature

@@ -88,11 +88,7 @@ export type DoctorState = "loading" | "success" | "error";
  * A future timestamp is NEVER recent.
  */
 export type ObservationState =
-  | "missing"
-  | "invalid"
-  | "future"
-  | "stale"
-  | "recent";
+  "missing" | "invalid" | "future" | "stale" | "recent";
 
 /**
  * Per-source input bag. Anything that is unknown stays undefined /
@@ -173,7 +169,12 @@ export function classifyObservation(
   const ms = parseObservedAt(payload);
   if (ms === null) {
     // Distinguish "field present but invalid" from "field missing".
-    if (payload && typeof payload === "object" && typeof payload.observedAt === "string" && payload.observedAt.length > 0) {
+    if (
+      payload &&
+      typeof payload === "object" &&
+      typeof payload.observedAt === "string" &&
+      payload.observedAt.length > 0
+    ) {
       return "invalid";
     }
     return "missing";
@@ -194,7 +195,11 @@ export function doctorFindingsFromResult(
 ): DoctorFinding[] | null {
   if (!result || !result.ok) return null;
   const p = result.data as { findings?: unknown; issues?: unknown };
-  const list = Array.isArray(p.findings) ? p.findings : Array.isArray(p.issues) ? p.issues : [];
+  const list = Array.isArray(p.findings)
+    ? p.findings
+    : Array.isArray(p.issues)
+      ? p.issues
+      : [];
   return list as DoctorFinding[];
 }
 
@@ -301,11 +306,7 @@ export interface DerivedHealth {
    * today because the production /api/v1/health contract carries
    * no verified-health evidence. We refuse to synthesize it.
    */
-  overall:
-    | "unreachable"
-    | "attention"
-    | "stale"
-    | "incomplete";
+  overall: "unreachable" | "attention" | "stale" | "incomplete";
 }
 
 /**

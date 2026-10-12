@@ -53,7 +53,10 @@ export function NetworksLivePage({
   if (!result.ok) {
     return (
       <PageFrame page={page} bundle={bundle}>
-        <StatePanel state={result.reason === "missing" ? "missing-contract" : "error"} body={result.message} />
+        <StatePanel
+          state={result.reason === "missing" ? "missing-contract" : "error"}
+          body={result.message}
+        />
       </PageFrame>
     );
   }
@@ -71,15 +74,27 @@ export function NetworksLivePage({
         mac: iface.mac,
       })),
     )
-    .filter((s) => query === "" || `${s.iface} ${s.cidr} ${s.mac}`.toLowerCase().includes(query.toLowerCase()));
+    .filter(
+      (s) =>
+        query === "" ||
+        `${s.iface} ${s.cidr} ${s.mac}`
+          .toLowerCase()
+          .includes(query.toLowerCase()),
+    );
 
   return (
     <PageFrame page={page} bundle={bundle}>
       <RuntimeEvidencePanel
         rows={[
           { key: "interfaces", value: data.interfaces.length },
-          { key: "ipv4 subnets", value: subnets.filter((s) => s.family === "ipv4").length },
-          { key: "ipv6 subnets", value: subnets.filter((s) => s.family === "ipv6").length },
+          {
+            key: "ipv4 subnets",
+            value: subnets.filter((s) => s.family === "ipv4").length,
+          },
+          {
+            key: "ipv6 subnets",
+            value: subnets.filter((s) => s.family === "ipv6").length,
+          },
         ]}
         observedAt={data.observedAt}
       />
@@ -88,9 +103,7 @@ export function NetworksLivePage({
         onChange={setQuery}
         placeholder="Find an interface or subnet"
         right={
-          <span className="v1-subtle v1-fs-xs">
-            {subnets.length} addresses
-          </span>
+          <span className="v1-subtle v1-fs-xs">{subnets.length} addresses</span>
         }
       />
       <DataTable
@@ -101,7 +114,9 @@ export function NetworksLivePage({
         emptyState="No subnets observed."
         selectedRowKey={selectedKey}
         onRowClick={(row) => {
-          const iface = result.data.interfaces.find((i) => i.name === row.iface);
+          const iface = result.data.interfaces.find(
+            (i) => i.name === row.iface,
+          );
           if (!iface) return;
           dispatch({
             type: "selectObject",
@@ -109,14 +124,25 @@ export function NetworksLivePage({
           });
         }}
         columns={[
-          { key: "iface", label: "Interface", render: (s) => <strong>{s.iface}</strong> },
-          { key: "family", label: "Family", render: (s) => s.family.toUpperCase() },
+          {
+            key: "iface",
+            label: "Interface",
+            render: (s) => <strong>{s.iface}</strong>,
+          },
+          {
+            key: "family",
+            label: "Family",
+            render: (s) => s.family.toUpperCase(),
+          },
           { key: "cidr", label: "Subnet", mono: true, render: (s) => s.cidr },
           {
             key: "state",
             label: "Admin state",
             render: (s) => (
-              <span className="v1-pill" data-state={s.state.toLowerCase() === "up" ? "good" : "warn"}>
+              <span
+                className="v1-pill"
+                data-state={s.state.toLowerCase() === "up" ? "good" : "warn"}
+              >
                 {s.state}
               </span>
             ),
@@ -154,7 +180,10 @@ export function ClientsPage({
   if (!result.ok) {
     return (
       <PageFrame page={page} bundle={bundle}>
-        <StatePanel state={result.reason === "missing" ? "missing-contract" : "error"} body={result.message} />
+        <StatePanel
+          state={result.reason === "missing" ? "missing-contract" : "error"}
+          body={result.message}
+        />
       </PageFrame>
     );
   }
@@ -166,15 +195,25 @@ export function ClientsPage({
       <RuntimeEvidencePanel
         rows={[
           { key: "interfaces observed", value: interfaces.length },
-          { key: "ipv4", value: interfaces.flatMap((i) => i.addresses.filter((a) => a.family === "ipv4")).length },
-          { key: "ipv6", value: interfaces.flatMap((i) => i.addresses.filter((a) => a.family === "ipv6")).length },
+          {
+            key: "ipv4",
+            value: interfaces.flatMap((i) =>
+              i.addresses.filter((a) => a.family === "ipv4"),
+            ).length,
+          },
+          {
+            key: "ipv6",
+            value: interfaces.flatMap((i) =>
+              i.addresses.filter((a) => a.family === "ipv6"),
+            ).length,
+          },
         ]}
         observedAt={result.data.observedAt}
       />
       <p className="v1-mute v1-fs-sm">
-        Per-device lease information comes from /api/v1/dhcp/leases, which
-        is not exposed today. Until then, this view shows the interfaces
-        the kernel knows about, with their admin state and addresses.
+        Per-device lease information comes from /api/v1/dhcp/leases, which is
+        not exposed today. Until then, this view shows the interfaces the kernel
+        knows about, with their admin state and addresses.
       </p>
       <DataTable
         rows={interfaces}
@@ -183,12 +222,19 @@ export function ClientsPage({
         initialSort={{ key: "name", direction: "asc" }}
         emptyState="No devices observed."
         columns={[
-          { key: "name", label: "Interface", render: (i) => <strong>{i.name}</strong> },
+          {
+            key: "name",
+            label: "Interface",
+            render: (i) => <strong>{i.name}</strong>,
+          },
           {
             key: "state",
             label: "Admin state",
             render: (i) => (
-              <span className="v1-pill" data-state={i.state.toLowerCase() === "up" ? "good" : "warn"}>
+              <span
+                className="v1-pill"
+                data-state={i.state.toLowerCase() === "up" ? "good" : "warn"}
+              >
                 {i.state}
               </span>
             ),
@@ -198,13 +244,15 @@ export function ClientsPage({
             key: "ipv4",
             label: "IPv4",
             mono: true,
-            render: (i) => i.addresses.find((a) => a.family === "ipv4")?.address ?? "—",
+            render: (i) =>
+              i.addresses.find((a) => a.family === "ipv4")?.address ?? "—",
           },
           {
             key: "ipv6",
             label: "IPv6",
             mono: true,
-            render: (i) => i.addresses.find((a) => a.family === "ipv6")?.address ?? "—",
+            render: (i) =>
+              i.addresses.find((a) => a.family === "ipv6")?.address ?? "—",
           },
         ]}
       />
@@ -212,7 +260,17 @@ export function ClientsPage({
   );
 }
 
-export const LanSubareaSpecs: Record<string, { columns: ReadonlyArray<{ key: string; label: string; description?: string }>; endpoint: string }> = {
+export const LanSubareaSpecs: Record<
+  string,
+  {
+    columns: ReadonlyArray<{
+      key: string;
+      label: string;
+      description?: string;
+    }>;
+    endpoint: string;
+  }
+> = {
   P023: {
     endpoint: "/api/v1/ipam",
     columns: [
@@ -248,7 +306,14 @@ export function LanSubareaStub({
 }: {
   page: PageMeta;
   bundle: Messages;
-  spec: { columns: ReadonlyArray<{ key: string; label: string; description?: string }>; endpoint: string };
+  spec: {
+    columns: ReadonlyArray<{
+      key: string;
+      label: string;
+      description?: string;
+    }>;
+    endpoint: string;
+  };
 }) {
   return (
     <UnsupportedFeature

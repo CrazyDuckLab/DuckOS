@@ -35,9 +35,12 @@ interface Props {
 function useLocale(): Locale {
   if (typeof document === "undefined") return "en";
   const html = document.documentElement.getAttribute("data-locale");
-  if (html === "ru" || html === "de" || html === "es" || html === "en") return html;
-  const shell = document.querySelector(".duck-shell")?.getAttribute("data-locale") ?? null;
-  if (shell === "ru" || shell === "de" || shell === "es" || shell === "en") return shell;
+  if (html === "ru" || html === "de" || html === "es" || html === "en")
+    return html;
+  const shell =
+    document.querySelector(".duck-shell")?.getAttribute("data-locale") ?? null;
+  if (shell === "ru" || shell === "de" || shell === "es" || shell === "en")
+    return shell;
   return "en";
 }
 
@@ -62,7 +65,10 @@ export function ServiceDiscoveryPage({ page, bundle, client }: Props) {
 
   const refresh = async () => {
     try {
-      const s = await listUPnPState(client.token(), new AbortController().signal);
+      const s = await listUPnPState(
+        client.token(),
+        new AbortController().signal,
+      );
       setState(s);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "load failed");
@@ -93,7 +99,12 @@ export function ServiceDiscoveryPage({ page, bundle, client }: Props) {
       allowedClients: [],
     };
     try {
-      await enableUPnPNetwork(client.token(), n, iface.trim(), new AbortController().signal);
+      await enableUPnPNetwork(
+        client.token(),
+        n,
+        iface.trim(),
+        new AbortController().signal,
+      );
       await refresh();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "enable failed");
@@ -102,7 +113,11 @@ export function ServiceDiscoveryPage({ page, bundle, client }: Props) {
   async function onDisable(ref: string) {
     setErr("");
     try {
-      await disableUPnPNetwork(client.token(), ref, new AbortController().signal);
+      await disableUPnPNetwork(
+        client.token(),
+        ref,
+        new AbortController().signal,
+      );
       await refresh();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "disable failed");
@@ -127,7 +142,12 @@ export function ServiceDiscoveryPage({ page, bundle, client }: Props) {
     try {
       const r = await sendWake(
         client.token(),
-        { target: wakeMAC.trim(), broadcast: "255.255.255.255:9", port: 9, packets: 3 },
+        {
+          target: wakeMAC.trim(),
+          broadcast: "255.255.255.255:9",
+          port: 9,
+          packets: 3,
+        },
         new AbortController().signal,
       );
       setWakeResult(r);
@@ -152,7 +172,10 @@ export function ServiceDiscoveryPage({ page, bundle, client }: Props) {
       <div className="v4-card" aria-labelledby="upnp-status-title">
         <div className="card-head">
           <h2 id="upnp-status-title">{t("upnp.serviceStatus")}</h2>
-          <span className="v4-pill" data-kind={networks.length ? "good" : "muted"}>
+          <span
+            className="v4-pill"
+            data-kind={networks.length ? "good" : "muted"}
+          >
             {networks.length ? t("upnp.serviceOn") : t("upnp.serviceOff")}
           </span>
         </div>
@@ -239,21 +262,37 @@ export function ServiceDiscoveryPage({ page, bundle, client }: Props) {
           <label>{t("upnp.protocolsLabel")}</label>
           <div>
             <label className="v4-check">
-              <input type="checkbox" checked={enableUPnP} onChange={(e) => setEnableUPnP(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={enableUPnP}
+                onChange={(e) => setEnableUPnP(e.target.checked)}
+              />
               {t("upnp.protocolUpnp")}
             </label>
             <label className="v4-check">
-              <input type="checkbox" checked={enableNATPMP} onChange={(e) => setEnableNATPMP(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={enableNATPMP}
+                onChange={(e) => setEnableNATPMP(e.target.checked)}
+              />
               {t("upnp.protocolNatpmp")}
             </label>
             <label className="v4-check">
-              <input type="checkbox" checked={enablePCP} onChange={(e) => setEnablePCP(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={enablePCP}
+                onChange={(e) => setEnablePCP(e.target.checked)}
+              />
               {t("upnp.protocolPcp")}
             </label>
           </div>
         </div>
         <div className="v4-row">
-          <button type="button" className="button button-primary" onClick={onEnable}>
+          <button
+            type="button"
+            className="button button-primary"
+            onClick={onEnable}
+          >
             {t("upnp.enable")}
           </button>
         </div>
@@ -278,7 +317,11 @@ export function ServiceDiscoveryPage({ page, bundle, client }: Props) {
                   <td>{n.protocols.join(", ")}</td>
                   <td>{n.ttlSec} s</td>
                   <td>
-                    <button type="button" className="button" onClick={() => onDisable(n.networkRef)}>
+                    <button
+                      type="button"
+                      className="button"
+                      onClick={() => onDisable(n.networkRef)}
+                    >
                       {t("upnp.disable")}
                     </button>
                   </td>
@@ -322,7 +365,11 @@ export function ServiceDiscoveryPage({ page, bundle, client }: Props) {
                   <td>{m.expiresAt}</td>
                   <td>{m.source}</td>
                   <td>
-                    <button type="button" className="button" onClick={() => onRevoke(m.id)}>
+                    <button
+                      type="button"
+                      className="button"
+                      onClick={() => onRevoke(m.id)}
+                    >
                       {t("upnp.revoke")}
                     </button>
                   </td>
@@ -356,7 +403,11 @@ export function ServiceDiscoveryPage({ page, bundle, client }: Props) {
           />
         </div>
         <div className="v4-row">
-          <button type="button" className="button button-primary" onClick={onWake}>
+          <button
+            type="button"
+            className="button button-primary"
+            onClick={onWake}
+          >
             {t("upnp.sendWake")}
           </button>
         </div>
@@ -365,8 +416,8 @@ export function ServiceDiscoveryPage({ page, bundle, client }: Props) {
             <span className="v4-pill" data-kind="good">
               {t("upnp.wakeSent")}
             </span>
-            {wakeResult.target} → {wakeResult.broadcast} · {wakeResult.packets} packets ·{" "}
-            {wakeResult.bytes} bytes · {t("upnp.notOnline")}
+            {wakeResult.target} → {wakeResult.broadcast} · {wakeResult.packets}{" "}
+            packets · {wakeResult.bytes} bytes · {t("upnp.notOnline")}
           </p>
         )}
       </div>

@@ -56,12 +56,12 @@ import (
 // DV01. It wires the exact constructor chain cmd/duck-api
 // uses:
 //
-//   Engine.New(sockPath, env)            // same as cmd/duck-api
-//   + RegisterAllWithRealSourcesAndLinuxSource
-//                                        // production boundary
-//   -> api.New(engine, token, listen, webDir)
-//                                        // same as cmd/duck-api
-//   -> httptest.NewServer(api.Handler)
+//	Engine.New(sockPath, env)            // same as cmd/duck-api
+//	+ RegisterAllWithRealSourcesAndLinuxSource
+//	                                     // production boundary
+//	-> api.New(engine, token, listen, webDir)
+//	                                     // same as cmd/duck-api
+//	-> httptest.NewServer(api.Handler)
 //
 // The fakeAgentSocket is a real net.Listen(unix) the Engine
 // HTTP client dials through its Unix-socket transport. The
@@ -71,17 +71,17 @@ import (
 // Linux-runtime kinds surface honest engine_unavailable
 // rather than fake-empty Complete=true.
 type dv01Production struct {
-	dir          string
-	sockPath     string
-	listener     net.Listener
-	apiSrv       *httptest.Server
-	token        string
-	wgCatalog    *wireguard.FileCatalog
-	xrayCatalog  *xray.FileCatalog
-	engine       *engine.Engine
-	doctorCalls  atomic.Int64
-	qosCalls     atomic.Int64
-	active       int32
+	dir         string
+	sockPath    string
+	listener    net.Listener
+	apiSrv      *httptest.Server
+	token       string
+	wgCatalog   *wireguard.FileCatalog
+	xrayCatalog *xray.FileCatalog
+	engine      *engine.Engine
+	doctorCalls atomic.Int64
+	qosCalls    atomic.Int64
+	active      int32
 }
 
 const dv01TestToken = "synthetic-dv01-test-token-not-a-real-credential-1234567890"
@@ -206,7 +206,7 @@ func (p *dv01Production) populateWireguardCatalog(t *testing.T) {
 	peer := wireguard.Peer{
 		ID: "wg-dv01-p1", ServerID: "wg-dv01-1", Name: "alice",
 		PublicKey: "PEERPUBKEY-DV01", AllowedIPs: []string{"10.8.0.2/32"},
-		Intent:    wireguard.IntentFullTunnel, Enabled: true,
+		Intent: wireguard.IntentFullTunnel, Enabled: true,
 		CreatedAt: time.Unix(1, 0).UTC(),
 	}
 	if err := cat.UpsertPeer(context.Background(), peer); err != nil {

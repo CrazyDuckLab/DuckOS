@@ -262,9 +262,12 @@
   font: inherit;
   font-size: var(--v1-fs-sm);
   cursor: pointer;
-  background-image: linear-gradient(45deg, transparent 50%, var(--v1-text-subtle) 50%),
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--v1-text-subtle) 50%),
     linear-gradient(135deg, var(--v1-text-subtle) 50%, transparent 50%);
-  background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%;
+  background-position:
+    calc(100% - 14px) 50%,
+    calc(100% - 9px) 50%;
   background-size: 5px 5px;
   background-repeat: no-repeat;
 }

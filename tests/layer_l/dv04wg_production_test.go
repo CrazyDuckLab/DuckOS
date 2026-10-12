@@ -3,26 +3,26 @@
 // dv04wg_production_test.go exercises DV04-WG through the
 // production code path:
 //
-//   PUBLIC ENTRYPOINT  -> httptest.Server that wraps the
-//                         agent.NewWireguardHost
-//   ENGINE PATH        -> wireguard.API (the canonical IPC
-//                         loopback; same code as the Agent
-//                         binary)
-//   AGENT PATH         -> agent.NewWireguardHost + the
-//                         ConfigureNetwork authorisation
-//                         gate
-//   RUNTIME MUTATION   -> wireguard.KernelAdapter with the
-//                         real IPRouteRunner talking to
-//                         /sbin/ip + /sbin/wg
-//   INDEPENDENT ORACLE -> independent /sbin/wg show
-//                         (read through a separate process
-//                         invocation, not the adapter)
-//   RESTART/DURABILITY -> re-open the durable catalog,
-//                         invoke host.ReconcileServer,
-//                         re-read kernel state
-//   NEGATIVE CASE      -> invalid peer / invalid
-//                         AllowedIPs / wrong server id /
-//                         agent-unavailable (no host)
+//	PUBLIC ENTRYPOINT  -> httptest.Server that wraps the
+//	                      agent.NewWireguardHost
+//	ENGINE PATH        -> wireguard.API (the canonical IPC
+//	                      loopback; same code as the Agent
+//	                      binary)
+//	AGENT PATH         -> agent.NewWireguardHost + the
+//	                      ConfigureNetwork authorisation
+//	                      gate
+//	RUNTIME MUTATION   -> wireguard.KernelAdapter with the
+//	                      real IPRouteRunner talking to
+//	                      /sbin/ip + /sbin/wg
+//	INDEPENDENT ORACLE -> independent /sbin/wg show
+//	                      (read through a separate process
+//	                      invocation, not the adapter)
+//	RESTART/DURABILITY -> re-open the durable catalog,
+//	                      invoke host.ReconcileServer,
+//	                      re-read kernel state
+//	NEGATIVE CASE      -> invalid peer / invalid
+//	                      AllowedIPs / wrong server id /
+//	                      agent-unavailable (no host)
 //
 // The test runs against the duck-dev-01 Linux fixture,
 // in the host namespace (kernel module does not load
@@ -260,11 +260,11 @@ func wgRandomSuffix() string {
 func TestDV04WG_ProductionCrudKernel(t *testing.T) {
 	f := newWGFixture(t)
 	server := wireguard.Server{
-		ID:        "0123456789abcdef0123456789abcdef",
-		Name:      "primary",
-		Interface: f.iface,
+		ID:         "0123456789abcdef0123456789abcdef",
+		Name:       "primary",
+		Interface:  f.iface,
 		ListenPort: 51820,
-		Addresses: []string{"10.66.66.1/24"},
+		Addresses:  []string{"10.66.66.1/24"},
 		PrivateKeyRef: wireguard.KeyRef{
 			VaultID:   "vault-test",
 			Revision:  "rev-test",

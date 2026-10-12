@@ -14,7 +14,12 @@ import { useEffect, useMemo, useState } from "react";
 import { APIClient, type FetchResult } from "../api/client";
 import { type Messages } from "../i18n/messages";
 import { type PageMeta } from "../pages/registry";
-import { PageFrame, Toolbar, Segmented, SearchField } from "../components/PageFrame";
+import {
+  PageFrame,
+  Toolbar,
+  Segmented,
+  SearchField,
+} from "../components/PageFrame";
 import { StatePanel } from "../components/forms/States";
 import { DataTable, type DataColumn } from "../components/forms/Table";
 import { RuntimeEvidencePanel } from "../components/forms/Panels";
@@ -63,14 +68,30 @@ export function InterfacesLivePage({
           { key: "interfaces", value: result.data.interfaces.length },
           {
             key: "administratively up",
-            value: result.data.interfaces.filter((i) => i.state.toLowerCase() === "up").length,
+            value: result.data.interfaces.filter(
+              (i) => i.state.toLowerCase() === "up",
+            ).length,
           },
-          { key: "ipv4 addresses", value: result.data.interfaces.flatMap((i) => i.addresses.filter((a) => a.family === "ipv4")).length },
-          { key: "ipv6 addresses", value: result.data.interfaces.flatMap((i) => i.addresses.filter((a) => a.family === "ipv6")).length },
+          {
+            key: "ipv4 addresses",
+            value: result.data.interfaces.flatMap((i) =>
+              i.addresses.filter((a) => a.family === "ipv4"),
+            ).length,
+          },
+          {
+            key: "ipv6 addresses",
+            value: result.data.interfaces.flatMap((i) =>
+              i.addresses.filter((a) => a.family === "ipv6"),
+            ).length,
+          },
         ]}
         observedAt={result.data.observedAt}
       />
-      <InterfacesTable bundle={bundle} interfaces={result.data.interfaces} pageId={page.id} />
+      <InterfacesTable
+        bundle={bundle}
+        interfaces={result.data.interfaces}
+        pageId={page.id}
+      />
     </PageFrame>
   );
 }
@@ -88,7 +109,9 @@ export function InterfacesTable({
 }) {
   const [query, setQuery] = useState("");
   const [family, setFamily] = useState<"all" | "ipv4" | "ipv6">("all");
-  const [stateFilter, setStateFilter] = useState<"all" | "up" | "down" | "unknown">("all");
+  const [stateFilter, setStateFilter] = useState<
+    "all" | "up" | "down" | "unknown"
+  >("all");
   const { state, dispatch } = usePrefs();
   const selectedKey =
     state.inspectorObject && pageId && state.inspectorObject.pageId === pageId
@@ -137,13 +160,20 @@ export function InterfacesTable({
       ),
       width: "100px",
     },
-    { key: "mac", label: "MAC", mono: true, sortValue: (i) => i.mac, width: "160px" },
+    {
+      key: "mac",
+      label: "MAC",
+      mono: true,
+      sortValue: (i) => i.mac,
+      width: "160px",
+    },
     { key: "mtu", label: "MTU", numeric: true, mono: true, width: "70px" },
     {
       key: "ipv4",
       label: "IPv4",
       mono: true,
-      sortValue: (i) => i.addresses.find((a) => a.family === "ipv4")?.address ?? "",
+      sortValue: (i) =>
+        i.addresses.find((a) => a.family === "ipv4")?.address ?? "",
       render: (i) =>
         i.addresses
           .filter((a) => a.family === "ipv4")
@@ -154,7 +184,8 @@ export function InterfacesTable({
       key: "ipv6",
       label: "IPv6",
       mono: true,
-      sortValue: (i) => i.addresses.find((a) => a.family === "ipv6")?.address ?? "",
+      sortValue: (i) =>
+        i.addresses.find((a) => a.family === "ipv6")?.address ?? "",
       render: (i) =>
         i.addresses
           .filter((a) => a.family === "ipv6")
@@ -246,10 +277,17 @@ export function InterfaceSubareaPage({
   );
 }
 
-export const InterfacesSubareaSpecs: Record<string, ReadonlyArray<{ key: string; label: string; description?: string }>> = {
+export const InterfacesSubareaSpecs: Record<
+  string,
+  ReadonlyArray<{ key: string; label: string; description?: string }>
+> = {
   P008: [
     { key: "name", label: "Bridge" },
-    { key: "members", label: "Member ports", description: "ports in the bridge" },
+    {
+      key: "members",
+      label: "Member ports",
+      description: "ports in the bridge",
+    },
     { key: "fdb", label: "FDB size", description: "learned MAC count" },
     { key: "vlan_filter", label: "VLAN filter" },
   ],

@@ -92,7 +92,9 @@ export function DuckMark({
       )}
 
       {/* Soft sheen across the top of the head */}
-      {drawSheen && <ellipse cx="28" cy="14" rx="16" ry="4" fill="#FFFFFF" opacity="0.22" />}
+      {drawSheen && (
+        <ellipse cx="28" cy="14" rx="16" ry="4" fill="#FFFFFF" opacity="0.22" />
+      )}
 
       {/* Beak */}
       <path

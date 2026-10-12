@@ -81,7 +81,9 @@ describe("ServiceDiscoveryPage", () => {
         mappings: [],
       }),
     });
-    const { getByLabelText, getByRole, getByText } = wrap(fakeClient(fetchJson));
+    const { getByLabelText, getByRole, getByText } = wrap(
+      fakeClient(fetchJson),
+    );
     fireEvent.change(getByLabelText(/Target MAC/i), {
       target: { value: "AA:BB:CC" },
     });

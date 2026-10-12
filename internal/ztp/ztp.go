@@ -294,6 +294,7 @@ func (m *Manager) Close() error {
 	defer m.mu.Unlock()
 	return m.releaseLock()
 }
+
 // reload reads the existing redemption journal and
 // rebuilds the in-memory dedup index.
 //

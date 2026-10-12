@@ -10,7 +10,7 @@ import (
 type syntheticGuardedFirewall struct {
 	syntheticFirewallKernel
 	failGuard, failCandidate bool
-	releases                  int
+	releases                 int
 }
 
 func (f *syntheticGuardedFirewall) InstallForwardGuard(ctx context.Context, before NFTSnapshot) (NFTSnapshot, error) {

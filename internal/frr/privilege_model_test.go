@@ -4,23 +4,23 @@
 // See privilege_model.go for the architecture. The
 // invariants enforced here:
 //
-//   1. StateBase / PathspaceBase are the canonical Debian
-//      FRR paths; FRRRunUser / FRRRunGroup are "frr".
-//   2. chownToFRR refuses any path that is not under
-//      StateBase or PathspaceBase. The runtime cannot
-//      chown arbitrary user-controlled paths.
-//   3. duck-agent's CapabilityBoundingSet is empty. NO cap
-//      of any kind appears in CapabilityBoundingSet /
-//      AmbientCapabilities — including CAP_NET_ADMIN,
-//      CAP_NET_RAW, CAP_NET_BIND_SERVICE, CAP_SETUID,
-//      CAP_SETGID, CAP_SETPCAP, and CAP_SYS_ADMIN.
-//   4. duck-agent has ReadWritePaths for /run/frr and
-//      /var/lib/frr and /etc/frr so the pathspace setup
-//      works without DAC bypass.
-//   5. The launcher binary path is wired through the
-//      runtime so the live BETA.2 review's mandate
-//      ("isolate FRR-only caps to the FRR process") is
-//      enforced by static source.
+//  1. StateBase / PathspaceBase are the canonical Debian
+//     FRR paths; FRRRunUser / FRRRunGroup are "frr".
+//  2. chownToFRR refuses any path that is not under
+//     StateBase or PathspaceBase. The runtime cannot
+//     chown arbitrary user-controlled paths.
+//  3. duck-agent's CapabilityBoundingSet is empty. NO cap
+//     of any kind appears in CapabilityBoundingSet /
+//     AmbientCapabilities — including CAP_NET_ADMIN,
+//     CAP_NET_RAW, CAP_NET_BIND_SERVICE, CAP_SETUID,
+//     CAP_SETGID, CAP_SETPCAP, and CAP_SYS_ADMIN.
+//  4. duck-agent has ReadWritePaths for /run/frr and
+//     /var/lib/frr and /etc/frr so the pathspace setup
+//     works without DAC bypass.
+//  5. The launcher binary path is wired through the
+//     runtime so the live BETA.2 review's mandate
+//     ("isolate FRR-only caps to the FRR process") is
+//     enforced by static source.
 //
 // Live armv7 execution remains LIVE-ARMV7-PENDING.
 package frr

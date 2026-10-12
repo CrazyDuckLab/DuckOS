@@ -247,7 +247,8 @@ export interface XrayUserView {
 
 export interface DoctorFinding {
   component: string;
-  severity: "info" | "warn" | "warning" | "error" | "critical" | "fatal" | string;
+  severity:
+    "info" | "warn" | "warning" | "error" | "critical" | "fatal" | string;
   code: string;
   message?: string;
   description?: string;

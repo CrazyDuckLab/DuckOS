@@ -362,9 +362,9 @@ func TestDV10ProductionPathConsumedTokenNeverReusable(t *testing.T) {
 // against the supplied DV10_DIR + DV10_KEY env vars and
 // reports the result through the exit code:
 //
-//   0 -> lock acquired (would race the parent; FAIL)
-//   2 -> ErrLocked observed (expected; PASS)
-//   1 -> other error (FAIL — surface unexpected state)
+//	0 -> lock acquired (would race the parent; FAIL)
+//	2 -> ErrLocked observed (expected; PASS)
+//	1 -> other error (FAIL — surface unexpected state)
 func TestDV10ProductionPathCrossProcessFlockWitness(t *testing.T) {
 	dir := t.TempDir()
 	key := dv10ProductionKey(t)
@@ -457,9 +457,9 @@ func dv10CheckCrossProcess(t *testing.T, out []byte, err error) {
 // opens a Manager against DV10_DIR / DV10_KEY and
 // reports the outcome via the process exit code:
 //
-//   0 -> lock acquired (would race the parent — FAIL)
-//   2 -> ErrLocked observed (expected — PASS)
-//   1 -> any other error
+//	0 -> lock acquired (would race the parent — FAIL)
+//	2 -> ErrLocked observed (expected — PASS)
+//	1 -> any other error
 func TestDV10CrossProcessHelper(t *testing.T) {
 	dir := os.Getenv("DV10_DIR")
 	keyHex := os.Getenv("DV10_KEY")

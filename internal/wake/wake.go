@@ -9,7 +9,7 @@
 //
 // The output of every send is:
 //
-//   PACKET_SENT     at time, length, target MAC, broadcast addr
+//	PACKET_SENT     at time, length, target MAC, broadcast addr
 //
 // Wake-on-LAN is one-shot: the package cannot observe the
 // device's powered state without a separate discovery layer
@@ -66,14 +66,14 @@ type Result struct {
 	SentAt      time.Time `json:"sentAt"`
 	Duration    string    `json:"duration"`
 	Status      string    `json:"status"`
-	Observation string `json:"observation"`
+	Observation string    `json:"observation"`
 }
 
 // Observation is the operator-facing caveat: PACKET_SENT,
 // not DEVICE_ONLINE. The Agent renders this verbatim.
 const (
 	ObservationPacketSent = "PACKET_SENT"
-	ObservationFailed      = "PACKET_FAILED"
+	ObservationFailed     = "PACKET_FAILED"
 	StatusSent            = "sent"
 	StatusFailed          = "failed"
 )

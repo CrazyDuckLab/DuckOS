@@ -90,8 +90,7 @@
   padding: 38px 6vw 24px;
   background:
     radial-gradient(ellipse at 27% 50%, #1b4b4822, transparent 60%),
-    radial-gradient(ellipse at 90% 20%, #254b7422, transparent 45%),
-    var(--page);
+    radial-gradient(ellipse at 90% 20%, #254b7422, transparent 45%), var(--page);
 }
 
 .login-top,
@@ -134,10 +133,15 @@
   font: inherit;
   font-size: 13px;
   cursor: pointer;
-  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
     linear-gradient(135deg, currentColor 50%, transparent 50%);
-  background-position: calc(100% - 14px) 50%, calc(100% - 8px) 50%;
-  background-size: 6px 6px, 6px 6px;
+  background-position:
+    calc(100% - 14px) 50%,
+    calc(100% - 8px) 50%;
+  background-size:
+    6px 6px,
+    6px 6px;
   background-repeat: no-repeat;
 }
 .pre-auth-row select:focus-visible {

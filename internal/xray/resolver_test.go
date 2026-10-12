@@ -156,17 +156,17 @@ func TestMaterialize_RealityInlinesKeyAndShortID(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Sanity: the rendered config MUST carry the
-// placeholder markers before materialisation.
-// JSON marshals `<` and `>` inside a string as
-// `\u003c` / `\u003e` so the substring search
-// uses the JSON-escaped form.
-pre, err := encodeConfig(cfg)
-if err != nil {
-	t.Fatal(err)
-}
-if !strings.Contains(string(pre), "resolved at apply time") {
-	t.Fatalf("render expected to contain placeholder markers")
-}
+	// placeholder markers before materialisation.
+	// JSON marshals `<` and `>` inside a string as
+	// `\u003c` / `\u003e` so the substring search
+	// uses the JSON-escaped form.
+	pre, err := encodeConfig(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(pre), "resolved at apply time") {
+		t.Fatalf("render expected to contain placeholder markers")
+	}
 	cfg, err = Materialize(context.Background(), cfg, stage, []Server{server}, []User{user}, resolver)
 	if err != nil {
 		t.Fatal(err)
@@ -176,9 +176,9 @@ if !strings.Contains(string(pre), "resolved at apply time") {
 		t.Fatal(err)
 	}
 	// The placeholder MUST be replaced with the
-// URL-safe-base64-of-the-32-byte-X25519-key. Xray
-// accepts privateKey in base64url form only; standard
-// base64 or raw hex are rejected by xray -test.
+	// URL-safe-base64-of-the-32-byte-X25519-key. Xray
+	// accepts privateKey in base64url form only; standard
+	// base64 or raw hex are rejected by xray -test.
 	wantPrivate := `"privateKey": "` + base64.RawURLEncoding.EncodeToString(x25519) + `"`
 	if !strings.Contains(string(post), wantPrivate) {
 		t.Fatalf("privateKey not inlined:\n%s", post)

@@ -18,9 +18,7 @@ import {
   WifiPage as OverviewWifiPage,
   DesignOnlyPage,
 } from "./OverviewPage";
-import {
-  TopologyPage,
-} from "./Concrete";
+import { TopologyPage } from "./Concrete";
 import { SpeedLabPage } from "./SpeedLabPage";
 import { ServiceDiscoveryPage } from "./ServiceDiscoveryPage";
 import {
@@ -31,9 +29,7 @@ import {
   EasyPublishPage,
   EasyCarePage,
 } from "./EasyV2";
-import {
-  SystemOverviewV2,
-} from "./SystemOverviewV2";
+import { SystemOverviewV2 } from "./SystemOverviewV2";
 
 import {
   InterfacesLivePage,
@@ -46,17 +42,9 @@ import {
   WanSubareaStub,
   WanSubareaSpecs,
 } from "../configurators/wan";
-import {
-  NetworksLivePage,
-  ClientsPage,
-} from "../configurators/lan";
-import {
-  DnsResolverPage,
-  DhcpLeasesPage,
-} from "../configurators/dns";
-import {
-  FirewallRulesPage,
-} from "../configurators/firewall";
+import { NetworksLivePage, ClientsPage } from "../configurators/lan";
+import { DnsResolverPage, DhcpLeasesPage } from "../configurators/dns";
+import { FirewallRulesPage } from "../configurators/firewall";
 import {
   WireguardServersPage,
   WireguardPeersPage,
@@ -140,77 +128,136 @@ const KIND_FOR_PAGE: Record<string, SupportedObjectKind> = {
 
 const OBJECTS_COLUMNS: Record<string, DataColumn<ViewObject>[]> = {
   "network.interface": [
-    { key: "name", label: "Name", render: (v) => <strong>{v.displayName}</strong> },
+    {
+      key: "name",
+      label: "Name",
+      render: (v) => <strong>{v.displayName}</strong>,
+    },
     { key: "id", label: "Id", mono: true, render: (v) => v.ref.id },
   ],
   "network.address": [
-    { key: "name", label: "Address", render: (v) => <strong>{v.displayName}</strong> },
+    {
+      key: "name",
+      label: "Address",
+      render: (v) => <strong>{v.displayName}</strong>,
+    },
     { key: "id", label: "Id", mono: true, render: (v) => v.ref.id },
   ],
   "network.firewall.rule": [
-    { key: "name", label: "Rule", render: (v) => <strong>{v.displayName}</strong> },
+    {
+      key: "name",
+      label: "Rule",
+      render: (v) => <strong>{v.displayName}</strong>,
+    },
     { key: "id", label: "Id", mono: true, render: (v) => v.ref.id },
   ],
   "network.firewall.set": [
-    { key: "name", label: "Set", render: (v) => <strong>{v.displayName}</strong> },
+    {
+      key: "name",
+      label: "Set",
+      render: (v) => <strong>{v.displayName}</strong>,
+    },
     { key: "id", label: "Id", mono: true, render: (v) => v.ref.id },
   ],
   "network.lease": [
-    { key: "name", label: "Lease", render: (v) => <strong>{v.displayName}</strong> },
+    {
+      key: "name",
+      label: "Lease",
+      render: (v) => <strong>{v.displayName}</strong>,
+    },
     { key: "id", label: "Id", mono: true, render: (v) => v.ref.id },
   ],
   "dns.zone": [
-    { key: "name", label: "Zone", render: (v) => <strong>{v.displayName}</strong> },
+    {
+      key: "name",
+      label: "Zone",
+      render: (v) => <strong>{v.displayName}</strong>,
+    },
     { key: "id", label: "Id", mono: true, render: (v) => v.ref.id },
   ],
   "dhcp.subnet": [
-    { key: "name", label: "Subnet", render: (v) => <strong>{v.displayName}</strong> },
+    {
+      key: "name",
+      label: "Subnet",
+      render: (v) => <strong>{v.displayName}</strong>,
+    },
     { key: "id", label: "Id", mono: true, render: (v) => v.ref.id },
   ],
   "qos.class": [
-    { key: "name", label: "Class", render: (v) => <strong>{v.displayName}</strong> },
+    {
+      key: "name",
+      label: "Class",
+      render: (v) => <strong>{v.displayName}</strong>,
+    },
     { key: "id", label: "Id", mono: true, render: (v) => v.ref.id },
   ],
   "wireguard.server": [
-    { key: "name", label: "Server", render: (v) => <strong>{v.displayName}</strong> },
+    {
+      key: "name",
+      label: "Server",
+      render: (v) => <strong>{v.displayName}</strong>,
+    },
     { key: "id", label: "Id", mono: true, render: (v) => v.ref.id },
   ],
   "wireguard.peer": [
-    { key: "name", label: "Peer", render: (v) => <strong>{v.displayName}</strong> },
+    {
+      key: "name",
+      label: "Peer",
+      render: (v) => <strong>{v.displayName}</strong>,
+    },
     { key: "id", label: "Id", mono: true, render: (v) => v.ref.id },
   ],
   "xray.server": [
-    { key: "name", label: "Server", render: (v) => <strong>{v.displayName}</strong> },
+    {
+      key: "name",
+      label: "Server",
+      render: (v) => <strong>{v.displayName}</strong>,
+    },
     { key: "id", label: "Id", mono: true, render: (v) => v.ref.id },
   ],
   "xray.user": [
-    { key: "name", label: "User", render: (v) => <strong>{v.displayName}</strong> },
+    {
+      key: "name",
+      label: "User",
+      render: (v) => <strong>{v.displayName}</strong>,
+    },
     { key: "id", label: "Id", mono: true, render: (v) => v.ref.id },
   ],
   "bgp.peer": [
-    { key: "name", label: "BGP peer", render: (v) => <strong>{v.displayName}</strong> },
+    {
+      key: "name",
+      label: "BGP peer",
+      render: (v) => <strong>{v.displayName}</strong>,
+    },
     { key: "id", label: "Id", mono: true, render: (v) => v.ref.id },
   ],
   "ospf.area": [
-    { key: "name", label: "OSPF area", render: (v) => <strong>{v.displayName}</strong> },
+    {
+      key: "name",
+      label: "OSPF area",
+      render: (v) => <strong>{v.displayName}</strong>,
+    },
     { key: "id", label: "Id", mono: true, render: (v) => v.ref.id },
   ],
   "isis.area": [
-    { key: "name", label: "IS-IS area", render: (v) => <strong>{v.displayName}</strong> },
+    {
+      key: "name",
+      label: "IS-IS area",
+      render: (v) => <strong>{v.displayName}</strong>,
+    },
     { key: "id", label: "Id", mono: true, render: (v) => v.ref.id },
   ],
   "route.map": [
-    { key: "name", label: "Route map", render: (v) => <strong>{v.displayName}</strong> },
+    {
+      key: "name",
+      label: "Route map",
+      render: (v) => <strong>{v.displayName}</strong>,
+    },
     { key: "id", label: "Id", mono: true, render: (v) => v.ref.id },
   ],
 };
 
-export function PagesRouter({
-  route,
-  navigate,
-  bundle,
-  client,
-}: PageContext) {
+export function PagesRouter({ route, navigate, bundle, client }: PageContext) {
   const page = PAGES_BY_ROUTE.get(route) ?? PAGES_BY_ID.get("P001")!;
   const kind = KIND_FOR_PAGE[page.id];
 
@@ -356,7 +403,9 @@ export function PagesRouter({
 
     /* — Tunnels — */
     case "P047":
-      return <WireguardServersPage page={page} bundle={bundle} client={client} />;
+      return (
+        <WireguardServersPage page={page} bundle={bundle} client={client} />
+      );
     case "P048":
       return <WireguardPeersPage page={page} bundle={bundle} client={client} />;
     case "P049":
@@ -419,7 +468,13 @@ export function PagesRouter({
         />
       );
     case "P090":
-      return <SpeedLabPage page={page} bundle={bundle as unknown as Record<string, unknown>} client={client} />;
+      return (
+        <SpeedLabPage
+          page={page}
+          bundle={bundle as unknown as Record<string, unknown>}
+          client={client}
+        />
+      );
 
     /* — Easy mode (v3) — */
     case "P094":

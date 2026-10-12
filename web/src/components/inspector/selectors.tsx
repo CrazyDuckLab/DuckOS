@@ -7,7 +7,11 @@
  * data can drive the table highlight via `selectedRowKey`.
  */
 import type { Overview } from "../../../../shared/api/types";
-import type { WireguardPeerView, WireguardServerView, XrayServerView } from "../../api/types";
+import type {
+  WireguardPeerView,
+  WireguardServerView,
+  XrayServerView,
+} from "../../api/types";
 import type { InspectorObject } from "../../state/store";
 
 /** Interface row (Overview.interfaces). */
@@ -101,7 +105,10 @@ export function wireguardServerToInspector(
         mono: true,
       },
       { label: "Peers", value: String(s.peerCount), mono: true },
-      { label: "Private key", value: s.hasPrivateKey ? "present (VaultExport)" : "absent" },
+      {
+        label: "Private key",
+        value: s.hasPrivateKey ? "present (VaultExport)" : "absent",
+      },
       { label: "Availability", value: s.availability },
     ],
   };
@@ -136,7 +143,10 @@ export function wireguardPeerToInspector(
         mono: true,
       },
       { label: "Server", value: peer.serverRef.id, mono: true },
-      { label: "Preshared key", value: peer.hasPresharedKey ? "present" : "absent" },
+      {
+        label: "Preshared key",
+        value: peer.hasPresharedKey ? "present" : "absent",
+      },
       { label: "Enabled", value: peer.enabled ? "yes" : "no" },
       { label: "Availability", value: peer.availability },
     ],
@@ -166,7 +176,18 @@ export function xrayServerToInspector(
 /** Firewall rule row (synthesised from typed firewall state). */
 export function firewallRuleToInspector(
   pageId: string,
-  rule: { id: string; family: string; chain: string; action: string; src?: string; dst?: string; proto?: string; comment?: string; packets?: number; bytes?: number },
+  rule: {
+    id: string;
+    family: string;
+    chain: string;
+    action: string;
+    src?: string;
+    dst?: string;
+    proto?: string;
+    comment?: string;
+    packets?: number;
+    bytes?: number;
+  },
 ): InspectorObject {
   return {
     pageId,
@@ -192,7 +213,12 @@ export function firewallRuleToInspector(
 /** DNS server row. */
 export function dnsServerToInspector(
   pageId: string,
-  server: { address: string; port?: number; protocol?: string; enabled?: boolean },
+  server: {
+    address: string;
+    port?: number;
+    protocol?: string;
+    enabled?: boolean;
+  },
 ): InspectorObject {
   return {
     pageId,
@@ -212,7 +238,14 @@ export function dnsServerToInspector(
 /** Service row (Overview.services / listener). */
 export function serviceToInspector(
   pageId: string,
-  svc: { name: string; kind?: string; listen?: string; port?: number; protocol?: string; state?: string },
+  svc: {
+    name: string;
+    kind?: string;
+    listen?: string;
+    port?: number;
+    protocol?: string;
+    state?: string;
+  },
 ): InspectorObject {
   return {
     pageId,
@@ -233,7 +266,13 @@ export function serviceToInspector(
 /** DHCP lease row. */
 export function leaseToInspector(
   pageId: string,
-  lease: { ip: string; mac: string; hostname?: string; iface?: string; expiresAt?: number | null },
+  lease: {
+    ip: string;
+    mac: string;
+    hostname?: string;
+    iface?: string;
+    expiresAt?: number | null;
+  },
 ): InspectorObject {
   return {
     pageId,
@@ -260,10 +299,11 @@ export function networkToInspector(
   pageId: string,
   iface: Overview["interfaces"][number],
 ): InspectorObject {
-  const ipv4 = iface.addresses
-    .filter((a) => a.family === "ipv4")
-    .map((a) => `${a.address}/${a.prefixLength}`)
-    .join(", ") || "—";
+  const ipv4 =
+    iface.addresses
+      .filter((a) => a.family === "ipv4")
+      .map((a) => `${a.address}/${a.prefixLength}`)
+      .join(", ") || "—";
   return {
     pageId,
     kind: "network",

@@ -37,9 +37,12 @@ type ProbeState =
 function useLocale(): Locale {
   if (typeof document === "undefined") return "en";
   const html = document.documentElement.getAttribute("data-locale");
-  if (html === "ru" || html === "de" || html === "es" || html === "en") return html;
-  const shell = document.querySelector(".duck-shell")?.getAttribute("data-locale") ?? null;
-  if (shell === "ru" || shell === "de" || shell === "es" || shell === "en") return shell;
+  if (html === "ru" || html === "de" || html === "es" || html === "en")
+    return html;
+  const shell =
+    document.querySelector(".duck-shell")?.getAttribute("data-locale") ?? null;
+  if (shell === "ru" || shell === "de" || shell === "es" || shell === "en")
+    return shell;
   return "en";
 }
 
@@ -113,7 +116,11 @@ export function SpeedLabPage({ page, bundle, client }: Props) {
       }
       body = {
         kind: "latency",
-        target: { host: host.trim(), port: p, label: label.trim() || undefined },
+        target: {
+          host: host.trim(),
+          port: p,
+          label: label.trim() || undefined,
+        },
         duration: dur * 1000,
         maxSamples: samples,
       };
@@ -153,7 +160,11 @@ export function SpeedLabPage({ page, bundle, client }: Props) {
   async function cancel() {
     if (state.kind !== "running") return;
     try {
-      await cancelSpeedLabProbe(client.token(), state.id, new AbortController().signal);
+      await cancelSpeedLabProbe(
+        client.token(),
+        state.id,
+        new AbortController().signal,
+      );
       setLastError("");
     } catch (e) {
       setLastError(e instanceof Error ? e.message : "Cancel failed");
@@ -329,7 +340,8 @@ function StateView({ state, locale }: { state: ProbeState; locale: Locale }) {
         {state.startedAt && (
           <>
             {" · "}
-            {t("speedlab.startedAt")} <time dateTime={state.startedAt}>{state.startedAt}</time>
+            {t("speedlab.startedAt")}{" "}
+            <time dateTime={state.startedAt}>{state.startedAt}</time>
           </>
         )}
       </p>
@@ -355,14 +367,22 @@ function StateView({ state, locale }: { state: ProbeState; locale: Locale }) {
         <>
           {" · "}
           {t("speedlab.finishedAt")}{" "}
-          <time dateTime={state.summary.finishedAt}>{state.summary.finishedAt}</time>
+          <time dateTime={state.summary.finishedAt}>
+            {state.summary.finishedAt}
+          </time>
         </>
       )}
     </p>
   );
 }
 
-function ResultsView({ summary, locale }: { summary: SpeedLabSummary; locale: Locale }) {
+function ResultsView({
+  summary,
+  locale,
+}: {
+  summary: SpeedLabSummary;
+  locale: Locale;
+}) {
   const t = (k: string) => v4t(locale, k);
   if (summary.kind === "latency" && summary.latency) {
     const l = summary.latency;
@@ -375,13 +395,34 @@ function ResultsView({ summary, locale }: { summary: SpeedLabSummary; locale: Lo
           </tr>
         </thead>
         <tbody>
-          <tr><td>{t("speedlab.resultSamples")}</td><td>{l.count}</td></tr>
-          <tr><td>{t("speedlab.resultMin")}</td><td>{fmtMicros(l.minMicros)}</td></tr>
-          <tr><td>{t("speedlab.resultAvg")}</td><td>{fmtMicros(l.avgMicros)}</td></tr>
-          <tr><td>{t("speedlab.resultMax")}</td><td>{fmtMicros(l.maxMicros)}</td></tr>
-          <tr><td>{t("speedlab.resultP50")}</td><td>{fmtMicros(l.p50Micros)}</td></tr>
-          <tr><td>{t("speedlab.resultP95")}</td><td>{fmtMicros(l.p95Micros)}</td></tr>
-          <tr><td>{t("speedlab.resultP99")}</td><td>{fmtMicros(l.p99Micros)}</td></tr>
+          <tr>
+            <td>{t("speedlab.resultSamples")}</td>
+            <td>{l.count}</td>
+          </tr>
+          <tr>
+            <td>{t("speedlab.resultMin")}</td>
+            <td>{fmtMicros(l.minMicros)}</td>
+          </tr>
+          <tr>
+            <td>{t("speedlab.resultAvg")}</td>
+            <td>{fmtMicros(l.avgMicros)}</td>
+          </tr>
+          <tr>
+            <td>{t("speedlab.resultMax")}</td>
+            <td>{fmtMicros(l.maxMicros)}</td>
+          </tr>
+          <tr>
+            <td>{t("speedlab.resultP50")}</td>
+            <td>{fmtMicros(l.p50Micros)}</td>
+          </tr>
+          <tr>
+            <td>{t("speedlab.resultP95")}</td>
+            <td>{fmtMicros(l.p95Micros)}</td>
+          </tr>
+          <tr>
+            <td>{t("speedlab.resultP99")}</td>
+            <td>{fmtMicros(l.p99Micros)}</td>
+          </tr>
         </tbody>
       </table>
     );
@@ -397,13 +438,34 @@ function ResultsView({ summary, locale }: { summary: SpeedLabSummary; locale: Lo
           </tr>
         </thead>
         <tbody>
-          <tr><td>{t("speedlab.resultSamples")}</td><td>{l.count}</td></tr>
-          <tr><td>{t("speedlab.resultMin")}</td><td>{fmtMicros(l.minMicros)}</td></tr>
-          <tr><td>{t("speedlab.resultAvg")}</td><td>{fmtMicros(l.avgMicros)}</td></tr>
-          <tr><td>{t("speedlab.resultMax")}</td><td>{fmtMicros(l.maxMicros)}</td></tr>
-          <tr><td>{t("speedlab.resultP50")}</td><td>{fmtMicros(l.p50Micros)}</td></tr>
-          <tr><td>{t("speedlab.resultP95")}</td><td>{fmtMicros(l.p95Micros)}</td></tr>
-          <tr><td>{t("speedlab.resultP99")}</td><td>{fmtMicros(l.p99Micros)}</td></tr>
+          <tr>
+            <td>{t("speedlab.resultSamples")}</td>
+            <td>{l.count}</td>
+          </tr>
+          <tr>
+            <td>{t("speedlab.resultMin")}</td>
+            <td>{fmtMicros(l.minMicros)}</td>
+          </tr>
+          <tr>
+            <td>{t("speedlab.resultAvg")}</td>
+            <td>{fmtMicros(l.avgMicros)}</td>
+          </tr>
+          <tr>
+            <td>{t("speedlab.resultMax")}</td>
+            <td>{fmtMicros(l.maxMicros)}</td>
+          </tr>
+          <tr>
+            <td>{t("speedlab.resultP50")}</td>
+            <td>{fmtMicros(l.p50Micros)}</td>
+          </tr>
+          <tr>
+            <td>{t("speedlab.resultP95")}</td>
+            <td>{fmtMicros(l.p95Micros)}</td>
+          </tr>
+          <tr>
+            <td>{t("speedlab.resultP99")}</td>
+            <td>{fmtMicros(l.p99Micros)}</td>
+          </tr>
         </tbody>
       </table>
     );
@@ -420,11 +482,26 @@ function ResultsView({ summary, locale }: { summary: SpeedLabSummary; locale: Lo
           </tr>
         </thead>
         <tbody>
-          <tr><td>{t("speedlab.resultBytes")}</td><td>{fmtBytes(tp.bytes)}</td></tr>
-          <tr><td>{t("speedlab.resultSeconds")}</td><td>{tp.seconds} s</td></tr>
-          <tr><td>{t("speedlab.resultBps")}</td><td>{tp.bytesPerSecond.toLocaleString()}</td></tr>
-          <tr><td>{t("speedlab.resultMbps")}</td><td>{fmt.primary}</td></tr>
-          <tr><td>{t("speedlab.colCaveat")}</td><td>{t("speedlab.caveat")}</td></tr>
+          <tr>
+            <td>{t("speedlab.resultBytes")}</td>
+            <td>{fmtBytes(tp.bytes)}</td>
+          </tr>
+          <tr>
+            <td>{t("speedlab.resultSeconds")}</td>
+            <td>{tp.seconds} s</td>
+          </tr>
+          <tr>
+            <td>{t("speedlab.resultBps")}</td>
+            <td>{tp.bytesPerSecond.toLocaleString()}</td>
+          </tr>
+          <tr>
+            <td>{t("speedlab.resultMbps")}</td>
+            <td>{fmt.primary}</td>
+          </tr>
+          <tr>
+            <td>{t("speedlab.colCaveat")}</td>
+            <td>{t("speedlab.caveat")}</td>
+          </tr>
         </tbody>
       </table>
     );

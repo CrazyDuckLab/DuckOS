@@ -325,11 +325,11 @@ func TestRuntime_BackendAddFailure_RollsBack(t *testing.T) {
 
 type failingBackend struct{}
 
-func (failingBackend) Add(Mapping) error              { return errBackendNew }
-func (failingBackend) Remove(string) error            { return nil }
+func (failingBackend) Add(Mapping) error                 { return errBackendNew }
+func (failingBackend) Remove(string) error               { return nil }
 func (failingBackend) AllowListen(string, net.Addr) bool { return true }
-func (failingBackend) TrustIface(string)               {}
-func (failingBackend) UntrustIface(string)             {}
+func (failingBackend) TrustIface(string)                 {}
+func (failingBackend) UntrustIface(string)               {}
 
 var errBackendNew = errBackend("backend refused")
 

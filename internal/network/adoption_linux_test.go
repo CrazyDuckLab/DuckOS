@@ -67,8 +67,8 @@ func mustParseMAC(t *testing.T, mac string) []byte {
 // observable attribute, so the boundary admits the adoption.
 func TestNetlinkAdopter_AdmittedEnrolledMatchingMAC(t *testing.T) {
 	const (
-		id     = "eth1"
-		name   = "eth1"
+		id      = "eth1"
+		name    = "eth1"
 		liveMAC = "00:15:5d:04:07:10"
 	)
 	adopter, calls := netlinkFixture(t, map[string]net.Interface{
@@ -98,8 +98,8 @@ func TestNetlinkAdopter_AdmittedEnrolledMatchingMAC(t *testing.T) {
 // must not adopt externally-managed links through normal configuration.
 func TestNetlinkAdopter_RejectsExternallyManaged(t *testing.T) {
 	const (
-		id     = "eth0"
-		name   = "eth0"
+		id      = "eth0"
+		name    = "eth0"
 		liveMAC = "00:15:5d:04:07:07"
 	)
 	adopter, _ := netlinkFixture(t, map[string]net.Interface{
@@ -130,10 +130,10 @@ func TestNetlinkAdopter_RejectsExternallyManaged(t *testing.T) {
 // not be retried.
 func TestNetlinkAdopter_RejectsMACMismatch(t *testing.T) {
 	const (
-		id        = "eth1"
-		name      = "eth1"
+		id          = "eth1"
+		name        = "eth1"
 		enrolledMAC = "00:15:5d:04:07:10"
-		liveMAC    = "00:15:5d:04:07:99"
+		liveMAC     = "00:15:5d:04:07:99"
 	)
 	adopter, calls := netlinkFixture(t, map[string]net.Interface{
 		name: makeInterface(name, liveMAC),

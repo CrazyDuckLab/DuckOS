@@ -81,7 +81,7 @@ func TestQualifiedRefreshAllowsVendorAmbientProfiles(t *testing.T) {
 		}
 	}
 	vendorProfiles := map[string]string{
-		"80-vm-vt.network":            "[Match]\nKind=tun\nName=vt-*\n",
+		"80-vm-vt.network":           "[Match]\nKind=tun\nName=vt-*\n",
 		"80-container-host0.network": "[Match]\nKind=veth\nName=host0\nVirtualization=container\n",
 		"80-6rd-tunnel.network":      "[Match]\nKind=sit\nName=6rd-*\n",
 		"80-wifi-adhoc.network":      "[Match]\nKind=wlan\nName=adhoc-*\n",

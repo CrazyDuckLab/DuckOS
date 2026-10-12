@@ -41,7 +41,12 @@ function makeOverview(over: Partial<Overview> = {}): Overview {
     routes: [],
     dns: { nameservers: ["1.1.1.1"], searchDomains: [], source: "static" },
     services: [
-      { name: "sshd", loadState: "loaded", activeState: "active", subState: "running" },
+      {
+        name: "sshd",
+        loadState: "loaded",
+        activeState: "active",
+        subState: "running",
+      },
     ],
     nftables: { status: "available", tables: 1, chains: 2, rules: 3 },
     issues: [],
@@ -90,7 +95,9 @@ describe("searchObjects", () => {
   it("surfaces VLAN hits when an interface name encodes one", () => {
     const overview = makeOverview();
     const hits = searchObjects("eth0.10", overview);
-    expect(hits.some((h) => h.kind === "vlan" && h.displayName === "VLAN 10")).toBe(true);
+    expect(
+      hits.some((h) => h.kind === "vlan" && h.displayName === "VLAN 10"),
+    ).toBe(true);
   });
 
   it("surfaces the system hostname", () => {

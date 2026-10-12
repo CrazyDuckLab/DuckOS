@@ -284,11 +284,11 @@ func stringGlobOverlap(pattern string, names []string) bool {
 // matchKeys holds the parsed [Match] section sufficient to classify
 // a profile's reach into DuckOS-managed namespaces.
 type matchKeys struct {
-	kind         string
-	typ          string
-	name         string
-	wildcard     bool
-	empty        bool
+	kind          string
+	typ           string
+	name          string
+	wildcard      bool
+	empty         bool
 	otherNonEmpty bool
 }
 

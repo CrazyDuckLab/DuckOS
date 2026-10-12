@@ -158,14 +158,14 @@ func NewRuntime(netns, pathspace string, manager *Manager) (*Runtime, error) {
 	// directory'". The daemon's vty socket itself lives
 	// under /run/frr/<ps>/, so /etc/frr/<ps>/ is a
 	// configuration-only path.
-//
-// /etc/frr is owned by frr:frr 0700 in the Debian
-// package. The Agent has no caps and UID 0 does not
-// match the file owner; gid=frr IS in SupplementaryGroups
-// but mode 0700 has no group bits. The Agent cannot
-// write into /etc/frr without a privilege expansion.
-//
-// Solution: the launcher creates /etc/frr/<ps>/vtysh.conf
+	//
+	// /etc/frr is owned by frr:frr 0700 in the Debian
+	// package. The Agent has no caps and UID 0 does not
+	// match the file owner; gid=frr IS in SupplementaryGroups
+	// but mode 0700 has no group bits. The Agent cannot
+	// write into /etc/frr without a privilege expansion.
+	//
+	// Solution: the launcher creates /etc/frr/<ps>/vtysh.conf
 	// AFTER dropping privileges to the frr service user.
 	// The frr user matches /etc/frr's owner, so the
 	// mkdir + write succeed. The runtime does NOT try
@@ -598,9 +598,9 @@ func (r *Runtime) launcherStop(binary string) error {
 //
 // Wire format:
 //
-//   EXEC <binary> <pathspace> <config> <log> <pidfile> [args...]
-//   STOP <pathspace> [binary]
-//   PING
+//	EXEC <binary> <pathspace> <config> <log> <pidfile> [args...]
+//	STOP <pathspace> [binary]
+//	PING
 //
 // Reply: "OK ..." on success, "ERR <msg>\n" on failure.
 //
@@ -674,19 +674,19 @@ func frrLauncherBinary() string {
 //
 // Identity guard.
 //
-//   We only kill a PID whose /proc/<pid>/cmdline matches
-//   /usr/lib/frr/{zebra,bgpd} with -N <pathspace>. A
-//   recycled PID whose number happens to appear in a
-//   stale zebra.pid (but whose cmdline is now an
-//   unrelated process) is NEVER signalled by this code
-//   path. This is the defence-in-depth complement to
-//   launcherStop; even if the launcher daemon is
-//   unreachable, the runtime never misdirects a kill.
+//	We only kill a PID whose /proc/<pid>/cmdline matches
+//	/usr/lib/frr/{zebra,bgpd} with -N <pathspace>. A
+//	recycled PID whose number happens to appear in a
+//	stale zebra.pid (but whose cmdline is now an
+//	unrelated process) is NEVER signalled by this code
+//	path. This is the defence-in-depth complement to
+//	launcherStop; even if the launcher daemon is
+//	unreachable, the runtime never misdirects a kill.
 //
-//   The launcher's STOP is the canonical kill path; this
-//   function is only invoked as a final sweep after
-//   launcherStop returns, and as the immediate-cleanup
-//   path in reloadOrRestart.
+//	The launcher's STOP is the canonical kill path; this
+//	function is only invoked as a final sweep after
+//	launcherStop returns, and as the immediate-cleanup
+//	path in reloadOrRestart.
 func (r *Runtime) killPidsLocked() {
 	for _, pid := range []int{r.zebraPID, r.bgpdPID} {
 		if pid <= 0 {

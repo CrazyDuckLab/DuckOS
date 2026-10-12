@@ -37,7 +37,13 @@ const collection: Collection = {
       desired: null,
       availability: "available",
       supportedActions: ["show", "edit", "delete"],
-      permissions: { observe: true, configure: true, action: false, exportSecret: false, delete: true },
+      permissions: {
+        observe: true,
+        configure: true,
+        action: false,
+        exportSecret: false,
+        delete: true,
+      },
     } as unknown as ViewObject,
     {
       ref: { kind: "network.interface", id: "eth1" },
@@ -45,7 +51,12 @@ const collection: Collection = {
       desired: null,
       availability: "unsupported",
       supportedActions: ["show"],
-      permissions: { observe: true, configure: false, action: false, exportSecret: false },
+      permissions: {
+        observe: true,
+        configure: false,
+        action: false,
+        exportSecret: false,
+      },
     } as unknown as ViewObject,
     {
       ref: { kind: "network.interface", id: "eth2" },
@@ -53,7 +64,12 @@ const collection: Collection = {
       desired: null,
       availability: "credential-pending",
       supportedActions: ["show"],
-      permissions: { observe: true, configure: false, action: false, exportSecret: false },
+      permissions: {
+        observe: true,
+        configure: false,
+        action: false,
+        exportSecret: false,
+      },
     } as unknown as ViewObject,
   ],
 };
@@ -71,19 +87,30 @@ describe("ObjectsPage", () => {
       { key: "name", label: "Name", render: (v) => v.displayName },
     ];
     const { container, getByText } = render(
-      <PrefsContext.Provider value={{ state: {
-        locale: "en",
-        mode: "full",
-        theme: "system",
-        sidebarCollapsed: false,
-        inspectorPageId: null,
-        health: {
-          overview: "good", readiness: "good", doctor: "good", topology: "good",
-          reachable: true,
-          lastObservedAt: Date.now(), timeTrust: "trusted", activeIncidents: 0, pendingChanges: 0,
-        },
-        pending: [],
-      }, dispatch: () => {} }}>
+      <PrefsContext.Provider
+        value={{
+          state: {
+            locale: "en",
+            mode: "full",
+            theme: "system",
+            sidebarCollapsed: false,
+            inspectorPageId: null,
+            health: {
+              overview: "good",
+              readiness: "good",
+              doctor: "good",
+              topology: "good",
+              reachable: true,
+              lastObservedAt: Date.now(),
+              timeTrust: "trusted",
+              activeIncidents: 0,
+              pendingChanges: 0,
+            },
+            pending: [],
+          },
+          dispatch: () => {},
+        }}
+      >
         <ObjectsPage
           page={page}
           bundle={messages.en}
@@ -91,7 +118,7 @@ describe("ObjectsPage", () => {
           kind="network.interface"
           columns={columns}
         />
-      </PrefsContext.Provider>
+      </PrefsContext.Provider>,
     );
     await waitFor(() => {
       expect(getByText("eth0")).toBeTruthy();

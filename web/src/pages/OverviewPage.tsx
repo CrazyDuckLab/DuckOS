@@ -7,11 +7,25 @@
  * that the API has not returned.
  */
 import { useEffect, useMemo, useState } from "react";
-import { APIClient, countFindings, countPending, inferTimeTrust, type FetchResult } from "../api/client";
+import {
+  APIClient,
+  countFindings,
+  countPending,
+  inferTimeTrust,
+  type FetchResult,
+} from "../api/client";
 import { type Messages, t } from "../i18n/messages";
 import { usePrefs } from "../state/store";
 import { formatBytes, formatUptime } from "../format";
-import { PageFrame, PageState, StatPanel, Toolbar, SearchField, ColumnsPanel, MissingContractNotice } from "../components/PageFrame";
+import {
+  PageFrame,
+  PageState,
+  StatPanel,
+  Toolbar,
+  SearchField,
+  ColumnsPanel,
+  MissingContractNotice,
+} from "../components/PageFrame";
 import { PAGES_BY_ID, type PageMeta } from "../pages/registry";
 import type { Overview } from "../../../shared/api/types";
 
@@ -90,19 +104,43 @@ export function OverviewPage({
           <StatPanel
             label={t(bundle, "overview.cpu")}
             value={cpuPercent === null ? "—" : `${cpuPercent.toFixed(1)}%`}
-            state={cpuPercent === null ? "unknown" : cpuPercent > 90 ? "bad" : cpuPercent > 70 ? "warn" : "good"}
+            state={
+              cpuPercent === null
+                ? "unknown"
+                : cpuPercent > 90
+                  ? "bad"
+                  : cpuPercent > 70
+                    ? "warn"
+                    : "good"
+            }
             hint={`${data.cpu.logicalCores} cores`}
           />
           <StatPanel
             label={t(bundle, "overview.memory")}
-            value={memPercent === null ? "—" : formatBytes(data.memory.usedBytes)}
-            state={memPercent === null ? "unknown" : memPercent > 90 ? "bad" : memPercent > 75 ? "warn" : "good"}
+            value={
+              memPercent === null ? "—" : formatBytes(data.memory.usedBytes)
+            }
+            state={
+              memPercent === null
+                ? "unknown"
+                : memPercent > 90
+                  ? "bad"
+                  : memPercent > 75
+                    ? "warn"
+                    : "good"
+            }
             hint={`${formatBytes(data.memory.totalBytes)} total`}
           />
           <StatPanel
             label={t(bundle, "overview.storage")}
             value={root ? formatBytes(root.usedBytes) : "—"}
-            state={!root ? "unknown" : (root.usedBytes / root.totalBytes) > 0.9 ? "bad" : "good"}
+            state={
+              !root
+                ? "unknown"
+                : root.usedBytes / root.totalBytes > 0.9
+                  ? "bad"
+                  : "good"
+            }
             hint={root ? `${formatBytes(root.availableBytes)} free` : "/"}
           />
           <StatPanel
@@ -167,7 +205,8 @@ export function OverviewPage({
         </div>
         <p className="v1-mute">{t(bundle, "overview.noInternetEvidence")}</p>
         <p className="v1-subtle v1-fs-xs">
-          The /api/v1/health endpoint is a local health signal, not Internet reachability.
+          The /api/v1/health endpoint is a local health signal, not Internet
+          reachability.
         </p>
       </div>
     </PageFrame>
@@ -186,7 +225,12 @@ export function GenericDataPage({
   bundle: Messages;
   client: APIClient;
   fetch: (c: APIClient, signal: AbortSignal) => Promise<FetchResult<unknown>>;
-  columns: Array<{ key: string; label: string; mono?: boolean; render?: (row: Record<string, unknown>) => React.ReactNode }>;
+  columns: Array<{
+    key: string;
+    label: string;
+    mono?: boolean;
+    render?: (row: Record<string, unknown>) => React.ReactNode;
+  }>;
 }) {
   const [result, setResult] = useState<FetchResult<unknown> | null>(null);
   const [query, setQuery] = useState("");
@@ -207,7 +251,13 @@ export function GenericDataPage({
     return (
       <PageFrame page={page} bundle={bundle}>
         <PageState
-          kind={result.reason === "missing" ? "contract-missing" : result.reason === "unauthorized" ? "permission" : "error"}
+          kind={
+            result.reason === "missing"
+              ? "contract-missing"
+              : result.reason === "unauthorized"
+                ? "permission"
+                : "error"
+          }
           bundle={bundle}
           body={result.message}
         />
@@ -216,14 +266,17 @@ export function GenericDataPage({
   }
   const data = result.data as unknown;
   const rows = useMemo(() => coerceRows(data, columns), [data, columns]);
-  const filtered = useMemo(
-    () => filterRows(rows, query),
-    [rows, query],
-  );
+  const filtered = useMemo(() => filterRows(rows, query), [rows, query]);
   return (
     <PageFrame page={page} bundle={bundle}>
       <Toolbar
-        left={<SearchField value={query} onChange={setQuery} placeholder={`Filter ${page.name.toLowerCase()}…`} />}
+        left={
+          <SearchField
+            value={query}
+            onChange={setQuery}
+            placeholder={`Filter ${page.name.toLowerCase()}…`}
+          />
+        }
         right={
           <span className="v1-subtle v1-fs-xs">
             {filtered.length} {filtered.length === 1 ? "row" : "rows"}
@@ -251,7 +304,10 @@ export function GenericDataPage({
                 filtered.map((row, idx) => (
                   <tr key={idx}>
                     {columns.map((c) => (
-                      <td key={c.key} className={c.mono ? "v1-mono" : undefined}>
+                      <td
+                        key={c.key}
+                        className={c.mono ? "v1-mono" : undefined}
+                      >
                         {c.render ? c.render(row) : String(row[c.key] ?? "—")}
                       </td>
                     ))}
@@ -356,7 +412,8 @@ export function DoctorPage({
       </PageFrame>
     );
   }
-  const findings = (pickArray(result.data, ["findings", "issues", "results"]) ?? []) as Array<Record<string, unknown>>;
+  const findings = (pickArray(result.data, ["findings", "issues", "results"]) ??
+    []) as Array<Record<string, unknown>>;
   return (
     <PageFrame page={page} bundle={bundle}>
       <div className="v1-card" data-tight="true">
@@ -365,7 +422,9 @@ export function DoctorPage({
           <span className="meta">{findings.length} findings</span>
         </div>
         {findings.length === 0 ? (
-          <p className="v1-mute">No findings. Doctor considers the system healthy.</p>
+          <p className="v1-mute">
+            No findings. Doctor considers the system healthy.
+          </p>
         ) : (
           <div className="v1-table-scroll">
             <table className="v1-table">
@@ -382,7 +441,10 @@ export function DoctorPage({
                   <tr key={i}>
                     <td>{String(f.component ?? "—")}</td>
                     <td>
-                      <span className="v1-pill" data-state={severityToState(String(f.severity ?? ""))}>
+                      <span
+                        className="v1-pill"
+                        data-state={severityToState(String(f.severity ?? ""))}
+                      >
                         {String(f.severity ?? "info")}
                       </span>
                     </td>
@@ -451,7 +513,8 @@ export function MultiwanPage({
       </PageFrame>
     );
   }
-  const uplinks = (pickArray(result.data, ["uplinks", "links", "interfaces"]) ?? []) as Array<Record<string, unknown>>;
+  const uplinks = (pickArray(result.data, ["uplinks", "links", "interfaces"]) ??
+    []) as Array<Record<string, unknown>>;
   return (
     <PageFrame page={page} bundle={bundle}>
       <ColumnsPanel page={page} />
@@ -476,10 +539,17 @@ export function MultiwanPage({
               <tbody>
                 {uplinks.map((u, i) => (
                   <tr key={i}>
-                    <td className="v1-mono">{String(u.name ?? u.iface ?? "—")}</td>
+                    <td className="v1-mono">
+                      {String(u.name ?? u.iface ?? "—")}
+                    </td>
                     <td>{String(u.role ?? "primary")}</td>
                     <td>
-                      <span className="v1-pill" data-state={severityToState(String(u.state ?? "unknown"))}>
+                      <span
+                        className="v1-pill"
+                        data-state={severityToState(
+                          String(u.state ?? "unknown"),
+                        )}
+                      >
                         {String(u.state ?? "unknown")}
                       </span>
                     </td>
@@ -530,7 +600,8 @@ export function WifiPage({
       </PageFrame>
     );
   }
-  const ssids = (pickArray(result.data, ["ssids", "networks", "aps"]) ?? []) as Array<Record<string, unknown>>;
+  const ssids = (pickArray(result.data, ["ssids", "networks", "aps"]) ??
+    []) as Array<Record<string, unknown>>;
   return (
     <PageFrame page={page} bundle={bundle}>
       <ColumnsPanel page={page} />
@@ -560,7 +631,9 @@ export function WifiPage({
                     <td>{String(s.band ?? "—")}</td>
                     <td className="v1-mono">{String(s.channel ?? "—")}</td>
                     <td>{String(s.security ?? s.auth ?? "—")}</td>
-                    <td className="v1-mono">{String(s.clients ?? s.clientCount ?? "0")}</td>
+                    <td className="v1-mono">
+                      {String(s.clients ?? s.clientCount ?? "0")}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -607,7 +680,9 @@ export function SitesPage({
       </PageFrame>
     );
   }
-  const sites = (pickArray(result.data, ["sites", "peers"]) ?? []) as Array<Record<string, unknown>>;
+  const sites = (pickArray(result.data, ["sites", "peers"]) ?? []) as Array<
+    Record<string, unknown>
+  >;
   return (
     <PageFrame page={page} bundle={bundle}>
       <ColumnsPanel page={page} />
@@ -635,7 +710,12 @@ export function SitesPage({
                     <td>{String(s.name ?? s.id ?? "—")}</td>
                     <td>{String(s.role ?? "—")}</td>
                     <td>
-                      <span className="v1-pill" data-state={severityToState(String(s.state ?? "unknown"))}>
+                      <span
+                        className="v1-pill"
+                        data-state={severityToState(
+                          String(s.state ?? "unknown"),
+                        )}
+                      >
                         {String(s.state ?? "unknown")}
                       </span>
                     </td>
@@ -697,8 +777,8 @@ export function AboutPage({
           <h3>Build</h3>
         </div>
         <p className="v1-mute">
-          DuckOS V1 dashboard. Schema version is what the running API reports;
-          a mismatch here means the installed agent needs an update.
+          DuckOS V1 dashboard. Schema version is what the running API reports; a
+          mismatch here means the installed agent needs an update.
         </p>
       </div>
     </PageFrame>
@@ -719,15 +799,17 @@ export function CandidatePage({
   const { state, dispatch } = usePrefs();
   useEffect(() => {
     const ctl = new AbortController();
-    client.fetchConfig({ signal: ctl.signal, fallbackToMissing: true }).then((r) => {
-      setResult(r);
-      if (r.ok) {
-        dispatch({
-          type: "setHealth",
-          patch: { pendingChanges: countPending(r.data) },
-        });
-      }
-    });
+    client
+      .fetchConfig({ signal: ctl.signal, fallbackToMissing: true })
+      .then((r) => {
+        setResult(r);
+        if (r.ok) {
+          dispatch({
+            type: "setHealth",
+            patch: { pendingChanges: countPending(r.data) },
+          });
+        }
+      });
     return () => ctl.abort();
   }, [client, dispatch]);
 
@@ -764,9 +846,15 @@ export function CandidatePage({
                     <td className="v1-mono">{c.before}</td>
                     <td className="v1-mono">{c.after}</td>
                     <td>
-                      <span className="v1-risk" data-risk={c.risk}>{c.risk}</span>
+                      <span className="v1-risk" data-risk={c.risk}>
+                        {c.risk}
+                      </span>
                     </td>
-                    <td>{c.confirmWindowSec === null ? "— (irreversible)" : `${c.confirmWindowSec}s`}</td>
+                    <td>
+                      {c.confirmWindowSec === null
+                        ? "— (irreversible)"
+                        : `${c.confirmWindowSec}s`}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -779,7 +867,9 @@ export function CandidatePage({
           <h3>{t(bundle, "shell.diagnostics")}</h3>
         </div>
         {result?.ok ? (
-          <p className="v1-mute">Live candidate transaction visible — review before apply.</p>
+          <p className="v1-mute">
+            Live candidate transaction visible — review before apply.
+          </p>
         ) : result && !result.ok ? (
           <p className="v1-mute">{result.message}</p>
         ) : (
@@ -848,16 +938,34 @@ export function DesignOnlyPage({
       <div className="v1-card" data-tight="true">
         <div className="card-head">
           <h3>Design</h3>
-          <span className="v1-pill" data-state="warn">design only</span>
+          <span className="v1-pill" data-state="warn">
+            design only
+          </span>
         </div>
         <p className="v1-mute">
-          The UX specification for this page is in <code className="v1-mono">docs/ux-v1/page-catalog.json</code> as <code className="v1-mono">{page.id}</code>. The production API does not yet expose the data needed to populate this view.
+          The UX specification for this page is in{" "}
+          <code className="v1-mono">docs/ux-v1/page-catalog.json</code> as{" "}
+          <code className="v1-mono">{page.id}</code>. The production API does
+          not yet expose the data needed to populate this view.
         </p>
-        <div className="v1-row" style={{ gap: "var(--v1-s2)", marginTop: "var(--v1-s2)" }}>
-          {page.risk === "C" && <span className="v1-pill">configurable when shipped</span>}
-          {page.risk === "I" && <span className="v1-pill" data-state="warn">will be irreversible</span>}
-          <span className="v1-pill">{page.columns.split(";").length} columns</span>
-          <span className="v1-pill">{page.filters.split(";").length} filters</span>
+        <div
+          className="v1-row"
+          style={{ gap: "var(--v1-s2)", marginTop: "var(--v1-s2)" }}
+        >
+          {page.risk === "C" && (
+            <span className="v1-pill">configurable when shipped</span>
+          )}
+          {page.risk === "I" && (
+            <span className="v1-pill" data-state="warn">
+              will be irreversible
+            </span>
+          )}
+          <span className="v1-pill">
+            {page.columns.split(";").length} columns
+          </span>
+          <span className="v1-pill">
+            {page.filters.split(";").length} filters
+          </span>
         </div>
       </div>
       <ColumnsPanel page={page} />

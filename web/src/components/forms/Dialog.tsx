@@ -4,11 +4,7 @@
  * Modal/dialog with focus trap, Escape-to-close, and proper ARIA.
  * Used for confirmation, destructive actions, and detail views.
  */
-import {
-  type ReactNode,
-  useEffect,
-  useRef,
-} from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 
 export interface DialogProps {
   open: boolean;

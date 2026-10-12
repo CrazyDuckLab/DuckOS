@@ -32,8 +32,8 @@ import (
 // listers never touch it.
 type dv01Engine struct{}
 
-func (dv01Engine) Doctor(ctx context.Context) (any, error)                 { return nil, nil }
-func (dv01Engine) DoctorCtx(ctx context.Context) (any, error)             { return nil, nil }
+func (dv01Engine) Doctor(ctx context.Context) (any, error)    { return nil, nil }
+func (dv01Engine) DoctorCtx(ctx context.Context) (any, error) { return nil, nil }
 
 // The engine-backed listers in this package use the
 // real_listers.go ListerSource contract (Doctor +

@@ -19,9 +19,9 @@ import (
 // calls in order. Tests assert the runtime forwards the
 // registry's intent to the backend verbatim.
 type runtimeTrackingBackend struct {
-	mu       sync.Mutex
-	trusted  []string
-	allowed  map[string]bool
+	mu      sync.Mutex
+	trusted []string
+	allowed map[string]bool
 }
 
 func newRuntimeTrackingBackend() *runtimeTrackingBackend {
@@ -88,12 +88,12 @@ func (s *runtimeTrackingSource) DisableNetwork(ref string) {
 	s.rt.DisableNetwork(ref)
 	s.rt.UntrustIface(ref)
 }
-func (s *runtimeTrackingSource) Networks() []Network   { return s.rt.Networks() }
-func (s *runtimeTrackingSource) Mappings() []Mapping   { return s.rt.Mappings() }
+func (s *runtimeTrackingSource) Networks() []Network { return s.rt.Networks() }
+func (s *runtimeTrackingSource) Mappings() []Mapping { return s.rt.Mappings() }
 func (s *runtimeTrackingSource) RevokeMapping(id string) {
 	s.rt.RevokeMapping(id)
 }
-func (s *runtimeTrackingSource) Stats() RuntimeStats    { return s.rt.Stats() }
+func (s *runtimeTrackingSource) Stats() RuntimeStats { return s.rt.Stats() }
 func (s *runtimeTrackingSource) TrustIface(iface string) {
 	s.rt.TrustIface(iface)
 }

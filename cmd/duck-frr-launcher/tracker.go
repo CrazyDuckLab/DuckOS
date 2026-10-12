@@ -366,7 +366,7 @@ func isFRRProcess(pid int, binary, pathspace string) error {
 //   - other errors for transient conditions
 var (
 	errIdentityMismatch = errors.New("frr-launcher: pid identity mismatch")
-	errProcessGone       = errors.New("frr-launcher: pid is not an exit target")
+	errProcessGone      = errors.New("frr-launcher: pid is not an exit target")
 )
 
 func terminateAndReap(pid int, binary, pathspace string) error {
@@ -511,7 +511,8 @@ func (t *Tracker) rehydrateFromPidfiles() (rehydrated, rejected int, ferr error)
 // =====================================================================
 
 // formatList formats one line per tracked entry:
-//   "OK <binary> <pathspace> <pid> <startedAt RFC3339>\n"
+//
+//	"OK <binary> <pathspace> <pid> <startedAt RFC3339>\n"
 func formatList(entries []*TrackedFRR) []byte {
 	var out bytes.Buffer
 	out.WriteString("OK\n")

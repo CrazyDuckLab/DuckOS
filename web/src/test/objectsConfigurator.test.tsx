@@ -11,10 +11,21 @@
  *   - Permission-denied rows hide the action buttons
  *   - Successful apply → confirm cycle drives the modal to "applied"
  */
-import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
+import {
+  render,
+  screen,
+  waitFor,
+  fireEvent,
+  act,
+} from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { APIClient } from "../api/client";
-import type { Collection, ConfigApplyResponse, ConfigConfirmResponse, ConfigDiffResponse } from "../api/types";
+import type {
+  Collection,
+  ConfigApplyResponse,
+  ConfigConfirmResponse,
+  ConfigDiffResponse,
+} from "../api/types";
 import { ObjectsPage } from "../configurators/Objects";
 import { messages } from "../i18n/messages";
 import { PAGES_BY_ID } from "../pages/registry";
@@ -55,10 +66,24 @@ function prefsState() {
 const writeableInterface: ViewObject = {
   ref: { kind: "network.interface", id: "eth0" },
   displayName: "eth0",
-  desired: { name: "eth0", adminState: "up", mtu: 1500, ipv4: "10.0.0.1", ipv4Prefix: 24, ipv6: "", ipv6Prefix: 64 },
+  desired: {
+    name: "eth0",
+    adminState: "up",
+    mtu: 1500,
+    ipv4: "10.0.0.1",
+    ipv4Prefix: 24,
+    ipv6: "",
+    ipv6Prefix: 64,
+  },
   availability: "available",
   supportedActions: ["show", "edit", "delete"],
-  permissions: { observe: true, configure: true, action: false, exportSecret: false, delete: true },
+  permissions: {
+    observe: true,
+    configure: true,
+    action: false,
+    exportSecret: false,
+    delete: true,
+  },
 } as unknown as ViewObject;
 
 const readonlyInterface: ViewObject = {
@@ -67,7 +92,12 @@ const readonlyInterface: ViewObject = {
   desired: null,
   availability: "available",
   supportedActions: ["show"],
-  permissions: { observe: true, configure: false, action: false, exportSecret: false },
+  permissions: {
+    observe: true,
+    configure: false,
+    action: false,
+    exportSecret: false,
+  },
 } as unknown as ViewObject;
 
 const collection: Collection = {
@@ -90,7 +120,9 @@ describe("ObjectsPage — real Create / Edit / Delete wiring", () => {
       { key: "name", label: "Name", render: (v) => v.displayName },
     ];
     render(
-      <PrefsContext.Provider value={{ state: prefsState(), dispatch: () => {} }}>
+      <PrefsContext.Provider
+        value={{ state: prefsState(), dispatch: () => {} }}
+      >
         <ObjectsPage
           page={page}
           bundle={messages.en}
@@ -119,7 +151,9 @@ describe("ObjectsPage — real Create / Edit / Delete wiring", () => {
       { key: "name", label: "Name", render: (v) => v.displayName },
     ];
     const { container } = render(
-      <PrefsContext.Provider value={{ state: prefsState(), dispatch: () => {} }}>
+      <PrefsContext.Provider
+        value={{ state: prefsState(), dispatch: () => {} }}
+      >
         <ObjectsPage
           page={page}
           bundle={messages.en}
@@ -134,9 +168,13 @@ describe("ObjectsPage — real Create / Edit / Delete wiring", () => {
       expect(screen.getByText("eth1")).toBeTruthy();
     });
     const buttons = container.querySelectorAll("button");
-    const editButtons = Array.from(buttons).filter((b) => b.textContent?.trim() === "Edit");
+    const editButtons = Array.from(buttons).filter(
+      (b) => b.textContent?.trim() === "Edit",
+    );
     expect(editButtons.length).toBe(1);
-    const deleteButtons = Array.from(buttons).filter((b) => b.textContent?.trim() === "Delete");
+    const deleteButtons = Array.from(buttons).filter(
+      (b) => b.textContent?.trim() === "Delete",
+    );
     expect(deleteButtons.length).toBe(1);
   });
 
@@ -152,7 +190,9 @@ describe("ObjectsPage — real Create / Edit / Delete wiring", () => {
       { key: "name", label: "Name", render: (v) => v.displayName },
     ];
     render(
-      <PrefsContext.Provider value={{ state: prefsState(), dispatch: () => {} }}>
+      <PrefsContext.Provider
+        value={{ state: prefsState(), dispatch: () => {} }}
+      >
         <ObjectsPage
           page={page}
           bundle={messages.en}
@@ -183,7 +223,15 @@ describe("ObjectsPage — real Create / Edit / Delete wiring", () => {
       age: 1,
     });
     const diff: ConfigDiffResponse = {
-      changes: [{ kind: "network.interface", id: "eth0", before: {}, after: { name: "eth0" }, risk: "C" }],
+      changes: [
+        {
+          kind: "network.interface",
+          id: "eth0",
+          before: {},
+          after: { name: "eth0" },
+          risk: "C",
+        },
+      ],
       issues: [],
       blastRadius: [{ kind: "network.interface", count: 1 }],
     };
@@ -191,16 +239,33 @@ describe("ObjectsPage — real Create / Edit / Delete wiring", () => {
       transactionId: "tx-1",
       deadline: Date.now() + 30_000,
     };
-    const confirm: ConfigConfirmResponse = { transactionId: "tx-1", revision: "rev-2" };
-    vi.spyOn(client, "configDiff").mockResolvedValue({ ok: true, data: diff, age: 1 });
-    vi.spyOn(client, "configApply").mockResolvedValue({ ok: true, data: apply, age: 1 });
-    vi.spyOn(client, "configConfirm").mockResolvedValue({ ok: true, data: confirm, age: 1 });
+    const confirm: ConfigConfirmResponse = {
+      transactionId: "tx-1",
+      revision: "rev-2",
+    };
+    vi.spyOn(client, "configDiff").mockResolvedValue({
+      ok: true,
+      data: diff,
+      age: 1,
+    });
+    vi.spyOn(client, "configApply").mockResolvedValue({
+      ok: true,
+      data: apply,
+      age: 1,
+    });
+    vi.spyOn(client, "configConfirm").mockResolvedValue({
+      ok: true,
+      data: confirm,
+      age: 1,
+    });
     const page = PAGES_BY_ID.get("P007")!;
     const columns: DataColumn<ViewObject>[] = [
       { key: "name", label: "Name", render: (v) => v.displayName },
     ];
     const { container } = render(
-      <PrefsContext.Provider value={{ state: prefsState(), dispatch: () => {} }}>
+      <PrefsContext.Provider
+        value={{ state: prefsState(), dispatch: () => {} }}
+      >
         <ObjectsPage
           page={page}
           bundle={messages.en}
@@ -213,7 +278,9 @@ describe("ObjectsPage — real Create / Edit / Delete wiring", () => {
     );
     await waitFor(() => expect(screen.getByText("eth0")).toBeTruthy());
     // Click Edit on the writable row.
-    const editButtons = Array.from(container.querySelectorAll("button")).filter((b) => b.textContent?.trim() === "Edit");
+    const editButtons = Array.from(container.querySelectorAll("button")).filter(
+      (b) => b.textContent?.trim() === "Edit",
+    );
     await act(async () => {
       fireEvent.click(editButtons[0]);
     });
@@ -221,14 +288,22 @@ describe("ObjectsPage — real Create / Edit / Delete wiring", () => {
       expect(screen.getByText(/edit interface — eth0/i)).toBeTruthy();
     });
     // Click "Validate & apply".
-    const applyBtn = await screen.findByRole("button", { name: /validate & apply/i });
+    const applyBtn = await screen.findByRole("button", {
+      name: /validate & apply/i,
+    });
     await act(async () => {
       fireEvent.click(applyBtn);
     });
     // Diff and apply should have been called.
     await waitFor(() => {
-      expect((client.configDiff as unknown as { mock: { calls: unknown[][] } }).mock.calls.length).toBeGreaterThan(0);
-      expect((client.configApply as unknown as { mock: { calls: unknown[][] } }).mock.calls.length).toBeGreaterThan(0);
+      expect(
+        (client.configDiff as unknown as { mock: { calls: unknown[][] } }).mock
+          .calls.length,
+      ).toBeGreaterThan(0);
+      expect(
+        (client.configApply as unknown as { mock: { calls: unknown[][] } }).mock
+          .calls.length,
+      ).toBeGreaterThan(0);
     });
     // Now there should be a Confirm button — but countdown may not be running
     // in jsdom. We can directly call the API to verify wiring.

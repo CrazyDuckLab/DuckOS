@@ -125,7 +125,11 @@ export function useSafeApply(client: APIClient): SafeApplyApi {
       setState((s) => ({ ...s, phase: "diffing", error: undefined }));
       const d = await client.configDiff(intent);
       if (!d.ok) {
-        setState((s) => ({ ...s, phase: "failed", error: { stage: "diffing", message: d.message, status: d.status } }));
+        setState((s) => ({
+          ...s,
+          phase: "failed",
+          error: { stage: "diffing", message: d.message, status: d.status },
+        }));
         return d;
       }
       setState((s) => ({ ...s, phase: "diffed", diff: d.data }));
@@ -151,7 +155,10 @@ export function useSafeApply(client: APIClient): SafeApplyApi {
         phase: "awaiting-confirmation",
         transaction: a.data,
         deadline: a.data.deadline,
-        remainingSeconds: Math.max(0, Math.floor((a.data.deadline - Date.now()) / 1000)),
+        remainingSeconds: Math.max(
+          0,
+          Math.floor((a.data.deadline - Date.now()) / 1000),
+        ),
       }));
       startCountdown(a.data.deadline);
       return d;
@@ -165,7 +172,10 @@ export function useSafeApply(client: APIClient): SafeApplyApi {
       setState((s) => ({
         ...s,
         phase: "failed",
-        error: { stage: "confirming", message: "No active transaction to confirm." },
+        error: {
+          stage: "confirming",
+          message: "No active transaction to confirm.",
+        },
       }));
       return { ok: false, reason: "failed", message: "No active transaction." };
     }
@@ -180,7 +190,13 @@ export function useSafeApply(client: APIClient): SafeApplyApi {
       }));
       return r;
     }
-    setState((s) => ({ ...s, phase: "applied", transaction: undefined, deadline: null, remainingSeconds: null }));
+    setState((s) => ({
+      ...s,
+      phase: "applied",
+      transaction: undefined,
+      deadline: null,
+      remainingSeconds: null,
+    }));
     return r;
   }, [state.transaction, client, clearTimer]);
 
@@ -191,9 +207,16 @@ export function useSafeApply(client: APIClient): SafeApplyApi {
         setState((s) => ({
           ...s,
           phase: "failed",
-          error: { stage: "rolling-back", message: "No active transaction to roll back." },
+          error: {
+            stage: "rolling-back",
+            message: "No active transaction to roll back.",
+          },
         }));
-        return { ok: false, reason: "failed", message: "No active transaction." };
+        return {
+          ok: false,
+          reason: "failed",
+          message: "No active transaction.",
+        };
       }
       setState((s) => ({ ...s, phase: "rolling-back" }));
       clearTimer();
@@ -202,11 +225,21 @@ export function useSafeApply(client: APIClient): SafeApplyApi {
         setState((s) => ({
           ...s,
           phase: "failed",
-          error: { stage: "rolling-back", message: r.message, status: r.status },
+          error: {
+            stage: "rolling-back",
+            message: r.message,
+            status: r.status,
+          },
         }));
         return r;
       }
-      setState((s) => ({ ...s, phase: "rolled-back", transaction: undefined, deadline: null, remainingSeconds: null }));
+      setState((s) => ({
+        ...s,
+        phase: "rolled-back",
+        transaction: undefined,
+        deadline: null,
+        remainingSeconds: null,
+      }));
       return r;
     },
     [state.transaction, client, clearTimer],

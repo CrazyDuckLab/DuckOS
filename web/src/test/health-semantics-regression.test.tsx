@@ -103,16 +103,17 @@ class StubClient extends APIClient {
   private overview: FetchResult<Overview> | undefined;
   private doctor: FetchResult<unknown>;
 
-  constructor(opts: {
-    health?: FetchResult<HealthPayload>;
-    overview?: FetchResult<Overview>;
-    doctor?: FetchResult<unknown>;
-  } = {}) {
+  constructor(
+    opts: {
+      health?: FetchResult<HealthPayload>;
+      overview?: FetchResult<Overview>;
+      doctor?: FetchResult<unknown>;
+    } = {},
+  ) {
     super({ token: "t", locale: "en", onFetch: () => {} } as never);
     this.health = opts.health ?? { ok: true, data: PROD_HEALTH, age: 0 };
     this.overview = opts.overview;
-    this.doctor =
-      opts.doctor ?? { ok: true, data: { findings: [] }, age: 0 };
+    this.doctor = opts.doctor ?? { ok: true, data: { findings: [] }, age: 0 };
   }
 
   fetchHealth(): Promise<FetchResult<HealthPayload>> {

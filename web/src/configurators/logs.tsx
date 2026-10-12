@@ -34,12 +34,21 @@ export function MonitoringPage({
     client.fetchOverview({ signal: ctl.signal }).then(setResult);
     return () => ctl.abort();
   }, [client]);
-  if (!result) return <PageFrame page={page} bundle={bundle}><StatePanel state="loading" /></PageFrame>;
-  if (!result.ok) return (
-    <PageFrame page={page} bundle={bundle}>
-      <StatePanel state={result.reason === "missing" ? "missing-contract" : "error"} body={result.message} />
-    </PageFrame>
-  );
+  if (!result)
+    return (
+      <PageFrame page={page} bundle={bundle}>
+        <StatePanel state="loading" />
+      </PageFrame>
+    );
+  if (!result.ok)
+    return (
+      <PageFrame page={page} bundle={bundle}>
+        <StatePanel
+          state={result.reason === "missing" ? "missing-contract" : "error"}
+          body={result.message}
+        />
+      </PageFrame>
+    );
 
   const cpu = result.data.cpu;
   const mem = result.data.memory;
@@ -62,11 +71,34 @@ export function MonitoringPage({
         pageSize={20}
         emptyState="No storage mounts observed."
         columns={[
-          { key: "mountpoint", label: "Mount", mono: true, render: (s) => <strong>{s.mountpoint}</strong> },
+          {
+            key: "mountpoint",
+            label: "Mount",
+            mono: true,
+            render: (s) => <strong>{s.mountpoint}</strong>,
+          },
           { key: "filesystem", label: "Filesystem" },
-          { key: "usedBytes", label: "Used", mono: true, numeric: true, render: (s) => s.usedBytes },
-          { key: "availableBytes", label: "Available", mono: true, numeric: true, render: (s) => s.availableBytes },
-          { key: "totalBytes", label: "Total", mono: true, numeric: true, render: (s) => s.totalBytes },
+          {
+            key: "usedBytes",
+            label: "Used",
+            mono: true,
+            numeric: true,
+            render: (s) => s.usedBytes,
+          },
+          {
+            key: "availableBytes",
+            label: "Available",
+            mono: true,
+            numeric: true,
+            render: (s) => s.availableBytes,
+          },
+          {
+            key: "totalBytes",
+            label: "Total",
+            mono: true,
+            numeric: true,
+            render: (s) => s.totalBytes,
+          },
         ]}
       />
       <p className="v1-subtle v1-fs-xs">
@@ -88,28 +120,52 @@ export function DoctorPage({
   client: APIClient;
 }) {
   const [result, setResult] = useState<FetchResult<unknown> | null>(null);
-  const [severity, setSeverity] = useState<"all" | "warn" | "critical" | "info">("all");
+  const [severity, setSeverity] = useState<
+    "all" | "warn" | "critical" | "info"
+  >("all");
   const [query, setQuery] = useState("");
   useEffect(() => {
     const ctl = new AbortController();
     client.fetchDoctor({ signal: ctl.signal }).then(setResult);
     return () => ctl.abort();
   }, [client]);
-  if (!result) return <PageFrame page={page} bundle={bundle}><StatePanel state="loading" /></PageFrame>;
-  if (!result.ok) return (
-    <PageFrame page={page} bundle={bundle}>
-      <StatePanel state={result.reason === "missing" ? "missing-contract" : "error"} body={result.message} />
-    </PageFrame>
-  );
+  if (!result)
+    return (
+      <PageFrame page={page} bundle={bundle}>
+        <StatePanel state="loading" />
+      </PageFrame>
+    );
+  if (!result.ok)
+    return (
+      <PageFrame page={page} bundle={bundle}>
+        <StatePanel
+          state={result.reason === "missing" ? "missing-contract" : "error"}
+          body={result.message}
+        />
+      </PageFrame>
+    );
 
-  const findings = (Array.isArray(result.data) ? result.data : (result.data as { findings?: Array<Record<string, unknown>> }).findings ?? []) as Array<Record<string, unknown>>;
+  const findings = (
+    Array.isArray(result.data)
+      ? result.data
+      : ((result.data as { findings?: Array<Record<string, unknown>> })
+          .findings ?? [])
+  ) as Array<Record<string, unknown>>;
   const filtered = findings.filter((f) => {
     const sv = String(f.severity ?? "").toLowerCase();
-    if (severity === "warn" && !(sv === "warn" || sv === "warning")) return false;
-    if (severity === "critical" && !(sv === "critical" || sv === "error" || sv === "fatal")) return false;
-    if (severity === "info" && !(sv === "info" || sv === "ok" || sv === "good")) return false;
+    if (severity === "warn" && !(sv === "warn" || sv === "warning"))
+      return false;
+    if (
+      severity === "critical" &&
+      !(sv === "critical" || sv === "error" || sv === "fatal")
+    )
+      return false;
+    if (severity === "info" && !(sv === "info" || sv === "ok" || sv === "good"))
+      return false;
     if (!query) return true;
-    return `${f.component ?? ""} ${f.code ?? ""} ${f.message ?? ""}`.toLowerCase().includes(query.toLowerCase());
+    return `${f.component ?? ""} ${f.code ?? ""} ${f.message ?? ""}`
+      .toLowerCase()
+      .includes(query.toLowerCase());
   });
 
   return (
@@ -117,8 +173,22 @@ export function DoctorPage({
       <RuntimeEvidencePanel
         rows={[
           { key: "findings", value: findings.length },
-          { key: "warnings", value: findings.filter((f) => ["warn", "warning"].includes(String(f.severity ?? "").toLowerCase())).length },
-          { key: "critical", value: findings.filter((f) => ["critical", "error", "fatal"].includes(String(f.severity ?? "").toLowerCase())).length },
+          {
+            key: "warnings",
+            value: findings.filter((f) =>
+              ["warn", "warning"].includes(
+                String(f.severity ?? "").toLowerCase(),
+              ),
+            ).length,
+          },
+          {
+            key: "critical",
+            value: findings.filter((f) =>
+              ["critical", "error", "fatal"].includes(
+                String(f.severity ?? "").toLowerCase(),
+              ),
+            ).length,
+          },
         ]}
       />
       <FilterBar
@@ -155,11 +225,24 @@ export function DoctorPage({
                 : ["warn", "warning"].includes(sv)
                   ? "warn"
                   : "good";
-              return <span className="v1-pill" data-state={tone}>{String(f.severity ?? "info")}</span>;
+              return (
+                <span className="v1-pill" data-state={tone}>
+                  {String(f.severity ?? "info")}
+                </span>
+              );
             },
           },
-          { key: "component", label: "Component", render: (f) => <strong>{String(f.component ?? "—")}</strong> },
-          { key: "code", label: "Code", mono: true, render: (f) => String(f.code ?? "—") },
+          {
+            key: "component",
+            label: "Component",
+            render: (f) => <strong>{String(f.component ?? "—")}</strong>,
+          },
+          {
+            key: "code",
+            label: "Code",
+            mono: true,
+            render: (f) => String(f.code ?? "—"),
+          },
           { key: "message", label: "Message" },
         ]}
       />
@@ -167,48 +250,82 @@ export function DoctorPage({
   );
 }
 
-export const LogsSubareaSpecs: Record<string, { columns: ReadonlyArray<{ key: string; label: string; description?: string }>; endpoint: string }> = {
-  P082: { endpoint: "/api/v1/incidents", columns: [
-    { key: "component", label: "Component" },
-    { key: "severity", label: "Severity" },
-    { key: "age", label: "Age" },
-    { key: "evidence", label: "Evidence" },
-  ] },
-  P083: { endpoint: "/api/v1/logs", columns: [
-    { key: "source", label: "Source" },
-    { key: "severity", label: "Severity" },
-    { key: "last_line", label: "Last line" },
-  ] },
-  P084: { endpoint: "/api/v1/events", columns: [
-    { key: "time", label: "Time" },
-    { key: "component", label: "Component" },
-    { key: "severity", label: "Severity" },
-    { key: "message", label: "Message" },
-  ] },
-  P085: { endpoint: "/api/v1/auth/audit", columns: [
-    { key: "time", label: "Time" },
-    { key: "actor", label: "Actor" },
-    { key: "action", label: "Action" },
-    { key: "result", label: "Result" },
-  ] },
-  P086: { endpoint: "/api/v1/engine/explain", columns: [
-    { key: "question", label: "Question" },
-    { key: "result", label: "Result" },
-  ] },
-  P088: { endpoint: "/api/v1/tools", columns: [
-    { key: "tool", label: "Tool" },
-    { key: "status", label: "Status" },
-  ] },
-  P090: { endpoint: "/api/v1/speedlab", columns: [
-    { key: "direction", label: "Direction" },
-    { key: "speed", label: "Speed" },
-    { key: "latency", label: "Latency" },
-  ] },
-  P092: { endpoint: "/api/v1/retention", columns: [
-    { key: "source", label: "Source" },
-    { key: "retention", label: "Retention" },
-    { key: "used", label: "Used" },
-  ] },
+export const LogsSubareaSpecs: Record<
+  string,
+  {
+    columns: ReadonlyArray<{
+      key: string;
+      label: string;
+      description?: string;
+    }>;
+    endpoint: string;
+  }
+> = {
+  P082: {
+    endpoint: "/api/v1/incidents",
+    columns: [
+      { key: "component", label: "Component" },
+      { key: "severity", label: "Severity" },
+      { key: "age", label: "Age" },
+      { key: "evidence", label: "Evidence" },
+    ],
+  },
+  P083: {
+    endpoint: "/api/v1/logs",
+    columns: [
+      { key: "source", label: "Source" },
+      { key: "severity", label: "Severity" },
+      { key: "last_line", label: "Last line" },
+    ],
+  },
+  P084: {
+    endpoint: "/api/v1/events",
+    columns: [
+      { key: "time", label: "Time" },
+      { key: "component", label: "Component" },
+      { key: "severity", label: "Severity" },
+      { key: "message", label: "Message" },
+    ],
+  },
+  P085: {
+    endpoint: "/api/v1/auth/audit",
+    columns: [
+      { key: "time", label: "Time" },
+      { key: "actor", label: "Actor" },
+      { key: "action", label: "Action" },
+      { key: "result", label: "Result" },
+    ],
+  },
+  P086: {
+    endpoint: "/api/v1/engine/explain",
+    columns: [
+      { key: "question", label: "Question" },
+      { key: "result", label: "Result" },
+    ],
+  },
+  P088: {
+    endpoint: "/api/v1/tools",
+    columns: [
+      { key: "tool", label: "Tool" },
+      { key: "status", label: "Status" },
+    ],
+  },
+  P090: {
+    endpoint: "/api/v1/speedlab",
+    columns: [
+      { key: "direction", label: "Direction" },
+      { key: "speed", label: "Speed" },
+      { key: "latency", label: "Latency" },
+    ],
+  },
+  P092: {
+    endpoint: "/api/v1/retention",
+    columns: [
+      { key: "source", label: "Source" },
+      { key: "retention", label: "Retention" },
+      { key: "used", label: "Used" },
+    ],
+  },
 };
 
 export function LogsSubareaStub({
@@ -218,7 +335,14 @@ export function LogsSubareaStub({
 }: {
   page: PageMeta;
   bundle: Messages;
-  spec: { columns: ReadonlyArray<{ key: string; label: string; description?: string }>; endpoint: string };
+  spec: {
+    columns: ReadonlyArray<{
+      key: string;
+      label: string;
+      description?: string;
+    }>;
+    endpoint: string;
+  };
 }) {
   return (
     <UnsupportedFeature

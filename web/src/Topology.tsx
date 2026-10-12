@@ -131,13 +131,21 @@ export function Topology({
                             status: link.state || "unknown",
                             fields: [
                               { label: "Name", value: link.name },
-                              { label: "Index", value: String(link.index), mono: true },
+                              {
+                                label: "Index",
+                                value: String(link.index),
+                                mono: true,
+                              },
                               {
                                 label: "MAC",
                                 value: link.mac || "—",
                                 mono: true,
                               },
-                              { label: "MTU", value: String(link.mtu), mono: true },
+                              {
+                                label: "MTU",
+                                value: String(link.mtu),
+                                mono: true,
+                              },
                               {
                                 label: "State",
                                 value: link.state || "unknown",
@@ -145,7 +153,9 @@ export function Topology({
                               {
                                 label: "Addresses",
                                 value: link.addresses.length
-                                  ? link.addresses.map((a) => a.address).join(", ")
+                                  ? link.addresses
+                                      .map((a) => a.address)
+                                      .join(", ")
                                   : "—",
                                 mono: true,
                               },

@@ -192,7 +192,14 @@ export type IconName =
 /* Common emphasised dots — fill=currentColor, no stroke.
  * Use sparingly so icons remain stroke-based. */
 const dot = (cx: number, cy: number, r = 0.7) => (
-  <circle key={`${cx}.${cy}`} cx={cx} cy={cy} r={r} fill="currentColor" stroke="none" />
+  <circle
+    key={`${cx}.${cy}`}
+    cx={cx}
+    cy={cy}
+    r={r}
+    fill="currentColor"
+    stroke="none"
+  />
 );
 
 /* SVG paths for every IconName. */
@@ -1332,22 +1339,23 @@ export { DuckMark, DuckWordmark } from "./brand/DuckMark";
  * 24×24 viewBox so consumers can size it freely via CSS width/height. */
 import { renderToStaticMarkup } from "react-dom/server";
 
-export const __iconPathsForCapture: Record<IconName, string> = Object.fromEntries(
-  (Object.entries(paths) as [IconName, ReactNode][]).map(([k, v]) => [
-    k,
-    renderToStaticMarkup(
-      <svg
-        viewBox="0 0 24 24"
-        width="24"
-        height="24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        {v}
-      </svg>,
-    ),
-  ]),
-) as Record<IconName, string>;
+export const __iconPathsForCapture: Record<IconName, string> =
+  Object.fromEntries(
+    (Object.entries(paths) as [IconName, ReactNode][]).map(([k, v]) => [
+      k,
+      renderToStaticMarkup(
+        <svg
+          viewBox="0 0 24 24"
+          width="24"
+          height="24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          {v}
+        </svg>,
+      ),
+    ]),
+  ) as Record<IconName, string>;

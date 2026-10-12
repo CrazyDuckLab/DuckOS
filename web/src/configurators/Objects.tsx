@@ -18,7 +18,11 @@ import { type Locale } from "../i18n/messages";
 import { type PageMeta } from "../pages/registry";
 import { PageFrame } from "../components/PageFrame";
 import { StatePanel } from "../components/forms/States";
-import { DataTable, FilterBar, type DataColumn } from "../components/forms/Table";
+import {
+  DataTable,
+  FilterBar,
+  type DataColumn,
+} from "../components/forms/Table";
 import { ConfiguratorShell } from "./ConfiguratorShell";
 import { bindingForKind, type KindBinding } from "./intentBuilders";
 import { useSafeApply } from "../state/safeApply";
@@ -78,18 +82,68 @@ function emptyKeyForKind(kind: SupportedObjectKind): string {
 /** Short product label for each kind. Used as the page-name suffix
  * inside the chrome, e.g. "WireGuard peers · 0 total". */
 function kindLabel(kind: SupportedObjectKind, locale: Locale): string {
-  const labels: Partial<Record<SupportedObjectKind, { en: string; ru: string; de: string; es: string }>> = {
-    "network.interface": { en: "interfaces", ru: "интерфейсы", de: "Schnittstellen", es: "interfaces" },
-    "network.address": { en: "addresses", ru: "адреса", de: "Adressen", es: "direcciones" },
-    "network.firewall.rule": { en: "rules", ru: "правила", de: "Regeln", es: "reglas" },
-    "network.firewall.set": { en: "sets", ru: "наборы", de: "Sets", es: "conjuntos" },
-    "network.lease": { en: "leases", ru: "lease-ы", de: "Leases", es: "concesiones" },
-    "wireguard.server": { en: "servers", ru: "серверы", de: "Server", es: "servidores" },
+  const labels: Partial<
+    Record<
+      SupportedObjectKind,
+      { en: string; ru: string; de: string; es: string }
+    >
+  > = {
+    "network.interface": {
+      en: "interfaces",
+      ru: "интерфейсы",
+      de: "Schnittstellen",
+      es: "interfaces",
+    },
+    "network.address": {
+      en: "addresses",
+      ru: "адреса",
+      de: "Adressen",
+      es: "direcciones",
+    },
+    "network.firewall.rule": {
+      en: "rules",
+      ru: "правила",
+      de: "Regeln",
+      es: "reglas",
+    },
+    "network.firewall.set": {
+      en: "sets",
+      ru: "наборы",
+      de: "Sets",
+      es: "conjuntos",
+    },
+    "network.lease": {
+      en: "leases",
+      ru: "lease-ы",
+      de: "Leases",
+      es: "concesiones",
+    },
+    "wireguard.server": {
+      en: "servers",
+      ru: "серверы",
+      de: "Server",
+      es: "servidores",
+    },
     "wireguard.peer": { en: "peers", ru: "peer-ы", de: "Peers", es: "peers" },
-    "xray.server": { en: "servers", ru: "серверы", de: "Server", es: "servidores" },
-    "xray.user": { en: "users", ru: "пользователи", de: "Benutzer", es: "usuarios" },
+    "xray.server": {
+      en: "servers",
+      ru: "серверы",
+      de: "Server",
+      es: "servidores",
+    },
+    "xray.user": {
+      en: "users",
+      ru: "пользователи",
+      de: "Benutzer",
+      es: "usuarios",
+    },
     "dns.zone": { en: "zones", ru: "зоны", de: "Zonen", es: "zonas" },
-    "dhcp.subnet": { en: "subnets", ru: "подсети", de: "Subnetze", es: "subredes" },
+    "dhcp.subnet": {
+      en: "subnets",
+      ru: "подсети",
+      de: "Subnetze",
+      es: "subredes",
+    },
     "bgp.peer": { en: "peers", ru: "peer-ы", de: "Peers", es: "peers" },
     "ospf.area": { en: "areas", ru: "области", de: "Areas", es: "áreas" },
     "isis.area": { en: "areas", ru: "области", de: "Areas", es: "áreas" },
@@ -113,7 +167,9 @@ export function ObjectsPage({
 }: ObjectsPageProps) {
   const [result, setResult] = useState<FetchResult<Collection> | null>(null);
   const [query, setQuery] = useState("");
-  const [availability, setAvailability] = useState<"all" | "available" | "non-available">("all");
+  const [availability, setAvailability] = useState<
+    "all" | "available" | "non-available"
+  >("all");
   const [showTech, setShowTech] = useState(false);
   const [activeAction, setActiveAction] = useState<{
     mode: "create" | "edit" | "delete";
@@ -132,7 +188,9 @@ export function ObjectsPage({
 
   useEffect(() => {
     const ctl = new AbortController();
-    client.fetchObjects(kind, { limit: 200 }, { signal: ctl.signal }).then(setResult);
+    client
+      .fetchObjects(kind, { limit: 200 }, { signal: ctl.signal })
+      .then(setResult);
     return () => ctl.abort();
   }, [client, kind]);
 
@@ -158,10 +216,13 @@ export function ObjectsPage({
   const items = col.items;
   const q = query.toLowerCase();
   const filtered = items.filter((v) => {
-    if (availability === "available" && v.availability !== "available") return false;
-    if (availability === "non-available" && v.availability === "available") return false;
+    if (availability === "available" && v.availability !== "available")
+      return false;
+    if (availability === "non-available" && v.availability === "available")
+      return false;
     if (!q) return true;
-    const haystack = `${v.displayName} ${v.ref.id} ${v.tags?.join(" ") ?? ""}`.toLowerCase();
+    const haystack =
+      `${v.displayName} ${v.ref.id} ${v.tags?.join(" ") ?? ""}`.toLowerCase();
     return haystack.includes(q);
   });
 
@@ -175,16 +236,23 @@ export function ObjectsPage({
   const showEditCol = binding !== undefined;
   const showDeleteCol = binding !== undefined;
 
-  const effectiveCanEdit = canEdit ?? ((v: ViewObject) => v.permissions.configure === true);
+  const effectiveCanEdit =
+    canEdit ?? ((v: ViewObject) => v.permissions.configure === true);
   const effectiveCanDelete =
-    canDelete ?? ((v: ViewObject) => (v.permissions.delete ?? v.permissions.configure) === true);
+    canDelete ??
+    ((v: ViewObject) =>
+      (v.permissions.delete ?? v.permissions.configure) === true);
 
   const emptyKey = emptyKeyForKind(kind);
   const emptyTitle = v4t(locale, `${emptyKey}.title`);
   const emptyBody = v4t(locale, `${emptyKey}.body`);
   const emptyAction = v4t(locale, `${emptyKey}.action`);
 
-  const summary: Array<{ label: string; value: React.ReactNode; tone?: "muted" | "warn" | "bad" }> = [
+  const summary: Array<{
+    label: string;
+    value: React.ReactNode;
+    tone?: "muted" | "warn" | "bad";
+  }> = [
     { label: v4t(locale, "chrome.total"), value: counts.total },
     { label: v4t(locale, "chrome.active"), value: counts.active },
   ];
@@ -203,7 +271,9 @@ export function ObjectsPage({
           {summary.map((s) => (
             <div className="v4-summary" key={s.label}>
               <span className="v4-summary-label">{s.label}</span>
-              <span className="v4-summary-value" data-tone={s.tone}>{s.value}</span>
+              <span className="v4-summary-value" data-tone={s.tone}>
+                {s.value}
+              </span>
             </div>
           ))}
         </div>
@@ -222,7 +292,11 @@ export function ObjectsPage({
           placeholder={`${v4t(locale, "chrome.filter")} · ${kindLabel(kind, locale)}`}
           right={
             <>
-              <div className="v4-chip-group" role="group" aria-label={v4t(locale, "chrome.availability")}>
+              <div
+                className="v4-chip-group"
+                role="group"
+                aria-label={v4t(locale, "chrome.availability")}
+              >
                 <button
                   type="button"
                   className="v4-chip"
@@ -274,7 +348,9 @@ export function ObjectsPage({
             title={emptyTitle}
             body={emptyBody}
             action={showCreate ? emptyAction : undefined}
-            onAction={showCreate ? () => setActiveAction({ mode: "create" }) : undefined}
+            onAction={
+              showCreate ? () => setActiveAction({ mode: "create" }) : undefined
+            }
           />
         ) : (
           <DataTable<ViewObject>
@@ -288,7 +364,10 @@ export function ObjectsPage({
                 key: "availability",
                 label: v4t(locale, "chrome.availability"),
                 render: (v) => (
-                  <span className="v4-status-pill" data-state={availabilityToState(v.availability)}>
+                  <span
+                    className="v4-status-pill"
+                    data-state={availabilityToState(v.availability)}
+                  >
                     {v.availability}
                   </span>
                 ),
@@ -304,7 +383,11 @@ export function ObjectsPage({
                         type="button"
                         className="v4-btn-ghost"
                         onClick={() =>
-                          setActiveAction({ mode: "edit", target: v, value: toInitial?.(v) ?? v.desired })
+                          setActiveAction({
+                            mode: "edit",
+                            target: v,
+                            value: toInitial?.(v) ?? v.desired,
+                          })
                         }
                       >
                         {v4t(locale, "chrome.edit")}
@@ -314,7 +397,9 @@ export function ObjectsPage({
                       <button
                         type="button"
                         className="v4-btn-danger-ghost"
-                        onClick={() => setActiveAction({ mode: "delete", target: v })}
+                        onClick={() =>
+                          setActiveAction({ mode: "delete", target: v })
+                        }
                       >
                         {v4t(locale, "chrome.delete")}
                       </button>
@@ -334,11 +419,15 @@ export function ObjectsPage({
           <summary>{v4t(locale, "chrome.technicalDetails")}</summary>
           <div className="v4-tech-body">
             <div className="v4-tech-row">
-              <span className="v4-tech-key">{v4t(locale, "chrome.collectionSnapshot")}</span>
+              <span className="v4-tech-key">
+                {v4t(locale, "chrome.collectionSnapshot")}
+              </span>
               <span className="v4-mono">{col.snapshotId || "—"}</span>
             </div>
             <div className="v4-tech-row">
-              <span className="v4-tech-key">{v4t(locale, "inspector.kind")}</span>
+              <span className="v4-tech-key">
+                {v4t(locale, "inspector.kind")}
+              </span>
               <span className="v4-mono">{kind}</span>
             </div>
           </div>
@@ -371,7 +460,11 @@ function ActionModal({
   binding: KindBinding;
   bundle: Messages;
   client: APIClient;
-  action: { mode: "create" | "edit" | "delete"; target?: ViewObject; value?: unknown };
+  action: {
+    mode: "create" | "edit" | "delete";
+    target?: ViewObject;
+    value?: unknown;
+  };
   onClose: () => void;
 }) {
   const safeApply = useSafeApply(client);
@@ -379,7 +472,7 @@ function ActionModal({
   const [formValue, setFormValue] = useState<unknown>(
     action.mode === "create"
       ? undefined
-      : action.value ?? action.target?.desired ?? {},
+      : (action.value ?? action.target?.desired ?? {}),
   );
 
   const title =
@@ -391,7 +484,8 @@ function ActionModal({
 
   const canApply =
     action.mode === "delete"
-      ? (action.target?.permissions.delete ?? action.target?.permissions.configure) === true
+      ? (action.target?.permissions.delete ??
+          action.target?.permissions.configure) === true
       : formValue !== undefined && binding.validate(formValue);
 
   const buildIntent = useCallback(() => {
@@ -399,10 +493,17 @@ function ActionModal({
       return binding.intentForCreate(formValue);
     }
     if (action.mode === "edit" && action.target) {
-      return binding.intentForUpdate(action.target.ref.id, formValue, action.target.ref.revision);
+      return binding.intentForUpdate(
+        action.target.ref.id,
+        formValue,
+        action.target.ref.revision,
+      );
     }
     if (action.mode === "delete" && action.target) {
-      return binding.intentForDelete(action.target.ref.id, action.target.ref.revision);
+      return binding.intentForDelete(
+        action.target.ref.id,
+        action.target.ref.revision,
+      );
     }
     return { objects: [] };
   }, [action, binding, formValue]);
@@ -461,7 +562,9 @@ function useLocale(): Locale {
     /* outside a Provider — fall through */
   }
   if (typeof document !== "undefined") {
-    const l = document.documentElement.getAttribute("data-locale") as Locale | null;
+    const l = document.documentElement.getAttribute(
+      "data-locale",
+    ) as Locale | null;
     if (l) return l;
   }
   return detectLocale();

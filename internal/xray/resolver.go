@@ -5,15 +5,15 @@
 // render.go). The render emits:
 //
 //   - TLS:     streamSettings.tlsSettings.{certificateFile,keyFile}
-//              pointing at <stage>/<name>.crt and <name>.key.
-//              The runtime must materialize those files from the
-//              vault references TLSCertRef / TLSKeyRef BEFORE
-//              running `xray run -c active.json -test`.
+//     pointing at <stage>/<name>.crt and <name>.key.
+//     The runtime must materialize those files from the
+//     vault references TLSCertRef / TLSKeyRef BEFORE
+//     running `xray run -c active.json -test`.
 //   - REALITY: streamSettings.realitySettings.{privateKey,shortIds}
-//              placeholder strings carrying the vault key id.
-//              The runtime must substitute the placeholder with
-//              the actual base64(X25519-private-key) / hex(short-id)
-//              bytes BEFORE running `xray run -c active.json -test`.
+//     placeholder strings carrying the vault key id.
+//     The runtime must substitute the placeholder with
+//     the actual base64(X25519-private-key) / hex(short-id)
+//     bytes BEFORE running `xray run -c active.json -test`.
 //
 // Without this step the rendered config cannot pass `xray -test`
 // (TLS: file does not exist; REALITY: invalid JSON). The runtime
@@ -57,13 +57,13 @@ type Resolver interface {
 // vault-backed references with their secret bytes:
 //
 //   - TLS inbound: TLSCertRef -> write <stage>/<name>.crt
-//                  TLSKeyRef  -> write <stage>/<name>.key
-//                  (the renderer's certificateFile/keyFile
-//                  paths already point at these locations.)
+//     TLSKeyRef  -> write <stage>/<name>.key
+//     (the renderer's certificateFile/keyFile
+//     paths already point at these locations.)
 //   - REALITY inbound: RealityKeyRef -> base64-encoded
-//                  privateKey inline in the JSON.
-//                  ShortIDRef -> hex-encoded short id
-//                  inline in the JSON.
+//     privateKey inline in the JSON.
+//     ShortIDRef -> hex-encoded short id
+//     inline in the JSON.
 //
 // Materialize is idempotent: if the inbound has no security
 // material (security=none) or the vault resolver returns
@@ -399,7 +399,7 @@ func substituteRealityFromValues(in *Inbound, privKeyID string, privKey []byte, 
 // emitted by the renderer carries the expected vault
 // KeyID at its end. The renderer uses the format:
 //
-//   "<resolved at apply time; see vault record <KeyID>>"
+//	"<resolved at apply time; see vault record <KeyID>>"
 //
 // (note the single trailing ">" — the placeholder is
 // a single opening bracket, the marker body, the key

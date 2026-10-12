@@ -146,12 +146,26 @@ func (u unsupportedLister) List(_ context.Context, _ object.CollectionParams) (o
 // boundary for the 9 generic kinds. They delegate to a
 // LinuxSource accessor; when nil the lister reports
 // engine_unavailable honestly.
-func linuxFirewallRuleLister(src LinuxSource) engine.ObjectLister { return NewNetworkFirewallRuleListerWithSource(src) }
-func linuxFirewallSetLister(src LinuxSource) engine.ObjectLister  { return NewNetworkFirewallSetListerWithSource(src) }
-func linuxLeaseLister(src LinuxSource) engine.ObjectLister        { return NewNetworkLeaseListerWithSource(src) }
-func linuxDNSZoneLister(src LinuxSource) engine.ObjectLister      { return NewDNSZoneListerWithSource(src) }
-func linuxDHCPSubnetLister(src LinuxSource) engine.ObjectLister    { return NewDHCPSubnetListerWithSource(src) }
-func linuxBGPPeerLister(src LinuxSource) engine.ObjectLister       { return NewBGPPeerListerWithSource(src) }
-func linuxOSPFAreaLister(src LinuxSource) engine.ObjectLister      { return NewOSPFAreaListerWithSource(src) }
-func linuxISISAreaLister(src LinuxSource) engine.ObjectLister      { return NewISISAreaListerWithSource(src) }
-func linuxRouteMapLister(src LinuxSource) engine.ObjectLister      { return NewRouteMapListerWithSource(src) }
+func linuxFirewallRuleLister(src LinuxSource) engine.ObjectLister {
+	return NewNetworkFirewallRuleListerWithSource(src)
+}
+func linuxFirewallSetLister(src LinuxSource) engine.ObjectLister {
+	return NewNetworkFirewallSetListerWithSource(src)
+}
+func linuxLeaseLister(src LinuxSource) engine.ObjectLister {
+	return NewNetworkLeaseListerWithSource(src)
+}
+func linuxDNSZoneLister(src LinuxSource) engine.ObjectLister { return NewDNSZoneListerWithSource(src) }
+func linuxDHCPSubnetLister(src LinuxSource) engine.ObjectLister {
+	return NewDHCPSubnetListerWithSource(src)
+}
+func linuxBGPPeerLister(src LinuxSource) engine.ObjectLister { return NewBGPPeerListerWithSource(src) }
+func linuxOSPFAreaLister(src LinuxSource) engine.ObjectLister {
+	return NewOSPFAreaListerWithSource(src)
+}
+func linuxISISAreaLister(src LinuxSource) engine.ObjectLister {
+	return NewISISAreaListerWithSource(src)
+}
+func linuxRouteMapLister(src LinuxSource) engine.ObjectLister {
+	return NewRouteMapListerWithSource(src)
+}

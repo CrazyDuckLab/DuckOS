@@ -72,7 +72,10 @@ function PreAuthSettings() {
     applyTheme(next);
   }
   // Follow System changes at runtime via matchMedia.
-  if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
+  if (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function"
+  ) {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const onChange = () => {
       if (readTheme() === "system") applyTheme("system");
@@ -170,7 +173,9 @@ export function IdentityLogin({
     // character class. See UD-002 in
     // docs/ui/V1_LIVE_QUALIFICATION_STATUS.md.
     if (!/^[a-z][a-z0-9._-]{0,47}$/.test(username)) {
-      setFailure("Username must start with a lowercase letter and contain only lowercase letters, digits, dots, underscores or dashes (1–48 characters).");
+      setFailure(
+        "Username must start with a lowercase letter and contain only lowercase letters, digits, dots, underscores or dashes (1–48 characters).",
+      );
       return;
     }
     setBusy(true);

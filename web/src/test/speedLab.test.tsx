@@ -53,9 +53,10 @@ function wrap(_node: React.ReactNode, client: APIClient) {
 
 describe("SpeedLabPage", () => {
   it("renders all three probe kinds", () => {
-    const { getByRole } = wrap(
-    null, fakeClient(vi.fn()));
-    const select = getByRole("combobox", { name: /probe type/i }) as HTMLSelectElement;
+    const { getByRole } = wrap(null, fakeClient(vi.fn()));
+    const select = getByRole("combobox", {
+      name: /probe type/i,
+    }) as HTMLSelectElement;
     const options = Array.from(select.options).map((o) => o.value);
     expect(options).toEqual(["latency", "http", "throughput"]);
   });
@@ -63,7 +64,8 @@ describe("SpeedLabPage", () => {
   it("blocks Start when the URL is not http(s) for HTTP/Throughput", async () => {
     const fetchJson = vi.fn();
     const { getByRole, getByText, getByLabelText } = wrap(
-      null, fakeClient(fetchJson),
+      null,
+      fakeClient(fetchJson),
     );
     fireEvent.change(getByRole("combobox", { name: /probe type/i }), {
       target: { value: "throughput" },
@@ -80,9 +82,7 @@ describe("SpeedLabPage", () => {
 
   it("requires Host for latency probes", async () => {
     const fetchJson = vi.fn();
-    const { getByRole, getByText } = wrap(
-      null, fakeClient(fetchJson),
-    );
+    const { getByRole, getByText } = wrap(null, fakeClient(fetchJson));
     fireEvent.click(getByRole("button", { name: /start/i }));
     await waitFor(() => {
       expect(getByText(/Host is required/i)).toBeTruthy();

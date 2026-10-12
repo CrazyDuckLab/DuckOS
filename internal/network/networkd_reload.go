@@ -44,7 +44,7 @@ type NetworkdReloadHost struct {
 	wait           func(context.Context) error
 	qualify        func(context.Context, Config, Config) error
 	verifyRuntime  func(context.Context, Config) error
-	protected     func(context.Context, Config) (string, error)
+	protected      func(context.Context, Config) (string, error)
 }
 
 func NewNetworkdReloadHost(e Enrollment) (*NetworkdReloadHost, error) {

@@ -15,7 +15,10 @@ import { DataTable } from "../components/forms/Table";
 import { RuntimeEvidencePanel } from "../components/forms/Panels";
 import { FilterBar } from "../components/forms/Table";
 import { UnsupportedFeature } from "../components/UnsupportedFeature";
-import { dnsServerToInspector, leaseToInspector } from "../components/inspector/selectors";
+import {
+  dnsServerToInspector,
+  leaseToInspector,
+} from "../components/inspector/selectors";
 import { usePrefs } from "../state/store";
 import type { Overview } from "../../../shared/api/types";
 
@@ -41,15 +44,26 @@ export function DnsResolverPage({
     return () => ctl.abort();
   }, [client]);
 
-  if (!result) return <PageFrame page={page} bundle={bundle}><StatePanel state="loading" /></PageFrame>;
-  if (!result.ok) return (
-    <PageFrame page={page} bundle={bundle}>
-      <StatePanel state={result.reason === "missing" ? "missing-contract" : "error"} body={result.message} />
-    </PageFrame>
-  );
+  if (!result)
+    return (
+      <PageFrame page={page} bundle={bundle}>
+        <StatePanel state="loading" />
+      </PageFrame>
+    );
+  if (!result.ok)
+    return (
+      <PageFrame page={page} bundle={bundle}>
+        <StatePanel
+          state={result.reason === "missing" ? "missing-contract" : "error"}
+          body={result.message}
+        />
+      </PageFrame>
+    );
 
   const dns = result.data.dns;
-  const filtered = dns.nameservers.filter((ns) => !query || ns.toLowerCase().includes(query.toLowerCase()));
+  const filtered = dns.nameservers.filter(
+    (ns) => !query || ns.toLowerCase().includes(query.toLowerCase()),
+  );
   return (
     <PageFrame page={page} bundle={bundle}>
       <RuntimeEvidencePanel
@@ -64,7 +78,11 @@ export function DnsResolverPage({
         value={query}
         onChange={setQuery}
         placeholder="Filter nameservers"
-        right={<span className="v1-subtle v1-fs-xs">{filtered.length} of {dns.nameservers.length}</span>}
+        right={
+          <span className="v1-subtle v1-fs-xs">
+            {filtered.length} of {dns.nameservers.length}
+          </span>
+        }
       />
       <DataTable
         rows={filtered.map((ns) => ({ ns, source: dns.source }))}
@@ -83,7 +101,12 @@ export function DnsResolverPage({
           });
         }}
         columns={[
-          { key: "ns", label: "Nameserver", mono: true, render: (r) => <strong>{r.ns}</strong> },
+          {
+            key: "ns",
+            label: "Nameserver",
+            mono: true,
+            render: (r) => <strong>{r.ns}</strong>,
+          },
           { key: "source", label: "Source" },
         ]}
         emptyState="No nameservers match."
@@ -96,8 +119,20 @@ export function DnsResolverPage({
         {dns.searchDomains.length === 0 ? (
           <p className="v1-mute">No search domains configured.</p>
         ) : (
-          <ul className="v1-row" style={{ gap: "var(--v1-s2)", flexWrap: "wrap", listStyle: "none", padding: 0 }}>
-            {dns.searchDomains.map((d) => <li key={d} className="v1-pill">{d}</li>)}
+          <ul
+            className="v1-row"
+            style={{
+              gap: "var(--v1-s2)",
+              flexWrap: "wrap",
+              listStyle: "none",
+              padding: 0,
+            }}
+          >
+            {dns.searchDomains.map((d) => (
+              <li key={d} className="v1-pill">
+                {d}
+              </li>
+            ))}
           </ul>
         )}
       </div>
@@ -130,12 +165,21 @@ export function DhcpLeasesPage({
     client.fetchOverview({ signal: ctl.signal }).then(setResult);
     return () => ctl.abort();
   }, [client]);
-  if (!result) return <PageFrame page={page} bundle={bundle}><StatePanel state="loading" /></PageFrame>;
-  if (!result.ok) return (
-    <PageFrame page={page} bundle={bundle}>
-      <StatePanel state={result.reason === "missing" ? "missing-contract" : "error"} body={result.message} />
-    </PageFrame>
-  );
+  if (!result)
+    return (
+      <PageFrame page={page} bundle={bundle}>
+        <StatePanel state="loading" />
+      </PageFrame>
+    );
+  if (!result.ok)
+    return (
+      <PageFrame page={page} bundle={bundle}>
+        <StatePanel
+          state={result.reason === "missing" ? "missing-contract" : "error"}
+          body={result.message}
+        />
+      </PageFrame>
+    );
 
   // We do not yet have a typed DHCP leases feed. Until /api/v1/dhcp/leases
   // is exposed, we present a derived view: each interface with an IPv4
@@ -149,7 +193,13 @@ export function DhcpLeasesPage({
       address: i.addresses.find((a) => a.family === "ipv4")?.address ?? "—",
       state: i.state,
     }))
-    .filter((r) => !query || `${r.iface} ${r.mac} ${r.address}`.toLowerCase().includes(query.toLowerCase()));
+    .filter(
+      (r) =>
+        !query ||
+        `${r.iface} ${r.mac} ${r.address}`
+          .toLowerCase()
+          .includes(query.toLowerCase()),
+    );
 
   return (
     <PageFrame page={page} bundle={bundle}>
@@ -164,7 +214,9 @@ export function DhcpLeasesPage({
         value={query}
         onChange={setQuery}
         placeholder="Filter derived leases"
-        right={<span className="v1-subtle v1-fs-xs">{observed.length} rows</span>}
+        right={
+          <span className="v1-subtle v1-fs-xs">{observed.length} rows</span>
+        }
       />
       <DataTable
         rows={observed}
@@ -184,27 +236,53 @@ export function DhcpLeasesPage({
           });
         }}
         columns={[
-          { key: "iface", label: "Interface", render: (r) => <strong>{r.iface}</strong> },
+          {
+            key: "iface",
+            label: "Interface",
+            render: (r) => <strong>{r.iface}</strong>,
+          },
           { key: "mac", label: "MAC", mono: true, render: (r) => r.mac || "—" },
-          { key: "address", label: "Address", mono: true, render: (r) => r.address },
+          {
+            key: "address",
+            label: "Address",
+            mono: true,
+            render: (r) => r.address,
+          },
           {
             key: "state",
             label: "Admin state",
-            render: (r) => <span className="v1-pill" data-state={r.state.toLowerCase() === "up" ? "good" : "warn"}>{r.state}</span>,
+            render: (r) => (
+              <span
+                className="v1-pill"
+                data-state={r.state.toLowerCase() === "up" ? "good" : "warn"}
+              >
+                {r.state}
+              </span>
+            ),
           },
         ]}
         emptyState="No derived leases."
       />
       <p className="v1-subtle v1-fs-xs">
         A typed leases endpoint would expose MAC, hostname, lease age, and
-        reservation status. Until then this view derives the same shape
-        from /overview.interfaces and flags its derivation.
+        reservation status. Until then this view derives the same shape from
+        /overview.interfaces and flags its derivation.
       </p>
     </PageFrame>
   );
 }
 
-export const DnsSubareaSpecs: Record<string, { columns: ReadonlyArray<{ key: string; label: string; description?: string }>; endpoint: string }> = {
+export const DnsSubareaSpecs: Record<
+  string,
+  {
+    columns: ReadonlyArray<{
+      key: string;
+      label: string;
+      description?: string;
+    }>;
+    endpoint: string;
+  }
+> = {
   P054: {
     endpoint: "/api/v1/dns/zones",
     columns: [
@@ -238,7 +316,14 @@ export function DnsSubareaStub({
 }: {
   page: PageMeta;
   bundle: Messages;
-  spec: { columns: ReadonlyArray<{ key: string; label: string; description?: string }>; endpoint: string };
+  spec: {
+    columns: ReadonlyArray<{
+      key: string;
+      label: string;
+      description?: string;
+    }>;
+    endpoint: string;
+  };
 }) {
   return (
     <UnsupportedFeature

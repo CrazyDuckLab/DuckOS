@@ -7,7 +7,11 @@
  */
 import type { ReactNode } from "react";
 
-export function Link({ to, children, ...rest }: {
+export function Link({
+  to,
+  children,
+  ...rest
+}: {
   to: string;
   children: ReactNode;
   className?: string;

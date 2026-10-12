@@ -19,11 +19,15 @@ export interface EmptyStateProps {
 export function EmptyState(props: EmptyStateProps) {
   return (
     <div className={props.density === "inline" ? "duck-empty" : "duck-empty"}>
-      <div className="e-icon"><Icon name={props.icon} size={28} /></div>
+      <div className="e-icon">
+        <Icon name={props.icon} size={28} />
+      </div>
       <h3>{props.title}</h3>
       <p>{props.body}</p>
       {props.action && props.onAction && (
-        <button type="button" onClick={props.onAction}>{props.action}</button>
+        <button type="button" onClick={props.onAction}>
+          {props.action}
+        </button>
       )}
     </div>
   );

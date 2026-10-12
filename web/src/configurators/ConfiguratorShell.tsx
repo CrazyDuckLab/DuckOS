@@ -95,8 +95,8 @@ export function ConfiguratorShell({
           <p className="v1-mute">
             Changes go through the Safe Apply workflow:
             <strong> validate → apply → confirm</strong>. Confirm within the
-            commit-confirmed window or the transaction is automatically
-            rolled back.
+            commit-confirmed window or the transaction is automatically rolled
+            back.
           </p>
         )
       }
@@ -105,9 +105,10 @@ export function ConfiguratorShell({
           ? { label: "Done", onAction: close }
           : phase === "awaiting-confirmation"
             ? {
-                label: remaining > 0
-                  ? `Confirm (${remaining}s left)`
-                  : "Window expired",
+                label:
+                  remaining > 0
+                    ? `Confirm (${remaining}s left)`
+                    : "Window expired",
                 onAction: () => {
                   void api.confirm();
                 },
@@ -141,7 +142,11 @@ export function ConfiguratorShell({
     >
       <div className="v1-stack">
         {phase !== "idle" && phase !== "applied" && phase !== "rolled-back" && (
-          <div className="v1-pill" data-tone={phaseTone(phase)} aria-live="polite">
+          <div
+            className="v1-pill"
+            data-tone={phaseTone(phase)}
+            aria-live="polite"
+          >
             {phaseLabel}
           </div>
         )}
@@ -164,7 +169,9 @@ export function ConfiguratorShell({
         {direct && (
           <>
             {directError && (
-              <div className="v1-pill" data-state="bad">{directError}</div>
+              <div className="v1-pill" data-state="bad">
+                {directError}
+              </div>
             )}
             <button
               type="button"
@@ -189,7 +196,10 @@ export function ConfiguratorShell({
   );
 }
 
-function phaseLabelFor(phase: import("../state/safeApply").Phase, remainingSeconds: number): string {
+function phaseLabelFor(
+  phase: import("../state/safeApply").Phase,
+  remainingSeconds: number,
+): string {
   switch (phase) {
     case "idle":
       return "Idle";
@@ -214,7 +224,9 @@ function phaseLabelFor(phase: import("../state/safeApply").Phase, remainingSecon
   }
 }
 
-function phaseTone(phase: import("../state/safeApply").Phase): "good" | "warn" | "bad" | "unknown" {
+function phaseTone(
+  phase: import("../state/safeApply").Phase,
+): "good" | "warn" | "bad" | "unknown" {
   switch (phase) {
     case "awaiting-confirmation":
       return "warn";

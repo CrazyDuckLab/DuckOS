@@ -92,7 +92,10 @@ export function Inspector({
 
       {objectPanel && (
         <div className="inspector-block" data-state="object">
-          <div className="v1-row" style={{ justifyContent: "space-between", alignItems: "baseline" }}>
+          <div
+            className="v1-row"
+            style={{ justifyContent: "space-between", alignItems: "baseline" }}
+          >
             <h3 style={{ marginBottom: 0 }}>{objectPanel.displayName}</h3>
             <button
               type="button"
@@ -105,8 +108,12 @@ export function Inspector({
               ✕
             </button>
           </div>
-          <p className="v1-subtle v1-fs-xs" style={{ marginTop: "var(--v1-s1)" }}>
-            {objectPanel.kind} · ref <code className="v1-mono">{objectPanel.ref}</code>
+          <p
+            className="v1-subtle v1-fs-xs"
+            style={{ marginTop: "var(--v1-s1)" }}
+          >
+            {objectPanel.kind} · ref{" "}
+            <code className="v1-mono">{objectPanel.ref}</code>
           </p>
           {objectPanel.status && (
             <p style={{ marginTop: "var(--v1-s2)" }}>
@@ -126,7 +133,10 @@ export function Inspector({
               </Fragment>
             ))}
           </dl>
-          <p className="v1-subtle v1-fs-xs" style={{ marginTop: "var(--v1-s2)" }}>
+          <p
+            className="v1-subtle v1-fs-xs"
+            style={{ marginTop: "var(--v1-s2)" }}
+          >
             Selected on <strong>{page.name}</strong> · page reference below.
           </p>
         </div>
@@ -143,24 +153,45 @@ export function Inspector({
 
       <div className="inspector-block">
         <h3>Configured · Desired · Observed · Verified</h3>
-        <ul className="v1-row" style={{ gap: "var(--v1-s2)", flexWrap: "wrap", listStyle: "none", padding: 0, marginTop: "var(--v1-s2)" }}>
-          <li className="v1-pill" data-state="unknown">configured</li>
-          <li className="v1-pill" data-state="unknown">desired</li>
-          <li className="v1-pill" data-state={page.implemented ? "good" : "warn"}>
+        <ul
+          className="v1-row"
+          style={{
+            gap: "var(--v1-s2)",
+            flexWrap: "wrap",
+            listStyle: "none",
+            padding: 0,
+            marginTop: "var(--v1-s2)",
+          }}
+        >
+          <li className="v1-pill" data-state="unknown">
+            configured
+          </li>
+          <li className="v1-pill" data-state="unknown">
+            desired
+          </li>
+          <li
+            className="v1-pill"
+            data-state={page.implemented ? "good" : "warn"}
+          >
             observed · {page.implemented ? "live" : "design only"}
           </li>
-          <li className="v1-pill" data-state="unknown">verified</li>
+          <li className="v1-pill" data-state="unknown">
+            verified
+          </li>
         </ul>
         <p className="v1-subtle v1-fs-xs" style={{ marginTop: "var(--v1-s2)" }}>
-          The dashboard never collapses these into a single status. Each
-          is set by the Engine independently.
+          The dashboard never collapses these into a single status. Each is set
+          by the Engine independently.
         </p>
       </div>
 
       <div className="inspector-block">
         <h3>{t(bundle, "shell.features")}</h3>
         <p style={{ marginTop: "var(--v1-s2)" }}>
-          {page.features.split(";").map((f) => f.trim()).join(" · ")}
+          {page.features
+            .split(";")
+            .map((f) => f.trim())
+            .join(" · ")}
         </p>
       </div>
 
@@ -197,7 +228,9 @@ export function Inspector({
 
       <div className="inspector-block">
         <h3>{t(bundle, "shell.risk")}</h3>
-        <span className="v1-risk" data-risk={page.risk}>{page.risk}</span>
+        <span className="v1-risk" data-risk={page.risk}>
+          {page.risk}
+        </span>
         <p style={{ marginTop: "var(--v1-s2)" }} className="v1-mute">
           {riskDescription(page.risk, bundle)}
         </p>
@@ -206,7 +239,10 @@ export function Inspector({
       {related.length > 0 && (
         <div className="inspector-block">
           <h3>Related pages</h3>
-          <ul className="v1-stack" style={{ listStyle: "none", padding: 0, marginTop: "var(--v1-s2)" }}>
+          <ul
+            className="v1-stack"
+            style={{ listStyle: "none", padding: 0, marginTop: "var(--v1-s2)" }}
+          >
             {related.map((id) => {
               const p = PAGES_BY_ID.get(id);
               if (!p) return null;
@@ -239,9 +275,9 @@ export function Inspector({
           </button>
         </div>
         <p className="v1-subtle v1-fs-xs" style={{ marginTop: "var(--v1-s2)" }}>
-          Commands are accurate per the documented CLI surface; the
-          dashboard never executes them. Never include private keys or
-          secrets in CLI examples.
+          Commands are accurate per the documented CLI surface; the dashboard
+          never executes them. Never include private keys or secrets in CLI
+          examples.
         </p>
       </div>
 
@@ -279,9 +315,9 @@ export function Inspector({
           <dd>{page.implemented ? "yes" : "no (design only)"}</dd>
         </dl>
         <p className="v1-subtle v1-fs-xs" style={{ marginTop: "var(--v1-s2)" }}>
-          The dashboard treats ownership and provenance as first-class:
-          every change is tied back to the same owner, and the dashboard
-          never claims to have done something the agent has not reported.
+          The dashboard treats ownership and provenance as first-class: every
+          change is tied back to the same owner, and the dashboard never claims
+          to have done something the agent has not reported.
         </p>
       </div>
     </aside>

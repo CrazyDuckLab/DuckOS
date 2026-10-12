@@ -27,7 +27,13 @@ interface StatePanelProps {
   detail?: ReactNode;
 }
 
-export function StatePanel({ state, title, body, actions, detail }: StatePanelProps) {
+export function StatePanel({
+  state,
+  title,
+  body,
+  actions,
+  detail,
+}: StatePanelProps) {
   return (
     <div className="v1-state" data-state={state}>
       <div className="state-head">

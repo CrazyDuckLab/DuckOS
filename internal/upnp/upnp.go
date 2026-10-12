@@ -211,7 +211,7 @@ type RuntimeStats struct {
 // BackendState is the canonical public snapshot of the
 // NetworkBackend the production wiring selected.
 type BackendState struct {
-	Kind       string `json:"kind"`               // "nftables" || "unavailable"
+	Kind       string `json:"kind"` // "nftables" || "unavailable"
 	Reason     string `json:"reason,omitempty"`
 	Since      string `json:"since,omitempty"`
 	Diagnostic string `json:"diagnostic,omitempty"`
@@ -382,8 +382,8 @@ var _ interface {
 // on every build target.
 type noopBackendCross struct{}
 
-func (noopBackendCross) Add(Mapping) error                { return nil }
-func (noopBackendCross) Remove(string) error              { return nil }
+func (noopBackendCross) Add(Mapping) error                 { return nil }
+func (noopBackendCross) Remove(string) error               { return nil }
 func (noopBackendCross) AllowListen(string, net.Addr) bool { return false }
 func (noopBackendCross) TrustIface(string)                 {}
 func (noopBackendCross) UntrustIface(string)               {}

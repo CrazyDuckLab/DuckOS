@@ -4,9 +4,9 @@
 // and asserts the runtime directory ownership model is
 // internally consistent. Three units
 //
-//   duck-agent.service
-//   duck-frr-launcher.service
-//   duck-wg-launcher.service
+//	duck-agent.service
+//	duck-frr-launcher.service
+//	duck-wg-launcher.service
 //
 // share /run/duckos-agent as their RuntimeDirectory.
 // systemd applies RuntimeDirectory=Mode and the unit's

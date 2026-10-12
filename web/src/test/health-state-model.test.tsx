@@ -143,11 +143,13 @@ function mkOverview(over: Partial<Overview> = {}): Overview {
 }
 
 class StubClient extends APIClient {
-  constructor(private opts: {
-    health?: FetchResult<HealthPayload>;
-    overview?: FetchResult<Overview>;
-    doctor?: FetchResult<unknown>;
-  }) {
+  constructor(
+    private opts: {
+      health?: FetchResult<HealthPayload>;
+      overview?: FetchResult<Overview>;
+      doctor?: FetchResult<unknown>;
+    },
+  ) {
     super({ token: "t", locale: "en", onFetch: () => {} } as never);
   }
   fetchHealth(): Promise<FetchResult<HealthPayload>> {
@@ -237,7 +239,9 @@ describe("Centralized health derivation matrix (9 scenarios A–I)", () => {
       health: opts.health ?? { ok: true, data: PROD_HEALTH, age: 0 },
       overview: opts.overview ?? {
         ok: true,
-        data: mkOverview({ observedAt: new Date(now - 30 * 1000).toISOString() }),
+        data: mkOverview({
+          observedAt: new Date(now - 30 * 1000).toISOString(),
+        }),
         age: 0,
       },
       doctor: opts.doctor ?? { ok: true, data: { findings: [] }, age: 0 },
@@ -292,7 +296,9 @@ describe("Centralized health derivation matrix (9 scenarios A–I)", () => {
       sources({
         overview: {
           ok: true,
-          data: mkOverview({ observedAt: new Date(now - 10 * 60 * 1000).toISOString() }),
+          data: mkOverview({
+            observedAt: new Date(now - 10 * 60 * 1000).toISOString(),
+          }),
           age: 0,
         },
       }),
@@ -307,7 +313,9 @@ describe("Centralized health derivation matrix (9 scenarios A–I)", () => {
       sources({
         overview: {
           ok: true,
-          data: mkOverview({ observedAt: new Date(now - 30 * 1000).toISOString() }),
+          data: mkOverview({
+            observedAt: new Date(now - 30 * 1000).toISOString(),
+          }),
           age: 0,
         },
       }),
@@ -358,7 +366,9 @@ describe("Centralized health derivation matrix (9 scenarios A–I)", () => {
       sources({
         overview: {
           ok: true,
-          data: mkOverview({ observedAt: new Date(now + 60 * 60 * 1000).toISOString() }),
+          data: mkOverview({
+            observedAt: new Date(now + 60 * 60 * 1000).toISOString(),
+          }),
           age: 0,
         },
       }),
@@ -375,7 +385,9 @@ describe("Centralized health derivation matrix (9 scenarios A–I)", () => {
       sources({
         overview: {
           ok: true,
-          data: mkOverview({ observedAt: new Date(now + 3 * 1000).toISOString() }),
+          data: mkOverview({
+            observedAt: new Date(now + 3 * 1000).toISOString(),
+          }),
           age: 0,
         },
       }),
@@ -460,7 +472,9 @@ describe("Surfaces consume the centralized derivation (no page-local optimistic 
     );
     // Wait for the doctor fetch to settle. The page must surface
     // the attention verdict in both the headline and the System tile.
-    expect((await findAllByText("Some things need attention")).length).toBeGreaterThan(0);
+    expect(
+      (await findAllByText("Some things need attention")).length,
+    ).toBeGreaterThan(0);
     const text = container.textContent ?? "";
     expect(text).not.toContain("Everything is working");
   });
@@ -479,7 +493,9 @@ describe("Surfaces consume the centralized derivation (no page-local optimistic 
     );
     // Wait for async overview fetch to settle. The headline h2 and
     // the System tile both show the incomplete verdict.
-    expect((await findAllByText("Status check incomplete")).length).toBeGreaterThan(0);
+    expect(
+      (await findAllByText("Status check incomplete")).length,
+    ).toBeGreaterThan(0);
     const text = container.textContent ?? "";
     expect(text).not.toContain("Everything is working");
     expect(text.toLowerCase()).toContain("incomplete");
@@ -695,7 +711,9 @@ describe("Health freeze: no local positive derivations", () => {
       // Allow microtasks to settle.
       await new Promise((r) => setTimeout(r, 30));
       const text = container.textContent ?? "";
-      expect(text, `scenario=${s.label}`).not.toContain("Everything is working");
+      expect(text, `scenario=${s.label}`).not.toContain(
+        "Everything is working",
+      );
     }
   });
 
@@ -731,7 +749,11 @@ describe("Health freeze: no local positive derivations", () => {
       {
         label: "missing-observation",
         opts: {
-          overview: { ok: true, data: mkOverview({ observedAt: "" }), age: 0 } as FetchResult<Overview>,
+          overview: {
+            ok: true,
+            data: mkOverview({ observedAt: "" }),
+            age: 0,
+          } as FetchResult<Overview>,
         },
       },
     ];
@@ -937,7 +959,9 @@ describe("Health freeze: no local positive derivations", () => {
       />,
     );
     // "Observation fresh" must appear regardless of Doctor findings.
-    expect((await findAllByText("Observation fresh")).length).toBeGreaterThan(0);
+    expect((await findAllByText("Observation fresh")).length).toBeGreaterThan(
+      0,
+    );
   });
 
   it("System Overview freshness is unchanged when Doctor request errors", async () => {
@@ -959,7 +983,9 @@ describe("Health freeze: no local positive derivations", () => {
         client={client}
       />,
     );
-    expect((await findAllByText("Observation fresh")).length).toBeGreaterThan(0);
+    expect((await findAllByText("Observation fresh")).length).toBeGreaterThan(
+      0,
+    );
   });
 });
 

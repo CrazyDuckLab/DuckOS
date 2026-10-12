@@ -750,7 +750,8 @@ const en: Messages = {
     vpn: {
       title: "VPN",
       hint: "WireGuard / Xray tunnels configured on this device.",
-      detail: "WireGuard and Xray servers are configured in the Tunnel section.",
+      detail:
+        "WireGuard and Xray servers are configured in the Tunnel section.",
       configure: "Configure VPN",
     },
     system: {
@@ -788,7 +789,8 @@ const en: Messages = {
       findingsHint: "Open Doctor for the full report.",
       findingsTitle: "Doctor findings",
       actionsTitle: "What you can do",
-      actionsHelp: "Backups, updates and recovery live in Full mode. Destructive actions stay behind Safe Apply.",
+      actionsHelp:
+        "Backups, updates and recovery live in Full mode. Destructive actions stay behind Safe Apply.",
       openDoctor: "Open Doctor",
       backup: "Backups",
       updates: "Updates",
@@ -820,8 +822,10 @@ const ru: Messages = {
       "Поиск по рабочему пространству, не по живой сети. Enter — открыть страницу.",
     modeEasy: "Просто",
     modeFull: "Полный",
-    modeEasyDescription: "Понятные задачи. Один вопрос за раз. Без скрытых действий.",
-    modeFullDescription: "Плотные таблицы, полные конфигураторы и маршруты к каждому объекту.",
+    modeEasyDescription:
+      "Понятные задачи. Один вопрос за раз. Без скрытых действий.",
+    modeFullDescription:
+      "Плотные таблицы, полные конфигураторы и маршруты к каждому объекту.",
     signOut: "Завершить сеанс",
     signIn: "Подключиться",
     timeTrusted: "Время доверено",
@@ -889,7 +893,8 @@ const ru: Messages = {
   overview: {
     ...en.overview,
     title: "Обзор системы",
-    description: "Что сейчас не работает, что работает и есть ли ожидающие изменения.",
+    description:
+      "Что сейчас не работает, что работает и есть ли ожидающие изменения.",
     issues: "Замеченные проблемы",
     noIssues: "Замечаний нет.",
     cpu: "ЦП",
@@ -927,7 +932,8 @@ const ru: Messages = {
   candidate: {
     ...en.candidate,
     title: "Ожидающие изменения",
-    empty: "Изменений нет. Система соответствует последней применённой ревизии.",
+    empty:
+      "Изменений нет. Система соответствует последней применённой ревизии.",
   },
   page: {
     easyHomeTitle: "Главная",
@@ -1094,8 +1100,7 @@ const ru: Messages = {
       step2: "2. Достижимость",
       step2Help: "Убедитесь, что backend достижим с DuckOS.",
       step3: "3. Порты и TLS",
-      step3Help:
-        "Откройте нужные порты и прикрепите TLS-сертификат.",
+      step3Help: "Откройте нужные порты и прикрепите TLS-сертификат.",
       currently: "Опубликованные",
       noSites: "Сайты ещё не публиковались.",
       configureAction: "Открыть Sites",
@@ -1109,7 +1114,8 @@ const ru: Messages = {
       findingsHint: "Откройте Doctor для полного отчёта.",
       findingsTitle: "Находки Doctor",
       actionsTitle: "Что можно сделать",
-      actionsHelp: "Резервные копии, обновления и восстановление — в полном режиме.",
+      actionsHelp:
+        "Резервные копии, обновления и восстановление — в полном режиме.",
       openDoctor: "Открыть Doctor",
       backup: "Резервные копии",
       updates: "Обновления",
@@ -1132,7 +1138,8 @@ const de: Messages = {
     modeEasy: "Einfach",
     modeFull: "Voll",
     modeEasyDescription: "Klare Aufgaben. Eine Frage nach der anderen.",
-    modeFullDescription: "Dichte Tabellen, volle Konfiguratoren, Wege zu jedem Objekt.",
+    modeFullDescription:
+      "Dichte Tabellen, volle Konfiguratoren, Wege zu jedem Objekt.",
     signOut: "Sitzung beenden",
     signIn: "Verbinden",
     timeTrusted: "Zeit vertrauenswürdig",
@@ -1341,7 +1348,8 @@ const de: Messages = {
     wifi: {
       title: "WLAN",
       hint: "Drahtlosnetze, die dieses Gerät bedient.",
-      detail: "Adapterstatus ist noch nicht über die öffentliche API verfügbar.",
+      detail:
+        "Adapterstatus ist noch nicht über die öffentliche API verfügbar.",
       configure: "WLAN einrichten",
     },
     networks: {
@@ -1362,7 +1370,8 @@ const de: Messages = {
     vpn: {
       title: "VPN",
       hint: "WireGuard- / Xray-Tunnel auf diesem Gerät.",
-      detail: "WireGuard- und Xray-Server werden im Tunnel-Bereich konfiguriert.",
+      detail:
+        "WireGuard- und Xray-Server werden im Tunnel-Bereich konfiguriert.",
       configure: "VPN einrichten",
     },
     system: {
@@ -1381,12 +1390,13 @@ const de: Messages = {
       hint: "Einen LAN-Dienst über DuckOS ins Internet freigeben.",
       stepsTitle: "Schritte",
       step1: "1. Name und Backend",
-      step1Help: "Geben Sie dem Dienst einen Namen und eine LAN-Backend-Adresse.",
+      step1Help:
+        "Geben Sie dem Dienst einen Namen und eine LAN-Backend-Adresse.",
       step2: "2. Erreichbarkeit",
-      step2Help: "Sicherstellen, dass die Backend-Adresse von DuckOS erreichbar ist.",
+      step2Help:
+        "Sicherstellen, dass die Backend-Adresse von DuckOS erreichbar ist.",
       step3: "3. Ports und TLS",
-      step3Help:
-        "Passende Ports öffnen und TLS-Zertifikat zuweisen.",
+      step3Help: "Passende Ports öffnen und TLS-Zertifikat zuweisen.",
       currently: "Aktuell veröffentlicht",
       noSites: "Es wurden noch keine Sites veröffentlicht.",
       configureAction: "Sites öffnen",
@@ -1400,7 +1410,8 @@ const de: Messages = {
       findingsHint: "Doctor für den vollständigen Bericht öffnen.",
       findingsTitle: "Doctor-Befunde",
       actionsTitle: "Was Sie tun können",
-      actionsHelp: "Backups, Updates und Wiederherstellung liegen im Voll-Modus.",
+      actionsHelp:
+        "Backups, Updates und Wiederherstellung liegen im Voll-Modus.",
       openDoctor: "Doctor öffnen",
       backup: "Backups",
       updates: "Updates",
@@ -1423,7 +1434,8 @@ const es: Messages = {
     modeEasy: "Fácil",
     modeFull: "Completo",
     modeEasyDescription: "Tareas claras. Una pregunta a la vez.",
-    modeFullDescription: "Tablas densas, configuradores completos, rutas a cada objeto.",
+    modeFullDescription:
+      "Tablas densas, configuradores completos, rutas a cada objeto.",
     signOut: "Cerrar sesión",
     signIn: "Conectar",
     timeTrusted: "Hora confiable",
@@ -1509,7 +1521,8 @@ const es: Messages = {
   candidate: {
     ...en.candidate,
     title: "Cambios pendientes",
-    empty: "Sin cambios pendientes. El sistema coincide con la última revisión.",
+    empty:
+      "Sin cambios pendientes. El sistema coincide con la última revisión.",
   },
   page: {
     easyHomeTitle: "Inicio",
@@ -1632,7 +1645,8 @@ const es: Messages = {
     wifi: {
       title: "Wi-Fi",
       hint: "Redes inalámbricas que opera este dispositivo.",
-      detail: "El estado del adaptador aún no está disponible en la API pública.",
+      detail:
+        "El estado del adaptador aún no está disponible en la API pública.",
       configure: "Configurar Wi-Fi",
     },
     networks: {
@@ -1653,7 +1667,8 @@ const es: Messages = {
     vpn: {
       title: "VPN",
       hint: "Túneles WireGuard / Xray configurados en este dispositivo.",
-      detail: "Los servidores WireGuard y Xray se configuran en la sección Túneles.",
+      detail:
+        "Los servidores WireGuard y Xray se configuran en la sección Túneles.",
       configure: "Configurar VPN",
     },
     system: {
@@ -1674,10 +1689,10 @@ const es: Messages = {
       step1: "1. Nombre y backend",
       step1Help: "Asigna al servicio un nombre y una dirección backend LAN.",
       step2: "2. Alcanzabilidad",
-      step2Help: "Asegúrate de que la dirección backend sea alcanzable desde DuckOS.",
+      step2Help:
+        "Asegúrate de que la dirección backend sea alcanzable desde DuckOS.",
       step3: "3. Puertos y TLS",
-      step3Help:
-        "Abre los puertos adecuados y asigna un certificado TLS.",
+      step3Help: "Abre los puertos adecuados y asigna un certificado TLS.",
       currently: "Publicado actualmente",
       noSites: "Aún no se han publicado sitios.",
       configureAction: "Abrir Sites",
@@ -1691,7 +1706,8 @@ const es: Messages = {
       findingsHint: "Abrir Doctor para el informe completo.",
       findingsTitle: "Hallazgos de Doctor",
       actionsTitle: "Qué puedes hacer",
-      actionsHelp: "Respaldos, actualizaciones y recuperación están en el modo Completo.",
+      actionsHelp:
+        "Respaldos, actualizaciones y recuperación están en el modo Completo.",
       openDoctor: "Abrir Doctor",
       backup: "Respaldos",
       updates: "Actualizaciones",
@@ -1721,7 +1737,11 @@ export function t(bundle: Messages, path: keyof Messages | string): string {
   const segments = String(path).split(".");
   let cursor: unknown = bundle;
   for (const segment of segments) {
-    if (cursor && typeof cursor === "object" && segment in (cursor as Record<string, unknown>)) {
+    if (
+      cursor &&
+      typeof cursor === "object" &&
+      segment in (cursor as Record<string, unknown>)
+    ) {
       cursor = (cursor as Record<string, unknown>)[segment];
     } else {
       cursor = undefined;
@@ -1733,7 +1753,11 @@ export function t(bundle: Messages, path: keyof Messages | string): string {
   }
   let fallback: unknown = en;
   for (const segment of segments) {
-    if (fallback && typeof fallback === "object" && segment in (fallback as Record<string, unknown>)) {
+    if (
+      fallback &&
+      typeof fallback === "object" &&
+      segment in (fallback as Record<string, unknown>)
+    ) {
       fallback = (fallback as Record<string, unknown>)[segment];
     } else {
       fallback = undefined;
@@ -1755,7 +1779,9 @@ export function detectLocale(): Locale {
   if (typeof document !== "undefined") {
     const htmlLocale = document.documentElement.getAttribute("data-locale");
     if (isValid(htmlLocale)) return htmlLocale;
-    const shellLocale = document.querySelector(".duck-shell")?.getAttribute("data-locale") ?? null;
+    const shellLocale =
+      document.querySelector(".duck-shell")?.getAttribute("data-locale") ??
+      null;
     if (isValid(shellLocale)) return shellLocale;
   }
   // 2. Fall back to the browser's preferred language.

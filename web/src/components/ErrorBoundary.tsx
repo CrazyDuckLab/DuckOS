@@ -13,7 +13,10 @@ export interface ErrorBoundaryProps {
   onError?: (error: Error, info: ErrorInfo) => void;
 }
 
-export class ErrorBoundary extends Component<ErrorBoundaryProps, { error: Error | null }> {
+export class ErrorBoundary extends Component<
+  ErrorBoundaryProps,
+  { error: Error | null }
+> {
   state = { error: null as Error | null };
 
   static getDerivedStateFromError(error: Error) {
@@ -32,7 +35,11 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, { error: Error 
   render() {
     if (this.state.error) {
       return (
-        <div className="v1-state v1-error-screen" data-state="error" role="alert">
+        <div
+          className="v1-state v1-error-screen"
+          data-state="error"
+          role="alert"
+        >
           <div className="state-head">
             <span className="v1-dot" data-state="bad" />
             <h3>The dashboard hit an unexpected error</h3>

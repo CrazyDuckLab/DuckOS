@@ -20,7 +20,10 @@ export function ShowCliPanel({
 }) {
   return (
     <div className="v1-show">
-      <div className="v1-row" style={{ alignItems: "center", gap: "var(--v1-s2)" }}>
+      <div
+        className="v1-row"
+        style={{ alignItems: "center", gap: "var(--v1-s2)" }}
+      >
         <strong>{bundle ? t(bundle, "inspector.cliLabel") : "Duck CLI"}</strong>
         <span className="v1-subtle v1-fs-xs">read-only — does not execute</span>
       </div>
@@ -44,8 +47,13 @@ export function ShowApiPanel({
 }) {
   return (
     <div className="v1-show">
-      <div className="v1-row" style={{ alignItems: "center", gap: "var(--v1-s2)" }}>
-        <strong>{bundle ? t(bundle, "inspector.apiLabel") : "Engine / API"}</strong>
+      <div
+        className="v1-row"
+        style={{ alignItems: "center", gap: "var(--v1-s2)" }}
+      >
+        <strong>
+          {bundle ? t(bundle, "inspector.apiLabel") : "Engine / API"}
+        </strong>
         <span className="v1-subtle v1-fs-xs">read-only — does not execute</span>
       </div>
       {hint && <div className="v1-subtle v1-fs-xs">{hint}</div>}
@@ -101,7 +109,14 @@ export function RuntimeEvidencePanel({
           <span className="ev-key">{r.key}</span>
           <span className={`ev-val ${r.mono ? "v1-mono" : ""}`}>
             {r.value}
-            {r.observed && <span className="v1-subtle v1-fs-xs" style={{ marginLeft: "var(--v1-s2)" }}>· {r.observed}</span>}
+            {r.observed && (
+              <span
+                className="v1-subtle v1-fs-xs"
+                style={{ marginLeft: "var(--v1-s2)" }}
+              >
+                · {r.observed}
+              </span>
+            )}
           </span>
         </div>
       ))}
@@ -139,7 +154,9 @@ export function RiskPanel({
           : "No commit-confirmed window — apply is irreversible.";
   return (
     <div className="v1-risk-panel">
-      <div className="v1-risk big-risk" data-risk={risk}>{risk}</div>
+      <div className="v1-risk big-risk" data-risk={risk}>
+        {risk}
+      </div>
       <div>
         <strong>{title}</strong>
         <p>{body}</p>

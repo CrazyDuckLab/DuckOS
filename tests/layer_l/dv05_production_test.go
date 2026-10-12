@@ -75,9 +75,9 @@ const dv05TestPassword = "Synthetic DV05 test password only 42!"
 // dv05Fixture wires the production authorization chain
 // end-to-end:
 //
-//   Engine -> real agent IPC -> identity.Service ->
-//   identity.PolicyStore -> api.Handler (identity +
-//   policy enabled) -> /api/v1/objects/wireguard.peer
+//	Engine -> real agent IPC -> identity.Service ->
+//	identity.PolicyStore -> api.Handler (identity +
+//	policy enabled) -> /api/v1/objects/wireguard.peer
 //
 // A NetworkAdmin role is provisioned (so the role matrix
 // allows Observe) and an explicit deny grant is added

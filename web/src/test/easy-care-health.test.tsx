@@ -54,10 +54,12 @@ class StubClient extends APIClient {
   private health: FetchResult<HealthPayload>;
   private doctor: FetchResult<unknown>;
 
-  constructor(opts: {
-    health?: FetchResult<HealthPayload>;
-    doctor?: FetchResult<unknown>;
-  } = {}) {
+  constructor(
+    opts: {
+      health?: FetchResult<HealthPayload>;
+      doctor?: FetchResult<unknown>;
+    } = {},
+  ) {
     super({
       token: "t",
       locale: "en",

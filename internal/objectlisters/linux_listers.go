@@ -65,8 +65,8 @@ type LinuxSource interface {
 // same honest envelope on source failure and the same
 // well-formed Complete=true envelope on success.
 type linuxLister struct {
-	kind string
-	src  LinuxSource
+	kind  string
+	src   LinuxSource
 	fetch func(ctx context.Context) ([]object.ViewObject, string, error)
 }
 

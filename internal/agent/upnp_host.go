@@ -285,13 +285,13 @@ type stubUPnPSource struct{}
 func (stubUPnPSource) EnableNetwork(upnp.Network, string) error {
 	return errors.New("upnp: agent is unavailable")
 }
-func (stubUPnPSource) DisableNetwork(string)               {}
-func (stubUPnPSource) Networks() []upnp.Network            { return nil }
-func (stubUPnPSource) Mappings() []upnp.Mapping            { return nil }
-func (stubUPnPSource) RevokeMapping(string)                {}
-func (stubUPnPSource) Stats() upnp.RuntimeStats            { return upnp.RuntimeStats{} }
-func (stubUPnPSource) TrustIface(string)                   {}
-func (stubUPnPSource) UntrustIface(string)                 {}
+func (stubUPnPSource) DisableNetwork(string)    {}
+func (stubUPnPSource) Networks() []upnp.Network { return nil }
+func (stubUPnPSource) Mappings() []upnp.Mapping { return nil }
+func (stubUPnPSource) RevokeMapping(string)     {}
+func (stubUPnPSource) Stats() upnp.RuntimeStats { return upnp.RuntimeStats{} }
+func (stubUPnPSource) TrustIface(string)        {}
+func (stubUPnPSource) UntrustIface(string)      {}
 
 type stubUPnPAccess struct{}
 

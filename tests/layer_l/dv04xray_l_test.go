@@ -47,7 +47,7 @@ func TestDV04XrayValidation(t *testing.T) {
 	}
 	if err := cat.UpsertUser(testCtx(), xray.User{
 		ID: "xray-user-1", ServerID: srv.ID, Name: "alice",
-		UUID: "deadbeef-dead-beef-dead-beefdeadbeef",
+		UUID:    "deadbeef-dead-beef-dead-beefdeadbeef",
 		Enabled: true, CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
 		t.Fatal(err)
@@ -94,7 +94,7 @@ func TestDV04XraySubscriptionQR(t *testing.T) {
 	sub := xray.Subscription{
 		ID: "xray-sub-1", Name: "main",
 		ProfileIDs: []string{"xray-profile-1"},
-		CreatedAt: now, UpdatedAt: now,
+		CreatedAt:  now, UpdatedAt: now,
 	}
 	if err := cat.UpsertSubscription(testCtx(), sub); err != nil {
 		t.Fatal(err)
@@ -155,7 +155,7 @@ func TestDV04XrayRestartNoResurrection(t *testing.T) {
 // decryption=none is mandatory for VLESS inbounds.
 func xrayFixtureConfig(s xray.Server, uuid string) []byte {
 	cfg := map[string]any{
-		"log":      map[string]string{"loglevel": "warning"},
+		"log": map[string]string{"loglevel": "warning"},
 		"inbounds": []map[string]any{
 			{
 				"listen":   s.Listen,

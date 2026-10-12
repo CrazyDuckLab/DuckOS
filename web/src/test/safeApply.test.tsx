@@ -23,8 +23,11 @@ import { useSafeApply } from "../state/safeApply";
 
 function ok<T>(data: T): FetchResult<T> {
   return { ok: true, data, age: 1 };
- }
-function fail(reason: "missing" | "unauthorized" | "failed", message = "x"): FetchResult<never> {
+}
+function fail(
+  reason: "missing" | "unauthorized" | "failed",
+  message = "x",
+): FetchResult<never> {
   return { ok: false, reason, message };
 }
 
@@ -62,7 +65,9 @@ describe("useSafeApply — happy path", () => {
     c.configDiff = vi.fn().mockResolvedValue(ok(diff));
     c.configApply = vi.fn().mockResolvedValue(ok(apply));
     c.configConfirm = vi.fn().mockResolvedValue(ok(confirm));
-    const { result } = renderHook(() => useSafeApply(c as unknown as APIClient));
+    const { result } = renderHook(() =>
+      useSafeApply(c as unknown as APIClient),
+    );
     expect(result.current.state.phase).toBe("idle");
     await act(async () => {
       await result.current.diffAndApply({ objects: [] });
@@ -79,7 +84,9 @@ describe("useSafeApply — happy path", () => {
   it("transitions to failed on diff rejection", async () => {
     const c = makeClient();
     c.configDiff = vi.fn().mockResolvedValue(fail("failed", "bad config"));
-    const { result } = renderHook(() => useSafeApply(c as unknown as APIClient));
+    const { result } = renderHook(() =>
+      useSafeApply(c as unknown as APIClient),
+    );
     await act(async () => {
       await result.current.diffAndApply({});
     });
@@ -88,14 +95,26 @@ describe("useSafeApply — happy path", () => {
   });
 
   it("transitions to rolled-back after rollback", async () => {
-    const diff: ConfigDiffResponse = { changes: [], issues: [], blastRadius: [] };
-    const apply: ConfigApplyResponse = { transactionId: "tx-2", deadline: Date.now() + 60_000 };
-    const rollback: ConfigRollbackResponse = { transactionId: "tx-2", revision: "rev-1" };
+    const diff: ConfigDiffResponse = {
+      changes: [],
+      issues: [],
+      blastRadius: [],
+    };
+    const apply: ConfigApplyResponse = {
+      transactionId: "tx-2",
+      deadline: Date.now() + 60_000,
+    };
+    const rollback: ConfigRollbackResponse = {
+      transactionId: "tx-2",
+      revision: "rev-1",
+    };
     const c = makeClient();
     c.configDiff = vi.fn().mockResolvedValue(ok(diff));
     c.configApply = vi.fn().mockResolvedValue(ok(apply));
     c.configRollback = vi.fn().mockResolvedValue(ok(rollback));
-    const { result } = renderHook(() => useSafeApply(c as unknown as APIClient));
+    const { result } = renderHook(() =>
+      useSafeApply(c as unknown as APIClient),
+    );
     await act(async () => {
       await result.current.diffAndApply({});
     });

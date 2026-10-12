@@ -94,10 +94,11 @@
   --radius-pill: 999px;
 
   /* type ramp */
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter",
-    "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
-  --font-mono: "SF Mono", Menlo, "Cascadia Mono", Consolas,
-    "Liberation Mono", monospace;
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Helvetica Neue",
+    Arial, "Noto Sans", "Liberation Sans", sans-serif;
+  --font-mono:
+    "SF Mono", Menlo, "Cascadia Mono", Consolas, "Liberation Mono", monospace;
   --fs-3xs: 11px;
   --fs-2xs: 12px;
   --fs-xs: 13px;

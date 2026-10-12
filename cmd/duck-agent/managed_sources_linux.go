@@ -206,9 +206,9 @@ func (linuxNetlink) MainRoutes() ([]network.KernelRoute, error) {
 }
 
 type ipRouteEntry struct {
-	Dst    string `json:"dst"`
-	Dev    string `json:"dev"`
-	Metric int    `json:"metric"`
+	Dst     string `json:"dst"`
+	Dev     string `json:"dev"`
+	Metric  int    `json:"metric"`
 	Gateway string `json:"gateway"`
 }
 

@@ -48,7 +48,7 @@ func canonicalConfig(vlanID int, address string) []byte {
 				"mtu":        1500,
 				"addresses":  []string{address},
 				"management": true,
-				"dhcpClient":  "none",
+				"dhcpClient": "none",
 			},
 		},
 		"routes": []map[string]any{},

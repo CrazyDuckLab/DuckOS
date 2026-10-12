@@ -37,7 +37,9 @@ const prefsValue = {
 };
 
 function wrap(node: React.ReactNode) {
-  return render(<PrefsContext.Provider value={prefsValue}>{node}</PrefsContext.Provider>);
+  return render(
+    <PrefsContext.Provider value={prefsValue}>{node}</PrefsContext.Provider>,
+  );
 }
 
 describe("UnsupportedFeature", () => {
@@ -62,7 +64,10 @@ describe("UnsupportedFeature", () => {
 
   it("shows the dependency list", () => {
     const page = PAGES_BY_ID.get("P033")!;
-    const deps = page.dependencies.split(/[,;]/).map((s) => s.trim()).filter(Boolean);
+    const deps = page.dependencies
+      .split(/[,;]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
     expect(deps.length).toBeGreaterThan(0);
     const { container } = wrap(
       <UnsupportedFeature page={page} bundle={bundle} />,

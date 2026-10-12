@@ -36,8 +36,15 @@ export interface DataColumn<T> {
 }
 
 /** Sort a copy of rows in place by `key` and direction. */
-function sortRows<T>(rows: T[], key: string, dir: "asc" | "desc", col: DataColumn<T>) {
-  const valueOf = col.sortValue ?? ((r: T) => (r as Record<string, unknown>)[key] as string | number);
+function sortRows<T>(
+  rows: T[],
+  key: string,
+  dir: "asc" | "desc",
+  col: DataColumn<T>,
+) {
+  const valueOf =
+    col.sortValue ??
+    ((r: T) => (r as Record<string, unknown>)[key] as string | number);
   const sorted = [...rows].sort((a, b) => {
     const va = valueOf(a);
     const vb = valueOf(b);
@@ -79,9 +86,10 @@ export function DataTable<T>({
    */
   selectedRowKey?: string | null;
 }) {
-  const [sort, setSort] = useState<{ key: string; direction: "asc" | "desc" } | null>(
-    initialSort ?? null,
-  );
+  const [sort, setSort] = useState<{
+    key: string;
+    direction: "asc" | "desc";
+  } | null>(initialSort ?? null);
   const [page, setPage] = useState(0);
 
   const sorted = useMemo(() => {
@@ -91,9 +99,13 @@ export function DataTable<T>({
     return sortRows([...rows], sort.key, sort.direction, col);
   }, [rows, sort, columns]);
 
-  const totalPages = pageSize ? Math.max(1, Math.ceil(sorted.length / pageSize)) : 1;
+  const totalPages = pageSize
+    ? Math.max(1, Math.ceil(sorted.length / pageSize))
+    : 1;
   const pageStart = pageSize ? page * pageSize : 0;
-  const pageEnd = pageSize ? Math.min(sorted.length, pageStart + pageSize) : sorted.length;
+  const pageEnd = pageSize
+    ? Math.min(sorted.length, pageStart + pageSize)
+    : sorted.length;
   const visible = pageSize ? sorted.slice(pageStart, pageEnd) : sorted;
 
   useEffect(() => {
@@ -112,84 +124,105 @@ export function DataTable<T>({
   return (
     <div className="v1-table-wrap">
       <div className="v1-table-scroll" role="region" aria-label="Data table">
-          <table className="v1-table">
-            <thead>
+        <table className="v1-table">
+          <thead>
+            <tr>
+              {columns.map((c) => {
+                const isSorted = sort?.key === c.key;
+                return (
+                  <th
+                    key={c.key}
+                    aria-sort={
+                      isSorted
+                        ? sort?.direction === "asc"
+                          ? "ascending"
+                          : "descending"
+                        : "none"
+                    }
+                    onClick={() => toggleSort(c.key, c.sortable)}
+                    style={{
+                      width: c.width,
+                      cursor: c.sortable === false ? "default" : "pointer",
+                    }}
+                    className={c.numeric ? "v1-num" : undefined}
+                  >
+                    {c.label}
+                    {isSorted && (
+                      <span aria-hidden="true">
+                        {sort?.direction === "asc" ? " ▲" : " ▼"}
+                      </span>
+                    )}
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {visible.length === 0 ? (
               <tr>
-                {columns.map((c) => {
-                  const isSorted = sort?.key === c.key;
-                  return (
-                    <th
-                      key={c.key}
-                      aria-sort={
-                        isSorted
-                          ? sort?.direction === "asc"
-                            ? "ascending"
-                            : "descending"
-                          : "none"
-                      }
-                      onClick={() => toggleSort(c.key, c.sortable)}
-                      style={{ width: c.width, cursor: c.sortable === false ? "default" : "pointer" }}
-                      className={c.numeric ? "v1-num" : undefined}
-                    >
-                      {c.label}
-                      {isSorted && (
-                        <span aria-hidden="true">{sort?.direction === "asc" ? " ▲" : " ▼"}</span>
-                      )}
-                    </th>
-                  );
-                })}
+                <td colSpan={columns.length} className="table-empty">
+                  {emptyState ??
+                    (bundle ? bundle.common.emptyRows : "No rows.")}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {visible.length === 0 ? (
-                <tr>
-                  <td colSpan={columns.length} className="table-empty">
-                    {emptyState ?? (bundle ? bundle.common.emptyRows : "No rows.")}
-                  </td>
-                </tr>
-              ) : (
-                visible.map((row, idx) => {
-                  const k = rowKey(row, pageStart + idx);
-                  const isSelected = selectedRowKey !== undefined && selectedRowKey === k;
-                  const clickable = onRowClick !== undefined;
-                  return (
-                    <tr
-                      key={k}
-                      className={isSelected ? "v1-selected" : undefined}
-                      aria-selected={isSelected ? "true" : undefined}
-                      onClick={clickable ? () => onRowClick!(row, pageStart + idx) : undefined}
-                      onKeyDown={
-                        clickable
-                          ? (e) => {
-                              if (e.key === "Enter" || e.key === " ") {
-                                e.preventDefault();
-                                onRowClick!(row, pageStart + idx);
-                              }
+            ) : (
+              visible.map((row, idx) => {
+                const k = rowKey(row, pageStart + idx);
+                const isSelected =
+                  selectedRowKey !== undefined && selectedRowKey === k;
+                const clickable = onRowClick !== undefined;
+                return (
+                  <tr
+                    key={k}
+                    className={isSelected ? "v1-selected" : undefined}
+                    aria-selected={isSelected ? "true" : undefined}
+                    onClick={
+                      clickable
+                        ? () => onRowClick!(row, pageStart + idx)
+                        : undefined
+                    }
+                    onKeyDown={
+                      clickable
+                        ? (e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              onRowClick!(row, pageStart + idx);
                             }
-                          : undefined
-                      }
-                      tabIndex={clickable ? 0 : undefined}
-                      role={clickable ? "button" : undefined}
-                    >
-                      {columns.map((c) => {
-                        const cls = c.numeric ? "v1-num" : c.mono ? "v1-mono" : undefined;
-                        return (
-                          <td key={c.key} className={cls}>
-                            {c.render
-                              ? c.render(row, pageStart + idx)
-                              : String((row as Record<string, unknown>)[c.key] ?? "—")}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                          }
+                        : undefined
+                    }
+                    tabIndex={clickable ? 0 : undefined}
+                    role={clickable ? "button" : undefined}
+                  >
+                    {columns.map((c) => {
+                      const cls = c.numeric
+                        ? "v1-num"
+                        : c.mono
+                          ? "v1-mono"
+                          : undefined;
+                      return (
+                        <td key={c.key} className={cls}>
+                          {c.render
+                            ? c.render(row, pageStart + idx)
+                            : String(
+                                (row as Record<string, unknown>)[c.key] ?? "—",
+                              )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
       {pageSize && totalPages > 1 && (
-        <div className="v1-table-pagination" role="navigation" aria-label="Pagination">
+        <div
+          className="v1-table-pagination"
+          role="navigation"
+          aria-label="Pagination"
+        >
           <button
             type="button"
             className="v1-btn"
