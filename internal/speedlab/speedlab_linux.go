@@ -61,6 +61,11 @@ type LinuxHost struct {
 	mu     sync.Mutex
 	cfg    runtimeConfig
 	active map[string]context.CancelFunc
+	// Finalize, when set, receives the terminal Summary of
+	// every collector goroutine (B-012: the Manager wires its
+	// Finalize here so completed probes release their
+	// concurrency slot and their result becomes observable).
+	Finalize func(id string, summary Summary)
 }
 
 // NewLinuxHost wires a runtime config to the Host. A nil
@@ -172,7 +177,13 @@ func (h *LinuxHost) run(ctx context.Context, req Request, tgt normalisedTarget, 
 		summary.Error = "speedlab: unknown kind"
 	}
 	summary.FinishedAt = time.Now().UTC()
-	_ = summary // Future: forward to a Manager.Finalize hook.
+	// B-012: report the terminal summary so the Manager
+	// releases the concurrency slot and Status observes the
+	// final state. Nil hook keeps the fire-and-forget
+	// behavior for standalone hosts.
+	if h.Finalize != nil {
+		h.Finalize(req.ID, summary)
+	}
 }
 
 // normalisedTarget is the resolved target after SSRF policy.

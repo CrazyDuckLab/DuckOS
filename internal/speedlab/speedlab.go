@@ -243,6 +243,7 @@ type Manager struct {
 	mu     sync.Mutex
 	host   Host
 	active map[string]Probe
+	done   map[string]Summary
 }
 
 // NewManager wires a Host to the Manager. A nil Host produces
@@ -251,7 +252,7 @@ func NewManager(host Host) *Manager {
 	if host == nil {
 		host = &unsupportedHost{}
 	}
-	return &Manager{host: host, active: map[string]Probe{}}
+	return &Manager{host: host, active: map[string]Probe{}, done: map[string]Summary{}}
 }
 
 // Start validates the Request, registers a pending probe and
@@ -296,11 +297,20 @@ func (m *Manager) Start(req Request) (ActiveRef, error) {
 func (m *Manager) Status(id string) (State, Summary, error) {
 	m.mu.Lock()
 	probe, ok := m.active[id]
-	m.mu.Unlock()
 	if !ok {
+		summary, done := m.done[id]
+		m.mu.Unlock()
+		if done {
+			if summary.Error != "" {
+				return StateFailed, summary, nil
+			}
+			return StateDone, summary, nil
+		}
 		return m.host.Status(id)
 	}
-	return probe.State, probe.Summary, nil
+	state, summary := probe.State, probe.Summary
+	m.mu.Unlock()
+	return state, summary, nil
 }
 
 // Cancel stops an in-flight probe.
@@ -335,14 +345,31 @@ func (m *Manager) List() []ActiveRef {
 // Finalize is called by the Host when a probe completes. The
 // Manager updates the local state, removes the probe from the
 // in-flight set and returns the final summary to the caller.
+// Finalize records the terminal Summary of a probe and
+// releases its concurrency slot. Called by the Host when the
+// collector goroutine finishes (B-012: without this call the
+// active slot leaked for the probe's lifetime beyond its run,
+// wedging the MaxConcurrent gate).
 func (m *Manager) Finalize(id string, summary Summary) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if _, ok := m.active[id]; !ok {
+	probe, ok := m.active[id]
+	if !ok {
 		return
 	}
-	summary.Status = string(StateDone)
+	summary.ID = id
+	summary.Kind = probe.Request.Kind
+	summary.Target = probe.Request.Target
+	if summary.StartedAt.IsZero() {
+		summary.StartedAt = probe.Summary.StartedAt
+	}
 	summary.FinishedAt = time.Now().UTC()
+	if summary.Error != "" {
+		summary.Status = string(StateFailed)
+	} else {
+		summary.Status = string(StateDone)
+	}
+	m.done[id] = summary
 	delete(m.active, id)
 }
 

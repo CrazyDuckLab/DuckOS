@@ -218,3 +218,108 @@ func TestIsExistsAcceptsBothIproute2ConflictWordings(t *testing.T) {
 		})
 	}
 }
+
+// B-011 regression: the production agent holds no capabilities, so
+// ApplyPeer must never exec wg via the Runner when a Typer is wired.
+// The launcher contract is a full WG_SET (replace_peers), so the peer
+// delta is merged into the server's peer list and the whole setconf
+// is re-applied through the privileged launcher.
+func TestAdapterApplyPeerDispatchesToLauncherWhenTyperSet(t *testing.T) {
+	server, priv := validServerFixture()
+	_, peerPub, err := GenerateServerKey()
+	if err != nil {
+		t.Fatalf("GenerateServerKey: %v", err)
+	}
+	existing := validPeerFixture(server.ID, peerPub)
+	server.Peers = []Peer{existing}
+	dir := t.TempDir()
+	cat, err := OpenFileCatalog(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cat.UpsertServer(context.Background(), server); err != nil {
+		t.Fatal(err)
+	}
+	if err := cat.UpsertPeer(context.Background(), existing); err != nil {
+		t.Fatal(err)
+	}
+	_, newPub, err := GenerateServerKey()
+	if err != nil {
+		t.Fatalf("GenerateServerKey: %v", err)
+	}
+	added := validPeerFixture(server.ID, newPub)
+	added.ID = "0123456789abcdef0123456789abcdef"
+	added.Name = "bob"
+	typer := &fakeTyper{}
+	runner := &fakeRunner{peers: map[string]bool{}}
+	fs := &fakeFilesystem{}
+	adapter := &KernelAdapter{
+		Resolver: staticResolver{key: priv},
+		Runner:   runner, // present, but must not be touched
+		Typer:    typer,  // production wiring
+		Files:    fs,
+		Catalog:  cat,
+	}
+	if err := adapter.ApplyPeer(context.Background(), added); err != nil {
+		t.Fatalf("ApplyPeer: %v", err)
+	}
+	if len(runner.commands) != 0 {
+		t.Fatalf("Runner.Run was invoked %d times; ApplyPeer must dispatch to Typer", len(runner.commands))
+	}
+	if typer.setConfPort != server.ListenPort {
+		t.Fatalf("Typer.SetConf port = %d, want %d", typer.setConfPort, server.ListenPort)
+	}
+	// The rendered peer list must contain both the existing and the
+	// newly added peer (full WG_SET replacement semantics).
+	if typer.setConfPeer != 2 {
+		t.Fatalf("Typer.SetConf peer count = %d, want 2 (existing + delta)", typer.setConfPeer)
+	}
+	if _, ok := fs.files["/etc/wireguard/"+server.Interface+".conf"]; !ok {
+		t.Fatal("config was not persisted under /etc/wireguard/<if>.conf")
+	}
+}
+
+// B-011 regression: disabling a peer through the launcher path must
+// drop it from the rendered peer set (the kernel-level remove), not
+// exec wg remove via the Runner.
+func TestAdapterApplyPeerDisableDispatchesToLauncherWhenTyperSet(t *testing.T) {
+	server, priv := validServerFixture()
+	_, peerPub, err := GenerateServerKey()
+	if err != nil {
+		t.Fatalf("GenerateServerKey: %v", err)
+	}
+	existing := validPeerFixture(server.ID, peerPub)
+	server.Peers = []Peer{existing}
+	dir := t.TempDir()
+	cat, err := OpenFileCatalog(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cat.UpsertServer(context.Background(), server); err != nil {
+		t.Fatal(err)
+	}
+	if err := cat.UpsertPeer(context.Background(), existing); err != nil {
+		t.Fatal(err)
+	}
+	disabled := existing
+	disabled.Enabled = false
+	typer := &fakeTyper{}
+	runner := &fakeRunner{peers: map[string]bool{}}
+	fs := &fakeFilesystem{}
+	adapter := &KernelAdapter{
+		Resolver: staticResolver{key: priv},
+		Runner:   runner,
+		Typer:    typer,
+		Files:    fs,
+		Catalog:  cat,
+	}
+	if err := adapter.ApplyPeer(context.Background(), disabled); err != nil {
+		t.Fatalf("ApplyPeer(disable): %v", err)
+	}
+	if len(runner.commands) != 0 {
+		t.Fatalf("Runner.Run was invoked %d times on disable; must dispatch to Typer", len(runner.commands))
+	}
+	if typer.setConfPeer != 0 {
+		t.Fatalf("Typer.SetConf peer count = %d, want 0 (disabled peer omitted)", typer.setConfPeer)
+	}
+}

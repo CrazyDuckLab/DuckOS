@@ -226,6 +226,34 @@ func (a *KernelAdapter) ApplyPeer(ctx context.Context, peer Peer) error {
 	if err != nil {
 		return fmt.Errorf("wireguard server for peer: %w", err)
 	}
+	// B-011 (BETA.2): when a.Typer is set (production wiring) the agent
+	// holds no capabilities, so the Runner-based wg set below would fail
+	// with EPERM. The launcher contract is a full WG_SET with
+	// replace_peers, so merge the peer delta into the catalog's flat
+	// peer list for this server and re-apply the whole setconf through
+	// the privileged launcher. A disabled peer is simply omitted from
+	// the rendered list, which is the kernel-level remove.
+	if a.Typer != nil {
+		catalogPeers, err := a.Catalog.ListPeers(ctx, server.ID)
+		if err != nil {
+			return fmt.Errorf("wireguard peer list for server: %w", err)
+		}
+		peers := make([]Peer, 0, len(catalogPeers)+1)
+		replaced := false
+		for _, existing := range catalogPeers {
+			if existing.ID == peer.ID {
+				peers = append(peers, peer)
+				replaced = true
+			} else {
+				peers = append(peers, existing)
+			}
+		}
+		if !replaced {
+			peers = append(peers, peer)
+		}
+		server.Peers = peers
+		return a.ApplyServerLauncher(ctx, server)
+	}
 	if !peer.Enabled {
 		// Disabling is implemented as a kernel-level
 		// remove. The catalog keeps the peer record

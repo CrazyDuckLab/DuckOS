@@ -930,6 +930,10 @@ func enableSpeedLabService(catalogDir, allowHosts string, access identityAccess)
 	})
 	// The Manager is the in-process store + concurrency gate.
 	mgr := speedlab.NewManager(linux)
+	// B-012: completed collector goroutines must release their
+	// concurrency slot and publish their terminal summary; the
+	// Manager's Finalize is the single terminal sink.
+	linux.Finalize = mgr.Finalize
 	host := agent.NewSpeedLabHost(mgr, access)
 	return host, nil
 }

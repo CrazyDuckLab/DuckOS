@@ -272,3 +272,59 @@ func itoa(i int) string {
 	}
 	return string(buf[pos:])
 }
+
+// B-012 regression: Finalize must release the concurrency slot and
+// leave the terminal summary observable through Status.
+func TestManagerFinalizeReleasesSlot(t *testing.T) {
+	m := NewManager(&fakeHost{})
+	var first Request
+	for i := 0; ; i++ {
+		if i >= MaxConcurrent+1 {
+			t.Fatal("cap never enforced")
+		}
+		r := newRequest(t)
+		r.ID = "probe-fill-" + itoa(i)
+		if _, err := m.Start(r); err != nil {
+			if i == 0 {
+				t.Fatal("cap enforced on the first probe")
+			}
+			break
+		}
+		if i == 0 {
+			first = r
+		}
+	}
+	m.Finalize(first.ID, Summary{Latency: LatencyStats{Count: 3}})
+	reuse := newRequest(t)
+	reuse.ID = "probe-reuse"
+	if _, err := m.Start(reuse); err != nil {
+		t.Fatalf("expected slot released after finalize, got %v", err)
+	}
+	state, summary, err := m.Status(first.ID)
+	if err != nil {
+		t.Fatalf("finalized probe status: %v", err)
+	}
+	if state != StateDone || summary.Status != string(StateDone) {
+		t.Fatalf("expected done state, got %s/%s", state, summary.Status)
+	}
+	if summary.Latency.Count != 3 {
+		t.Fatalf("expected terminal summary preserved, got %+v", summary)
+	}
+}
+
+// B-012 regression: a failed terminal summary must report failed state.
+func TestManagerFinalizeFailure(t *testing.T) {
+	m := NewManager(&fakeHost{})
+	r := newRequest(t)
+	if _, err := m.Start(r); err != nil {
+		t.Fatal(err)
+	}
+	m.Finalize(r.ID, Summary{Error: "dial timeout"})
+	state, summary, err := m.Status(r.ID)
+	if err != nil {
+		t.Fatalf("finalized probe status: %v", err)
+	}
+	if state != StateFailed || summary.Error == "" {
+		t.Fatalf("expected failed state with error, got %s/%q", state, summary.Error)
+	}
+}
