@@ -38,8 +38,13 @@ import (
 // alive.
 func makeStandaloneFakeFRR(t *testing.T, bin, ps string) (*exec.Cmd, int) {
 	t.Helper()
-	cmd := exec.Command("/bin/sh", "-c",
-		fmt.Sprintf("exec -a /usr/lib/frr/%s-fake-test /bin/sh -c 'while :; do sleep 1; done' -N %s", bin, ps))
+	// bash is required: dash (Debian /bin/sh) rejects the bash-only
+	// "exec -a" argv0 override, and plain sleep would reject the -N
+	// operand. bash -c accepts $0 = "-N" and loops forever, so the
+	// long-lived process's own /proc/<pid>/cmdline carries both the
+	// frr path and the pathspace.
+	cmd := exec.Command("/bin/bash", "-c",
+		fmt.Sprintf("exec -a /usr/lib/frr/%s-fake-test /bin/bash -c 'while :; do sleep 1; done' -N %s", bin, ps))
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start fake %s/%s: %v", ps, bin, err)

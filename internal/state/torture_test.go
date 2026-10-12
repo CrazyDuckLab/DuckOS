@@ -63,7 +63,12 @@ func TestTortureConcurrentWritersRace(t *testing.T) {
 			defer wg.Done()
 			for i := 0; i < iters; i++ {
 				snap, _ := s.Snapshot()
-				value := id*1000 + i
+				// Writers start at 1000 so the first candidate can
+				// never equal the initial {"value":0} state: an
+				// equal candidate is a plain "no changes" error,
+				// not a contention conflict, and writer 0 iteration
+				// 0 wins that race whenever the machine is fast.
+				value := (id+1)*1000 + i
 				cfg := json.RawMessage(fmt.Sprintf(`{"value":%d}`, value))
 				tx, err := s.Prepare(snap.Current.ID, cfg, "torture", "concurrent writers")
 				if err != nil {
