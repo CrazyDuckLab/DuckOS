@@ -3,28 +3,28 @@
 // dv04xray_production_test.go exercises DV04-XRAY through the
 // production code path:
 //
-//   PUBLIC ENTRYPOINT  -> httptest.Server that wraps the
-//                         agent.NewXrayHost
-//   ENGINE PATH        -> xray.API (the canonical IPC
-//                         loopback; same code as the Agent
-//                         binary)
-//   AGENT PATH         -> agent.NewXrayHost + the
-//                         ConfigureNetwork authorisation
-//                         gate + the runtime
-//   RUNTIME MUTATION   -> xray.Runtime.Apply via
-//                         /tmp/duckos-test/xray/xray run
-//                         -c <path> (cold start) or
-//                         SIGUSR1 (hot reload)
-//   INDEPENDENT ORACLE -> independent /tmp/duckos-test/xray/xray
-//                         api statsquery + /sbin/ss -ltn
-//                         listener probe on the
-//                         configured Listen:Port
-//   RESTART/DURABILITY -> re-open the durable catalog,
-//                         invoke host.Reconcile, re-read
-//                         the runtime state
-//   NEGATIVE CASE      -> invalid protocol / security /
-//                         malformed UUID / agent-unavailable
-//                         (no host) / missing xray binary
+//	PUBLIC ENTRYPOINT  -> httptest.Server that wraps the
+//	                      agent.NewXrayHost
+//	ENGINE PATH        -> xray.API (the canonical IPC
+//	                      loopback; same code as the Agent
+//	                      binary)
+//	AGENT PATH         -> agent.NewXrayHost + the
+//	                      ConfigureNetwork authorisation
+//	                      gate + the runtime
+//	RUNTIME MUTATION   -> xray.Runtime.Apply via
+//	                      /tmp/duckos-test/xray/xray run
+//	                      -c <path> (cold start) or
+//	                      SIGUSR1 (hot reload)
+//	INDEPENDENT ORACLE -> independent /tmp/duckos-test/xray/xray
+//	                      api statsquery + /sbin/ss -ltn
+//	                      listener probe on the
+//	                      configured Listen:Port
+//	RESTART/DURABILITY -> re-open the durable catalog,
+//	                      invoke host.Reconcile, re-read
+//	                      the runtime state
+//	NEGATIVE CASE      -> invalid protocol / security /
+//	                      malformed UUID / agent-unavailable
+//	                      (no host) / missing xray binary
 //
 // The test runs against the duck-dev-01 Linux fixture.
 // The xray binary lives at /tmp/duckos-test/xray/xray
@@ -118,7 +118,7 @@ func newXrayFixture(t *testing.T) *xrayFixture {
 	api := &xray.API{
 		Access:  access,
 		Catalog: cat,
-		Apply:   rt.Apply,
+		Apply:   rt.ApplyWith,
 		Prefix:  "/xray/v1/",
 	}
 	host := agent.NewXrayHost(api, access, rt)

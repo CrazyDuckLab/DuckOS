@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -51,7 +52,7 @@ func newHTTPServer(t *testing.T, handler http.Handler) *httptest.Server {
 func newHostWithAllow(t *testing.T, allowed []string) *LinuxHost {
 	t.Helper()
 	return NewLinuxHost(runtimeConfig{
-		AllowedHosts: allowed,
+		AllowedHosts:  allowed,
 		AllowLoopback: true,
 		AllowPrivate:  true,
 		DialTimeout:   500 * time.Millisecond,
@@ -68,12 +69,12 @@ func TestLinuxHost_LatencySuccess(t *testing.T) {
 	fmt.Sscanf(port, "%d", &p)
 	h := newHostWithAllow(t, []string{host})
 	req := Request{
-		ID:   "probe-lat-1",
-		Kind: KindLatency,
-		Target: Target{Host: host, Port: p},
-		Duration: 500 * time.Millisecond,
+		ID:         "probe-lat-1",
+		Kind:       KindLatency,
+		Target:     Target{Host: host, Port: p},
+		Duration:   1 * time.Second,
 		MaxSamples: 4,
-		CreatedAt: time.Now().UTC(),
+		CreatedAt:  time.Now().UTC(),
 	}
 	ref, err := h.Start(req)
 	if err != nil {
@@ -115,12 +116,12 @@ func TestLinuxHost_HTTPSuccess(t *testing.T) {
 	host, _, _ := net.SplitHostPort(u.Host)
 	h := newHostWithAllow(t, []string{host})
 	req := Request{
-		ID:   "probe-http-1",
-		Kind: KindHTTP,
-		Target: Target{URL: srv.URL},
-		Duration: 300 * time.Millisecond,
+		ID:         "probe-http-1",
+		Kind:       KindHTTP,
+		Target:     Target{URL: srv.URL},
+		Duration:   1 * time.Second,
 		MaxSamples: 3,
-		CreatedAt: time.Now().UTC(),
+		CreatedAt:  time.Now().UTC(),
 	}
 	ref, err := h.Start(req)
 	if err != nil {
@@ -142,12 +143,12 @@ func TestLinuxHost_ThroughputSuccess(t *testing.T) {
 	host, _, _ := net.SplitHostPort(u.Host)
 	h := newHostWithAllow(t, []string{host})
 	req := Request{
-		ID:   "probe-tp-1",
-		Kind: KindThroughput,
-		Target: Target{URL: srv.URL},
-		Duration: 200 * time.Millisecond,
+		ID:         "probe-tp-1",
+		Kind:       KindThroughput,
+		Target:     Target{URL: srv.URL},
+		Duration:   1 * time.Second,
 		MaxSamples: 1,
-		CreatedAt: time.Now().UTC(),
+		CreatedAt:  time.Now().UTC(),
 	}
 	if _, err := h.Start(req); err != nil {
 		t.Fatalf("Start: %v", err)
@@ -164,12 +165,12 @@ func TestLinuxHost_Cancel(t *testing.T) {
 	fmt.Sscanf(port, "%d", &p)
 	h := newHostWithAllow(t, []string{host})
 	req := Request{
-		ID:   "probe-cancel-1",
-		Kind: KindLatency,
-		Target: Target{Host: host, Port: p},
-		Duration: 2 * time.Second,
+		ID:         "probe-cancel-1",
+		Kind:       KindLatency,
+		Target:     Target{Host: host, Port: p},
+		Duration:   2 * time.Second,
 		MaxSamples: 100,
-		CreatedAt: time.Now().UTC(),
+		CreatedAt:  time.Now().UTC(),
 	}
 	if _, err := h.Start(req); err != nil {
 		t.Fatalf("Start: %v", err)
@@ -188,17 +189,17 @@ func TestLinuxHost_Cancel(t *testing.T) {
 // 5. SSRF: a target not in the allow-list is refused.
 func TestLinuxHost_SSRFAllowListBlocks(t *testing.T) {
 	h := NewLinuxHost(runtimeConfig{
-		AllowedHosts: []string{"allowed.example"},
+		AllowedHosts:  []string{"allowed.example"},
 		AllowLoopback: false,
 		AllowPrivate:  false,
 	})
 	req := Request{
-		ID:   "probe-ssrf-1",
-		Kind: KindLatency,
-		Target: Target{Host: "evil.example", Port: 80},
-		Duration: 100 * time.Millisecond,
+		ID:         "probe-ssrf-1",
+		Kind:       KindLatency,
+		Target:     Target{Host: "evil.example", Port: 80},
+		Duration:   1 * time.Second,
 		MaxSamples: 1,
-		CreatedAt: time.Now().UTC(),
+		CreatedAt:  time.Now().UTC(),
 	}
 	if _, err := h.Start(req); err == nil {
 		t.Fatalf("expected SSRF refusal")
@@ -209,12 +210,12 @@ func TestLinuxHost_SSRFAllowListBlocks(t *testing.T) {
 func TestLinuxHost_SSRFEmptyAllowListRefusesAll(t *testing.T) {
 	h := NewLinuxHost(runtimeConfig{AllowLoopback: true, AllowPrivate: true})
 	req := Request{
-		ID:   "probe-empty-1",
-		Kind: KindLatency,
-		Target: Target{Host: "anything.example", Port: 80},
-		Duration: 100 * time.Millisecond,
+		ID:         "probe-empty-1",
+		Kind:       KindLatency,
+		Target:     Target{Host: "anything.example", Port: 80},
+		Duration:   1 * time.Second,
 		MaxSamples: 1,
-		CreatedAt: time.Now().UTC(),
+		CreatedAt:  time.Now().UTC(),
 	}
 	if _, err := h.Start(req); err == nil {
 		t.Fatalf("expected refusal on empty allow-list")
@@ -233,12 +234,12 @@ func TestLinuxHost_SSRFLoopbackBlocked(t *testing.T) {
 		AllowLoopback: false,
 	})
 	req := Request{
-		ID:   "probe-lo-1",
-		Kind: KindLatency,
-		Target: Target{Host: "127.0.0.1", Port: p},
-		Duration: 100 * time.Millisecond,
+		ID:         "probe-lo-1",
+		Kind:       KindLatency,
+		Target:     Target{Host: "127.0.0.1", Port: p},
+		Duration:   1 * time.Second,
 		MaxSamples: 1,
-		CreatedAt: time.Now().UTC(),
+		CreatedAt:  time.Now().UTC(),
 	}
 	if _, err := h.Start(req); err == nil {
 		t.Fatalf("expected loopback refusal")
@@ -249,12 +250,12 @@ func TestLinuxHost_SSRFLoopbackBlocked(t *testing.T) {
 func TestLinuxHost_InvalidPortRejected(t *testing.T) {
 	h := newHostWithAllow(t, []string{"x"})
 	req := Request{
-		ID:   "probe-port-1",
-		Kind: KindLatency,
-		Target: Target{Host: "x", Port: 0},
-		Duration: 100 * time.Millisecond,
+		ID:         "probe-port-1",
+		Kind:       KindLatency,
+		Target:     Target{Host: "x", Port: 0},
+		Duration:   1 * time.Second,
 		MaxSamples: 1,
-		CreatedAt: time.Now().UTC(),
+		CreatedAt:  time.Now().UTC(),
 	}
 	if _, err := h.Start(req); err == nil {
 		t.Fatalf("expected port rejection")
@@ -265,12 +266,12 @@ func TestLinuxHost_InvalidPortRejected(t *testing.T) {
 func TestLinuxHost_InvalidURLRejected(t *testing.T) {
 	h := newHostWithAllow(t, []string{"x"})
 	req := Request{
-		ID:   "probe-url-1",
-		Kind: KindHTTP,
-		Target: Target{URL: "ftp://x"},
-		Duration: 100 * time.Millisecond,
+		ID:         "probe-url-1",
+		Kind:       KindHTTP,
+		Target:     Target{URL: "ftp://x"},
+		Duration:   1 * time.Second,
 		MaxSamples: 1,
-		CreatedAt: time.Now().UTC(),
+		CreatedAt:  time.Now().UTC(),
 	}
 	if _, err := h.Start(req); err == nil {
 		t.Fatalf("expected URL scheme rejection")
@@ -291,12 +292,12 @@ func TestLinuxHost_TimeoutRefuses(t *testing.T) {
 	fmt.Sscanf(port, "%d", &p)
 	h := newHostWithAllow(t, []string{host})
 	req := Request{
-		ID:   "probe-timeout-1",
-		Kind: KindLatency,
-		Target: Target{Host: host, Port: p},
-		Duration:  600 * time.Millisecond,
+		ID:         "probe-timeout-1",
+		Kind:       KindLatency,
+		Target:     Target{Host: host, Port: p},
+		Duration:   1 * time.Second,
 		MaxSamples: 100,
-		CreatedAt: time.Now().UTC(),
+		CreatedAt:  time.Now().UTC(),
 	}
 	if _, err := h.Start(req); err != nil {
 		t.Fatalf("Start: %v", err)
@@ -312,12 +313,12 @@ func TestLinuxHost_ServerDisappearsMidTest(t *testing.T) {
 	fmt.Sscanf(port, "%d", &p)
 	h := newHostWithAllow(t, []string{host})
 	req := Request{
-		ID:   "probe-disappear-1",
-		Kind: KindLatency,
-		Target: Target{Host: host, Port: p},
-		Duration:  500 * time.Millisecond,
+		ID:         "probe-disappear-1",
+		Kind:       KindLatency,
+		Target:     Target{Host: host, Port: p},
+		Duration:   1 * time.Second,
 		MaxSamples: 8,
-		CreatedAt: time.Now().UTC(),
+		CreatedAt:  time.Now().UTC(),
 	}
 	if _, err := h.Start(req); err != nil {
 		t.Fatalf("Start: %v", err)
@@ -338,12 +339,12 @@ func TestLinuxHost_DuplicateIDRejected(t *testing.T) {
 	fmt.Sscanf(port, "%d", &p)
 	h := newHostWithAllow(t, []string{host})
 	req := Request{
-		ID:   "probe-dup-1",
-		Kind: KindLatency,
-		Target: Target{Host: host, Port: p},
-		Duration:  500 * time.Millisecond,
+		ID:         "probe-dup-1",
+		Kind:       KindLatency,
+		Target:     Target{Host: host, Port: p},
+		Duration:   1 * time.Second,
 		MaxSamples: 2,
-		CreatedAt: time.Now().UTC(),
+		CreatedAt:  time.Now().UTC(),
 	}
 	if _, err := h.Start(req); err != nil {
 		t.Fatalf("Start: %v", err)
@@ -414,12 +415,12 @@ func TestLinuxHost_List_OnlyInflight(t *testing.T) {
 		t.Fatalf("empty list expected")
 	}
 	req := Request{
-		ID:   "probe-list-1",
-		Kind: KindLatency,
-		Target: Target{Host: host, Port: p},
-		Duration:  600 * time.Millisecond,
+		ID:         "probe-list-1",
+		Kind:       KindLatency,
+		Target:     Target{Host: host, Port: p},
+		Duration:   1 * time.Second,
 		MaxSamples: 4,
-		CreatedAt: time.Now().UTC(),
+		CreatedAt:  time.Now().UTC(),
 	}
 	if _, err := h.Start(req); err != nil {
 		t.Fatalf("Start: %v", err)
@@ -460,7 +461,7 @@ func TestLinuxHost_ConcurrentBounded(t *testing.T) {
 			ID:         fmt.Sprintf("probe-conc-%d", i),
 			Kind:       KindLatency,
 			Target:     Target{Host: "127.0.0.1", Port: 65000},
-			Duration:   100 * time.Millisecond,
+			Duration:   1 * time.Second,
 			MaxSamples: 1,
 			CreatedAt:  time.Now().UTC(),
 		}
@@ -489,7 +490,7 @@ func TestLinuxHost_ContextCancellation(t *testing.T) {
 		ID:         "probe-ctx-1",
 		Kind:       KindLatency,
 		Target:     Target{Host: "127.0.0.1", Port: 65000},
-		Duration:   50 * time.Millisecond,
+		Duration:   1 * time.Second,
 		MaxSamples: 1,
 		CreatedAt:  time.Now().UTC(),
 	}
@@ -516,7 +517,7 @@ func TestLinuxHost_ConcurrentProbesIsolated(t *testing.T) {
 				ID:         id,
 				Kind:       KindLatency,
 				Target:     Target{Host: host, Port: p},
-				Duration:   300 * time.Millisecond,
+				Duration:   1 * time.Second,
 				MaxSamples: 3,
 				CreatedAt:  time.Now().UTC(),
 			}
@@ -546,7 +547,7 @@ func TestLinuxHost_HTTPNoBodyBytesLeak(t *testing.T) {
 		ID:         "probe-noleak-1",
 		Kind:       KindHTTP,
 		Target:     Target{URL: srv.URL},
-		Duration:   200 * time.Millisecond,
+		Duration:   1 * time.Second,
 		MaxSamples: 2,
 		CreatedAt:  time.Now().UTC(),
 	}
@@ -604,7 +605,7 @@ func TestLinuxHost_CancelRaceSafe(t *testing.T) {
 			ID:         fmt.Sprintf("probe-race-%d", i),
 			Kind:       KindLatency,
 			Target:     Target{Host: host, Port: p},
-			Duration:   500 * time.Millisecond,
+			Duration:   1 * time.Second,
 			MaxSamples: 5,
 			CreatedAt:  time.Now().UTC(),
 		}
@@ -616,10 +617,10 @@ func TestLinuxHost_CancelRaceSafe(t *testing.T) {
 // 26. ssrf: isRFC1918 / isCGNAT / isULA classifications.
 func TestSSRFClassifications(t *testing.T) {
 	cases := []struct {
-		ip       string
-		rfc1918  bool
-		cgnat    bool
-		ula      bool
+		ip      string
+		rfc1918 bool
+		cgnat   bool
+		ula     bool
 	}{
 		{"10.0.0.1", true, false, false},
 		{"172.16.0.1", true, false, false},
@@ -660,7 +661,7 @@ func TestLinuxHost_Start_DuplicateIDReturnsError(t *testing.T) {
 		ID:         "probe-dup-x",
 		Kind:       KindLatency,
 		Target:     Target{Host: host, Port: p},
-		Duration:   300 * time.Millisecond,
+		Duration:   1 * time.Second,
 		MaxSamples: 2,
 		CreatedAt:  time.Now().UTC(),
 	}
@@ -683,25 +684,35 @@ func TestNormaliseTarget_FTPSchemeRejected(t *testing.T) {
 
 // 29. newBoundedClient refuses redirects.
 func TestNewBoundedClient_RefusesRedirects(t *testing.T) {
-	var saw int
+	var saw, dest int32
 	mux := http.NewServeMux()
 	mux.HandleFunc("/r", func(w http.ResponseWriter, r *http.Request) {
-		saw++
+		atomic.AddInt32(&saw, 1)
 		http.Redirect(w, r, "/dest", http.StatusFound)
 	})
 	mux.HandleFunc("/dest", func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&dest, 1)
 		w.WriteHeader(http.StatusOK)
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 	c := newBoundedClient(runtimeConfig{AllowLoopback: true, AllowPrivate: true})
 	req, _ := http.NewRequest(http.MethodHead, srv.URL+"/r", nil)
-	_, err := c.Do(req)
-	if err == nil {
-		t.Fatal("expected redirect refusal")
+	resp, err := c.Do(req)
+	if err != nil {
+		t.Fatalf("Do: %v", err)
 	}
-	if saw != 1 {
-		t.Fatalf("redirect target hit %d times", saw)
+	// CheckRedirect returns http.ErrUseLastResponse: the 302
+	// is surfaced to the caller and the target is never
+	// followed, so the probe cannot bounce across hosts.
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("status: %d, want 302", resp.StatusCode)
+	}
+	if n := atomic.LoadInt32(&dest); n != 0 {
+		t.Fatalf("redirect target followed %d times", n)
+	}
+	if n := atomic.LoadInt32(&saw); n != 1 {
+		t.Fatalf("redirect source hit %d times", n)
 	}
 }
 

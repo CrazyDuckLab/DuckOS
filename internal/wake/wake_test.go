@@ -75,11 +75,15 @@ func TestValidate_ReasonTooLong(t *testing.T) {
 
 func TestManager_RateLimit(t *testing.T) {
 	m := NewManager()
-	for i := 0; i < 5; i++ {
-		if _, err := m.Send(SendOpts{Target: "AA:BB:CC:DD:EE:FF", Port: 9, Packets: 1}); err != nil {
-			t.Fatalf("send %d: %v", i, err)
-		}
-	}
+	// Pre-seed the current 1-second window to the refusal
+	// threshold: firing five real bursts and requiring all of
+	// them to land inside one unix-second makes the test
+	// flaky on a loaded host (a boundary crossing legitimately
+	// resets the window mid-test).
+	m.mu.Lock()
+	m.lastMin = time.Now().UTC().Unix()
+	m.count = 5
+	m.mu.Unlock()
 	if _, err := m.Send(SendOpts{Target: "AA:BB:CC:DD:EE:FF", Port: 9, Packets: 1}); err == nil {
 		t.Fatal("expected rate limit refusal")
 	}
@@ -250,16 +254,23 @@ func TestValidate_ShortMAC(t *testing.T) {
 
 func TestManager_RateWindowResets(t *testing.T) {
 	m := NewManager()
-	for i := 0; i < 5; i++ {
-		_, _ = m.Send(SendOpts{Target: "AA:BB:CC:DD:EE:FF", Port: 9, Packets: 1})
-	}
+	// Pre-seed the current 1-second window to the refusal
+	// threshold instead of firing six real bursts: on a
+	// loaded host six rapid Sends can straddle a
+	// unix-second boundary, which legitimately resets the
+	// window mid-test and makes the refusal flaky.
+	m.mu.Lock()
+	m.lastMin = time.Now().UTC().Unix()
+	m.count = 5
+	m.mu.Unlock()
 	if _, err := m.Send(SendOpts{Target: "AA:BB:CC:DD:EE:FF", Port: 9, Packets: 1}); err == nil {
 		t.Fatal("expected rate limit refusal")
 	}
-	// Direct reset rather than waiting 1 s.
+	// Advance the observed window by one second: the next
+	// Send must reset the counter and go through.
 	m.mu.Lock()
-	m.lastMin = 0
-	m.count = 0
+	m.lastMin = time.Now().UTC().Unix() - 1
+	m.count = 5
 	m.mu.Unlock()
 	if _, err := m.Send(SendOpts{Target: "AA:BB:CC:DD:EE:FF", Port: 9, Packets: 1}); err != nil {
 		t.Fatalf("after reset: %v", err)

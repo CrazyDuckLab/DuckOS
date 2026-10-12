@@ -38,7 +38,7 @@ func TestH05ProductionLastUserRevocation(t *testing.T) {
 	catalog := filepath.Join(dir, "catalog")
 	key := strings.Repeat("k", 64)
 	access := identity.ForwardedAccess{Secret: key}
-	host, err := enableXrayService(catalog, access)
+	host, err := enableXrayService(catalog, access, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +102,7 @@ func TestH05ProductionLastUserRevocation(t *testing.T) {
 		if err := host.Runtime.Stop(); err != nil {
 			t.Fatal(err)
 		}
-		host, err = enableXrayService(catalog, access)
+		host, err = enableXrayService(catalog, access, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

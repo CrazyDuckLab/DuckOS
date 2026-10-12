@@ -207,6 +207,7 @@ func TestIsExistsAcceptsBothIproute2ConflictWordings(t *testing.T) {
 		{"nil", nil, true},
 		{"old wording", errors.New("RTNETLINK answers: File exists"), true},
 		{"new wording", errors.New("Error: ipv4: Address already assigned."), true},
+		{"launcher ownership gate", errors.New(`interface "wg-edge1" already exists`), true},
 		{"unrelated", errors.New("some other error"), false},
 	}
 	for _, tc := range cases {

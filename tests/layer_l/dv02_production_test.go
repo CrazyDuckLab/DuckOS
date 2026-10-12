@@ -74,6 +74,7 @@ type dv02Fixture struct {
 	netns        string
 	sockPath     string
 	listener     net.Listener
+	agentSrv     *http.Server
 	adapter      *netnsApplyAdapter
 	canonical    *state.Store
 	exec         *state.Store
@@ -226,7 +227,7 @@ func (a *netnsApplyAdapter) runNetNS(args ...string) error {
 // admit the ready startup state.
 type dv02EmptyBootKernel struct{ tables []int }
 
-func (k *dv02EmptyBootKernel) EnrolledTables() []int         { return append([]int(nil), k.tables...) }
+func (k *dv02EmptyBootKernel) EnrolledTables() []int { return append([]int(nil), k.tables...) }
 func (k *dv02EmptyBootKernel) CaptureRoutes(context.Context) (network.RouteSnapshot, error) {
 	return network.RouteSnapshot{Version: 1, Tables: append([]int{}, k.tables...)}, nil
 }
@@ -307,7 +308,14 @@ func newDV02Fixture(t *testing.T) *dv02Fixture {
 	}
 	ah := agent.NewHandler(nil)
 	ah.EnableNetwork(service)
-	go func() { _ = http.Serve(listener, ah) }()
+	// Serve through http.Server so tests can simulate a real
+	// agent death: Server.Close() tears down the listener AND
+	// every already-accepted keep-alive connection, exactly
+	// what happens when the duck-agent process exits. Closing
+	// only the listener leaves pooled engine connections alive
+	// and the engine cannot see the outage.
+	agentSrv := &http.Server{Handler: ah}
+	go func() { _ = agentSrv.Serve(listener) }()
 
 	eng := engine.New(sockPath, "test")
 	networking, err := eng.EnableNetworking(canonicalStore)
@@ -359,6 +367,7 @@ func newDV02Fixture(t *testing.T) *dv02Fixture {
 		netns:        netns,
 		sockPath:     sockPath,
 		listener:     listener,
+		agentSrv:     agentSrv,
 		adapter:      adapter,
 		canonical:    canonicalStore,
 		exec:         execStore,
@@ -374,6 +383,7 @@ func newDV02Fixture(t *testing.T) *dv02Fixture {
 	}
 	t.Cleanup(func() {
 		apiSrv.Close()
+		_ = agentSrv.Close()
 		_ = apiHandler.Close()
 		_ = listener.Close()
 		_ = controller.Close()
@@ -485,7 +495,7 @@ func (f *dv02Fixture) readStateJSON(t *testing.T, dir string) state.Snapshot {
 	// decode the payload explicitly so we observe the same
 	// fields the Engine surfaces.
 	var env struct {
-		Digest  string        `json:"digest"`
+		Digest  string         `json:"digest"`
 		Payload state.Snapshot `json:"payload"`
 	}
 	if err := json.Unmarshal(data, &env); err != nil {
@@ -548,16 +558,16 @@ func dv02CandidateConfig(cidr string) network.Config {
 // TestDV02ProductionPathApplyMutatesKernel is the canonical
 // DV02 production-path witness. The full chain runs:
 //
-//   POST /api/v1/config/apply    (Engine.Config.Prepare -> Networking.Apply ->
-//                                  Agent /agent/v1/network/apply ->
-//                                  safeapply.Worker.SubmitRequest ->
-//                                  safeapply.Controller.ApplyRequest ->
-//                                  netns adapter: ip netns exec <ns> ip addr add)
-//   POST /api/v1/config/rollback (Engine.Config.Rollback -> Networking.Rollback ->
-//                                  Agent /agent/v1/network/rollback ->
-//                                  safeapply.Worker.RejectAdmission ->
-//                                  safeapply.Controller.rollbackLocked ->
-//                                  netns adapter.Restore)
+//	POST /api/v1/config/apply    (Engine.Config.Prepare -> Networking.Apply ->
+//	                               Agent /agent/v1/network/apply ->
+//	                               safeapply.Worker.SubmitRequest ->
+//	                               safeapply.Controller.ApplyRequest ->
+//	                               netns adapter: ip netns exec <ns> ip addr add)
+//	POST /api/v1/config/rollback (Engine.Config.Rollback -> Networking.Rollback ->
+//	                               Agent /agent/v1/network/rollback ->
+//	                               safeapply.Worker.RejectAdmission ->
+//	                               safeapply.Controller.rollbackLocked ->
+//	                               netns adapter.Restore)
 //
 // Independent oracle (separate os/exec) reads both the
 // canonical state.json AND observes the kernel address via
@@ -653,8 +663,6 @@ func TestDV02ProductionPathApplyMutatesKernel(t *testing.T) {
 	t.Fatalf("rollback did not remove 10.99.99.10: %s", f.addrOracle(t, "dummy0"))
 }
 
-
-
 // TestDV02ProductionPathTimeoutRollback confirms the
 // durable safe-apply window: an applied transaction that
 // the caller never confirms must be auto-rolled-back by the
@@ -711,15 +719,15 @@ func TestDV02ProductionPathTimeoutRollback(t *testing.T) {
 // TestDV02ProductionPathIdempotencyByRequestID confirms the
 // production-boundary RequestID idempotency contract:
 //
-//   1. First POST /apply with RequestID=X, body=B1 admits a
-//      transaction; canonical journal records the outcome.
-//   2. Second POST /apply with the same RequestID=X, body=B1
-//      is idempotent — the canonical journal returns the
-//      prior outcome without re-running the adapter.
-//   3. Third POST /apply with the same RequestID=X, body=B2
-//      (conflicting body) is rejected with 409 conflict —
-//      caller identity reuse with a conflicting body is
-//      never silently admitted.
+//  1. First POST /apply with RequestID=X, body=B1 admits a
+//     transaction; canonical journal records the outcome.
+//  2. Second POST /apply with the same RequestID=X, body=B1
+//     is idempotent — the canonical journal returns the
+//     prior outcome without re-running the adapter.
+//  3. Third POST /apply with the same RequestID=X, body=B2
+//     (conflicting body) is rejected with 409 conflict —
+//     caller identity reuse with a conflicting body is
+//     never silently admitted.
 func TestDV02ProductionPathIdempotencyByRequestID(t *testing.T) {
 	f := newDV02Fixture(t)
 	cidr := "10.99.99.12/24"
@@ -1075,7 +1083,14 @@ func TestDV02ProductionPathAgentUnavailableNoFakeSuccess(t *testing.T) {
 	f := newDV02Fixture(t)
 	before := f.addrOracle(t, "dummy0")
 
-	_ = f.listener.Close()
+	// Kill the agent the way the process manager would:
+	// listener plus every live keep-alive connection. Closing
+	// only the listener would leave the engine's pooled
+	// connections serving requests from a handler that no
+	// longer has an accept loop - an outage no real host can
+	// produce.
+	_ = f.agentSrv.Close()
+	f.agentSrv = nil
 	f.listener = nil
 
 	code, body := f.postConfig(t, "apply", "", engine.ConfigApplyRequest{Expected: f.currentRevID(t), Candidate: mustJSON(t, dv02CandidateConfig("10.99.99.14/24")), Actor: "duckdev", Reason: "dv02-test"})
@@ -1091,7 +1106,8 @@ func TestDV02ProductionPathAgentUnavailableNoFakeSuccess(t *testing.T) {
 		t.Fatalf("re-listen: %v", err)
 	}
 	f.listener = reListener
-	go func() { _ = http.Serve(reListener, f.handler) }()
+	f.agentSrv = &http.Server{Handler: f.handler}
+	go func() { _ = f.agentSrv.Serve(reListener) }()
 
 	after := f.addrOracle(t, "dummy0")
 	if before != after {

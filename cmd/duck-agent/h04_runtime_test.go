@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -136,10 +138,58 @@ func remediationIsolatedNetwork(t *testing.T) bool {
 	return true
 }
 
+// spawnTestLauncher builds and runs a private
+// duck-wg-launcher with a fresh owned-state directory and a
+// private socket, then points the package-level socket
+// override at it. Production tests must never drive the
+// host's live launcher: it persists owned interfaces and
+// re-creates them (qualified boot recovery), which both
+// pollutes the host and resurrects interfaces from failed
+// runs across netns boundaries.
+func spawnTestLauncher(t *testing.T) {
+	t.Helper()
+	bin := filepath.Join(t.TempDir(), "duck-wg-launcher")
+	build := exec.Command(filepath.Join(runtime.GOROOT(), "bin", "go"), "build", "-o", bin, "./cmd/duck-wg-launcher")
+	build.Dir = "../.."
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build duck-wg-launcher: %v %s", err, out)
+	}
+	work := t.TempDir()
+	sock := filepath.Join(work, "wg-launcher.sock")
+	cmd := exec.Command(bin,
+		"-listen", sock,
+		"-state", filepath.Join(work, "state"),
+		"-secret", "/run/duckos-agent/secret",
+		"-agent-uid", fmt.Sprintf("%d", os.Geteuid()),
+	)
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start launcher: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_, _ = cmd.Process.Wait()
+	})
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(sock); err == nil {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	old := wireguard.WGLauncherSocket
+	wireguard.WGLauncherSocket = func() string { return sock }
+	t.Cleanup(func() { wireguard.WGLauncherSocket = old })
+}
+
 func TestH04ProductionVaultAndKernelRestart(t *testing.T) {
 	if !remediationIsolatedNetwork(t) {
 		return
 	}
+	// The test drives a private launcher against the real
+	// kernel inside the netns. A leftover interface from a
+	// crashed run must never mask the create path.
+	_ = exec.Command("ip", "link", "del", "wg-h04").Run()
+	spawnTestLauncher(t)
 	dir := t.TempDir()
 	master := filepath.Join(dir, "master.key")
 	if err := os.WriteFile(master, bytes.Repeat([]byte{7}, 32), 0600); err != nil {
@@ -208,7 +258,7 @@ func TestH04ProductionVaultAndKernelRestart(t *testing.T) {
 		}
 		return out
 	}
-	server := wireguard.Server{ID: strings.Repeat("1", 32), Name: "h04", Interface: "duckh04wg", ListenPort: 51820, Addresses: []string{"10.66.66.1/24"}, PrivateKeyRef: wireguard.KeyRef{VaultID: ref.ID, Revision: ref.Revision, KeyID: ref.KeyID}, PublicKey: public}
+	server := wireguard.Server{ID: strings.Repeat("1", 32), Name: "h04", Interface: "wg-h04", ListenPort: 51820, Addresses: []string{"10.66.66.1/24"}, PrivateKeyRef: wireguard.KeyRef{VaultID: ref.ID, Revision: ref.Revision, KeyID: ref.KeyID}, PublicKey: public}
 	call("POST", "servers", server, "", 401)
 	call("POST", "servers", server, token, 201)
 	peerKey, peerPublic, err := wireguard.GenerateServerKey()

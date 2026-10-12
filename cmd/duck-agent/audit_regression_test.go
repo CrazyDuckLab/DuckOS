@@ -23,7 +23,7 @@ func TestPrivilegedWGAndXrayRequireIdentityAccess(t *testing.T) {
 	if host, err := enableWireguardService(t.TempDir(), t.TempDir(), nil, nil); err == nil || host != nil {
 		t.Fatalf("wireguard service must fail closed without identity access; host=%v err=%v", host, err)
 	}
-	if host, err := enableXrayService(t.TempDir(), nil); err == nil || host != nil {
+	if host, err := enableXrayService(t.TempDir(), nil, nil); err == nil || host != nil {
 		t.Fatalf("xray service must fail closed without identity access; host=%v err=%v", host, err)
 	}
 }

@@ -29,15 +29,33 @@ import (
 // makeStandaloneFakeFRR spawns a process whose
 // /proc/<pid>/cmdline matches /usr/lib/frr/<bin> with
 // -N <ps>. Returns the cmd and the PID.
+//
+// The -N <ps> arguments must be part of the long-running
+// process's own argv. Handing them to sleep(1) does not
+// work: GNU sleep rejects "-N" as an invalid operand and
+// exits before the assertion runs. The sh -c wrapper
+// accepts them as $0/$1 while the loop keeps the process
+// alive.
 func makeStandaloneFakeFRR(t *testing.T, bin, ps string) (*exec.Cmd, int) {
 	t.Helper()
 	cmd := exec.Command("/bin/sh", "-c",
-		fmt.Sprintf("exec -a /usr/lib/frr/%s-fake-test sleep 600 -N %s", bin, ps))
+		fmt.Sprintf("exec -a /usr/lib/frr/%s-fake-test /bin/sh -c 'while :; do sleep 1; done' -N %s", bin, ps))
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start fake %s/%s: %v", ps, bin, err)
 	}
-	time.Sleep(50 * time.Millisecond)
+	// Wait until the kernel actually published the faked
+	// cmdline: a fixed sleep races process startup on a
+	// loaded host and reads either an empty or the outer
+	// shell's /proc/<pid>/cmdline.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if data, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", cmd.Process.Pid)); err == nil &&
+			strings.Contains(string(data), "-N "+ps) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	return cmd, cmd.Process.Pid
 }
 
@@ -119,10 +137,14 @@ func TestKillPidsLocked_RefusesRecycledPID(t *testing.T) {
 // with "OK ..." or "ERR <message>\n". launcherSend wraps
 // non-OK replies as fmt.Errorf("launcher <cmd>: <body>").
 func TestLauncherSend_ErrorContract(t *testing.T) {
-	// We can't stand up a real launcher here (would
-	// require the binary and root), so we test the
-	// error path: an unreachable socket returns a
-	// dial error, not an "ERR line".
+	// The launcher socket is a var precisely so tests can
+	// pin it to a dead path: on a host with a live
+	// duck-frr-launcher (e.g. a qualified lab VM) the real
+	// daemon would answer PING and the "unreachable"
+	// contract would never be exercised.
+	old := frrLauncherSocket
+	frrLauncherSocket = func() string { return "/nonexistent/duckos-frr-test.sock" }
+	t.Cleanup(func() { frrLauncherSocket = old })
 	err := launcherSend("PING")
 	if err == nil {
 		t.Skip("launcher socket reachable in this environment; skipping error-contract test")

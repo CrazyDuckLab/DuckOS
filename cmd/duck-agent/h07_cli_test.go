@@ -23,6 +23,10 @@ func TestH07RealCLITunnelPublicParity(t *testing.T) {
 	if !remediationIsolatedNetwork(t) {
 		return
 	}
+	// Same private-launcher hygiene as H04: drop any interface
+	// a previous crashed run leaked, then isolate the launcher.
+	_ = exec.Command("ip", "link", "del", "wg-h07").Run()
+	spawnTestLauncher(t)
 	dir := t.TempDir()
 	cli := filepath.Join(dir, "duck")
 	build := exec.Command(filepath.Join(runtime.GOROOT(), "bin", "go"), "build", "-o", cli, "./cmd/duck")
@@ -55,7 +59,7 @@ func TestH07RealCLITunnelPublicParity(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("DUCKOS_XRAY_STAGE", filepath.Join(dir, "xray-runtime"))
-	xHost, err := enableXrayService(filepath.Join(dir, "xray-catalog"), access)
+	xHost, err := enableXrayService(filepath.Join(dir, "xray-catalog"), access, vault)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +106,7 @@ func TestH07RealCLITunnelPublicParity(t *testing.T) {
 		}
 		return path
 	}
-	server := wireguard.Server{ID: strings.Repeat("1", 32), Name: "h07", Interface: "duckh07wg", ListenPort: 51820, Addresses: []string{"10.67.67.1/24"}, PrivateKeyRef: wireguard.KeyRef{VaultID: ref.ID, Revision: ref.Revision, KeyID: ref.KeyID}, PublicKey: public}
+	server := wireguard.Server{ID: strings.Repeat("1", 32), Name: "h07", Interface: "wg-h07", ListenPort: 51820, Addresses: []string{"10.67.67.1/24"}, PrivateKeyRef: wireguard.KeyRef{VaultID: ref.ID, Revision: ref.Revision, KeyID: ref.KeyID}, PublicKey: public}
 	run(srv.URL, false, "wireguard", "servers", "create", "--server", write("server.json", server))
 	out := run(srv.URL, false, "wireguard", "servers", "list")
 	var listed []wireguard.Server

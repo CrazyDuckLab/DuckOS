@@ -50,16 +50,25 @@ func TestHexToPrefixLength_RegressionRBACLive(t *testing.T) {
 		want string
 		note string
 	}{
-		{"0000FFFF", "16", "/16 mask in LE"},
+		// Hex values are what the kernel prints in
+		// /proc/net/route on little-endian: the u32
+		// host-byte-order value in %08X. For a /N netmask the
+		// printed value byte-swaps to the MSB-contiguous mask.
+		{"0000FFFF", "16", "/16 mask in LE (255.255.0.0)"},
 		{"00000000", "0", "/0 default mask"},
 		{"FFFFFFFF", "32", "/32 host mask"},
-		{"00000080", "25", "/25 mask"},
-		{"000000C0", "26", "/26 mask"},
-		{"80000000", "1", "/1 mask"},
+		{"80FFFFFF", "25", "/25 mask (255.255.255.128)"},
+		{"C0FFFFFF", "26", "/26 mask (255.255.255.192)"},
+		{"00000080", "1", "/1 mask (128.0.0.0)"},
 	}
-	// Non-contiguous: must error.
+	// Non-contiguous: must error ("7F000000" byte-swaps to
+	// 0x0000007F, a mask no kernel ever writes).
 	if _, err := hexToPrefixLength("7F000000"); err == nil {
 		t.Errorf("non-contiguous mask must error")
+	}
+	// Wrong byte length: must error, not silently succeed.
+	if _, err := hexToPrefixLength("0000"); err == nil {
+		t.Errorf("wrong-length mask must error")
 	}
 	for _, c := range cases {
 		got, err := hexToPrefixLength(c.hex)

@@ -80,6 +80,17 @@ func (f *fakeLauncher) handle(conn net.Conn) {
 	}
 }
 
+// lines returns a snapshot of the recorded protocol
+// lines. Every read from test goroutines must go
+// through this accessor: the connection handlers append
+// from their own goroutines and -race flags any
+// unsynchronized read of the slice.
+func (f *fakeLauncher) lines() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.Received...)
+}
+
 // newTestClient wires a LauncherClient at the supplied
 // socket and secret dir.
 func newTestClient(t *testing.T, fl *fakeLauncher, secretDir string) *LauncherClient {
@@ -108,8 +119,8 @@ func TestLauncherClient_LinkAdd(t *testing.T) {
 		"OP op=LINK_ADD ifname=wg-edge1 kind=wireguard",
 		"DONE",
 	}
-	if !equalLines(fl.Received, want) {
-		t.Fatalf("launcher received:\n%s\nwant:\n%s", strings.Join(fl.Received, "\n"), strings.Join(want, "\n"))
+	if !equalLines(fl.lines(), want) {
+		t.Fatalf("launcher received:\n%s\nwant:\n%s", strings.Join(fl.lines(), "\n"), strings.Join(want, "\n"))
 	}
 }
 
@@ -124,8 +135,8 @@ func TestLauncherClient_LinkDel(t *testing.T) {
 		"OP op=LINK_DEL ifname=wg-edge1",
 		"DONE",
 	}
-	if !equalLines(fl.Received, want) {
-		t.Fatalf("launcher received:\n%s\nwant:\n%s", strings.Join(fl.Received, "\n"), strings.Join(want, "\n"))
+	if !equalLines(fl.lines(), want) {
+		t.Fatalf("launcher received:\n%s\nwant:\n%s", strings.Join(fl.lines(), "\n"), strings.Join(want, "\n"))
 	}
 }
 
@@ -138,12 +149,12 @@ func TestLauncherClient_AddrAdd(t *testing.T) {
 	if err := c.AddrAdd("wg-edge1", "10.0.0.1/24"); err != nil {
 		t.Fatalf("AddrAdd: %v", err)
 	}
-	for _, line := range fl.Received {
+	for _, line := range fl.lines() {
 		if strings.Contains(line, "address=10.0.0.1/24") {
 			return
 		}
 	}
-	t.Fatalf("launcher never saw the address; received=%s", strings.Join(fl.Received, "\n"))
+	t.Fatalf("launcher never saw the address; received=%s", strings.Join(fl.lines(), "\n"))
 }
 
 func TestLauncherClient_AddrAdd_RejectsBadPrefix(t *testing.T) {
@@ -152,8 +163,8 @@ func TestLauncherClient_AddrAdd_RejectsBadPrefix(t *testing.T) {
 	if err := c.AddrAdd("wg-edge1", "10.0.0.1"); err == nil {
 		t.Fatalf("non-CIDR address must fail at the runner")
 	}
-	if len(fl.Received) != 0 {
-		t.Fatalf("launcher saw a request for an invalid prefix; received=%v", fl.Received)
+	if len(fl.lines()) != 0 {
+		t.Fatalf("launcher saw a request for an invalid prefix; received=%v", fl.lines())
 	}
 }
 
@@ -175,7 +186,7 @@ func TestLauncherClient_SetConfPrivateKey(t *testing.T) {
 	// OP line with private_key_file pointing into
 	// secretDir.
 	var foundFile bool
-	for _, line := range fl.Received {
+	for _, line := range fl.lines() {
 		if strings.Contains(line, "private_key_file="+secretDir) {
 			foundFile = true
 		}
@@ -186,7 +197,7 @@ func TestLauncherClient_SetConfPrivateKey(t *testing.T) {
 		}
 	}
 	if !foundFile {
-		t.Fatalf("launcher never saw private_key_file under secretDir; received=%v", fl.Received)
+		t.Fatalf("launcher never saw private_key_file under secretDir; received=%v", fl.lines())
 	}
 	// The temp file the client created MUST be
 	// removed after the SetConf returns so the key
@@ -220,13 +231,13 @@ func TestLauncherClient_SetConfPeers(t *testing.T) {
 		t.Fatalf("SetConf: %v", err)
 	}
 	var sawPeer bool
-	for _, line := range fl.Received {
+	for _, line := range fl.lines() {
 		if strings.Contains(line, "public=kZqPLkFBVCjoSTRcC3ZFGpVSPlc5WoqdH7jLfvL1FW0=") {
 			sawPeer = true
 		}
 	}
 	if !sawPeer {
-		t.Fatalf("launcher never saw the peer; lines=%v", fl.Received)
+		t.Fatalf("launcher never saw the peer; lines=%v", fl.lines())
 	}
 }
 
@@ -243,7 +254,7 @@ func TestLauncherClient_DoesNotLogSecretBytes(t *testing.T) {
 	if err := c.SetConf("wg-edge1", 51820, key, nil); err != nil {
 		t.Fatalf("SetConf: %v", err)
 	}
-	for _, line := range fl.Received {
+	for _, line := range fl.lines() {
 		if strings.Contains(line, "SECRET") {
 			t.Fatalf("secret bytes leaked into protocol line: %s", line)
 		}
@@ -282,7 +293,7 @@ func TestLauncherClient_AuthoriseIsPerCall(t *testing.T) {
 	// Give the server a moment to drain.
 	time.Sleep(50 * time.Millisecond)
 	count := 0
-	for _, line := range fl.Received {
+	for _, line := range fl.lines() {
 		if strings.HasPrefix(line, "OP op=LINK_ADD") {
 			count++
 		}
@@ -307,7 +318,7 @@ func TestLauncherClient_SetConf_NonCanonicalIfname(t *testing.T) {
 	// future refactor that adds client-side gating
 	// has the regression test in place.
 	_ = c.SetConf("eth0", 51820, nil, nil)
-	if !sawOP(fl.Received, "ifname=eth0") {
+	if !sawOP(fl.lines(), "ifname=eth0") {
 		t.Fatalf("expected launcher to receive the op")
 	}
 }
