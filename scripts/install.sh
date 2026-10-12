@@ -84,14 +84,18 @@ install_xray_backend() {
   # helper so unit tests that extract just this function still
   # see the trust anchor.
   #
-  # Sourced from the upstream XTLS/Xray-core v26.3.27 release:
+  # Sourced from the upstream XTLS/Xray-core v26.3.27 release
+  # (digest of the extracted "xray" ELF, NOT the .zip archive):
   #   amd64  -> Xray-linux-64.zip
   #   armv7  -> Xray-linux-arm32-v7a.zip  (Debian armhf target)
   #   arm64  -> Xray-linux-arm64-v8a.zip  (Debian arm64 target)
+  # scripts/stage_xray.sh re-derives these digests from the
+  # downloaded upstream zip at build time and fails the build if
+  # they ever disagree, so the pins cannot silently drift.
   local XRAY_CORE_VERSIONS=(
     'amd64:Xray-linux-64:8255dd939c34cf966cc91517b6324dd3c8d0bcf49ffac8beca049a38c46845ed'
-    'armv7:Xray-linux-arm32-v7a:c7265ae13c63ca0241a037df4ef960ad37938c8a67d984cc08834b2cfdf5654b'
-    'arm64:Xray-linux-arm64-v8a:4d30283ae614e3057f730f67cd088a42be6fdf91f8639d82cb69e48cde80413c'
+    'armv7:Xray-linux-arm32-v7a:b7ea2a82185f0f7a59510b01b24a93cc3c45529dabbf3c97970ad66c49c6b882'
+    'arm64:Xray-linux-arm64-v8a:c2d20a7045250497083afea0d79db0672f6c89a25aaaf37c92de034d6b764b04'
   )
   [[ -n "$release_dir" ]] || { printf 'xray backend install requires the release directory\n' >&2; return 1; }
 
@@ -300,7 +304,7 @@ verify_artifact() {
     else fail 'Special files are not allowed in artifacts.'; fi
   done < <(find "$root" -mindepth 1 -print0)
   [[ $count -eq $((${#manifest_paths[@]} + 1)) ]] || fail 'Artifact inventory mismatch.'
-  for relative in VERSION BUILD-INFO.json install.sh bin/duck-api bin/duck-agent bin/duck-updater bin/duck-restore systemd/duck-restore.service systemd/duck-updater.service systemd/duck-api.service systemd/duck-agent.service systemd/duck-dnsmasq.service systemd/duck-network-recover.service web/index.html; do
+  for relative in VERSION BUILD-INFO.json install.sh bin/duck-api bin/duck-agent bin/duck-updater bin/duck-restore systemd/duck-restore.service systemd/duck-updater.service systemd/duck-api.service systemd/duck-agent.service systemd/duck-dnsmasq.service systemd/duck-network-recover.service web/index.html xray-core/XRAY_CORE_VERSION xray-core/XRAY_CORE_LICENSE xray-core/XRAY_CORE_SHA256SUMS; do
     has_path "$relative" || fail "Required artifact file is missing: $relative"
   done
   [[ $(wc -c < "$root/VERSION") -le 80 ]] || fail 'VERSION is too long.'
@@ -340,6 +344,22 @@ verify_artifact() {
     machine=$(od -An -tx1 -j18 -N2 "$root/bin/$binary" | tr -d ' \n')
     [[ "$magic" == "7f454c46$expected_elf_class" && "$machine" == "$expected_elf_machine" ]] || fail "$binary must be a Linux $arch_label binary; got ELF magic ${magic:0:14} e_machine ${machine:-??}."
   done
+  # The vendored xray-core binary must match the pin embedded in the
+  # artifact's own install.sh for the artifact's target architecture.
+  # This catches the zip-digest-vs-ELF-digest pin class of defect at
+  # verification time, before publication, without network access.
+  case "$metadata_arch" in
+    amd64) xray_binary='Xray-linux-64' ;;
+    arm64) xray_binary='Xray-linux-arm64-v8a' ;;
+    armv7) xray_binary='Xray-linux-arm32-v7a' ;;
+  esac
+  [[ -f "$root/xray-core/$xray_binary" && ! -L "$root/xray-core/$xray_binary" ]] || fail "Required artifact file is missing: xray-core/$xray_binary"
+  xray_pin=$(sed -n "s/^.*'${metadata_arch}:${xray_binary}:\([0-9a-f]\{64\}\)'.*$/\1/p" "$root/install.sh" | head -n 1)
+  [[ "$xray_pin" =~ ^[0-9a-f]{64}$ ]] || fail "install.sh embeds no xray-core pin for $metadata_arch."
+  xray_actual=$(digest_file "$root/xray-core/$xray_binary")
+  [[ "$xray_actual" == "$xray_pin" ]] || fail "xray-core pin mismatch for $metadata_arch: install.sh pins $xray_pin but vendored binary digest is $xray_actual."
+  grep -E "^${xray_actual}[[:space:]]+(\\*?)${xray_binary}\$" "$root/xray-core/XRAY_CORE_SHA256SUMS" >/dev/null || fail "xray-core XRAY_CORE_SHA256SUMS does not list $xray_binary."
+  [[ -s "$root/xray-core/XRAY_CORE_LICENSE" ]] || fail 'xray-core/XRAY_CORE_LICENSE is empty or missing.'
 }
 
 verify_artifact "$artifact"
@@ -737,8 +757,9 @@ ln -s "releases/$version" /opt/duckos/current
 # Provision the integrity-pinned xray-core backend into
 # /usr/local/bin/xray. This is the only step that satisfies
 # internal/xray/runtime_linux.go's NewRuntime os.Stat gate
-# on a fresh install. The helper refuses arm64 loudly because
-# upstream does not currently ship an arm64 Linux binary.
+# on a fresh install. The helper verifies the vendored ELF
+# against the per-architecture extracted-binary pin before
+# installing anything.
 install_xray_backend "$release" || {
   printf 'DuckOS installer: Xray backend install failed.\n' >&2
   printf 'The Agent will run without the Xray service until the operator re-runs install.sh with a binary that satisfies the architecture.\n' >&2

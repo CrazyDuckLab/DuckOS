@@ -34,9 +34,9 @@ for ARCH in "${TARGETS[@]}"; do
   # installer's manifest check would treat as unlisted artifact entries.
   find "$TASK_BUILD/systemd" -name '._*' -delete -o -name '.DS_Store' -delete
   # Vendor an integrity-pinned xray-core binary into the artifact.
-  # The script is a no-op on architectures upstream does not
-  # provide (currently arm64) so the build does not fail for the
-  # unsupported target — the installer will refuse cleanly.
+  # Fails the build if the upstream zip digest, the extracted-ELF
+  # installer pin or the mandatory license staging cannot be
+  # verified.
   bash "$ROOT/scripts/stage_xray.sh" "$TASK_BUILD"
   printf '%s\n' "$VERSION" > "$TASK_BUILD/VERSION"
   node scripts/manifest.mjs "$TASK_BUILD" "$VERSION" "$COMMIT" "$DIRTY" "$ARCH" "$SOURCE_DATE_EPOCH"

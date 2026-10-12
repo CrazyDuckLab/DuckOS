@@ -20,14 +20,29 @@ async function fixture(t) {
   const elf = Buffer.alloc(64);
   elf.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1]);
   elf[18] = 0x3e;
+  // Synthetic xray-core payload. The vendored ELF cannot hash to the real
+  // upstream pin (no preimage), so the fixture rewrites the pin inside the
+  // artifact's own install.sh to the synthetic digest; the verifier is run
+  // with the artifact's own install.sh so its identity check still passes.
+  // A stale pin (e.g. an upstream ZIP digest) is covered by a dedicated
+  // rejection test below.
+  const xrayBinary = 'synthetic-xray-amd64-payload\n';
+  const xraySha = hash(xrayBinary);
+  const installerSource = (await fs.readFile(installer))
+    .toString('utf8')
+    .replace('8255dd939c34cf966cc91517b6324dd3c8d0bcf49ffac8beca049a38c46845ed', xraySha);
   const files = new Map([
     ['VERSION', '1.0.0-dev.012345abcdef\n'],
     ['BUILD-INFO.json', JSON.stringify({ version: '1.0.0-dev.012345abcdef', commit: '012345abcdef0000000000000000000000000000', dirty: false, target: 'linux/amd64', goVersion: 'go1.27.1', nodeVersion: 'v24.20.0', sourceDateEpoch: 1788796800, kind: 'internal-development' }, null, 2) + '\n'],
-    ['install.sh', await fs.readFile(installer)],
+    ['install.sh', installerSource],
     ['bin/duck-agent', elf],
     ['bin/duck-api', elf],
     ['bin/duck-updater', elf],
     ['bin/duck-restore', elf],
+    ['xray-core/Xray-linux-64', xrayBinary],
+    ['xray-core/XRAY_CORE_VERSION', '26.3.27\n'],
+    ['xray-core/XRAY_CORE_LICENSE', 'MPL-2.0 synthetic license fixture\n'],
+    ['xray-core/XRAY_CORE_SHA256SUMS', `${xraySha}  Xray-linux-64\n`],
     ['web/index.html', '<!doctype html><title>Synthetic installer fixture</title>\n'],
     ['web/assets/main.js', '/* Synthetic packaging fixture, never executed. */\n'],
     ['systemd/duck-agent.service', await fs.readFile(path.join(root, 'packaging/systemd/duck-agent.service'))],
@@ -51,7 +66,10 @@ async function fixture(t) {
 }
 
 function verify(artifact, args = []) {
-  const result = spawnSync('/bin/bash', [installer, '--artifact', artifact, '--verify-artifact', ...args], {
+  // Run the artifact's own install.sh: the verifier refuses to run if the
+  // artifact's installer differs from the invoked one, and the fixture pins
+  // its synthetic xray payload inside that copy.
+  const result = spawnSync('/bin/bash', [path.join(artifact, 'install.sh'), '--artifact', artifact, '--verify-artifact', ...args], {
     encoding: 'utf8', timeout: 15000, env: { PATH: '/usr/bin:/bin:/usr/sbin:/sbin' },
   });
   assert.equal(result.error, undefined, result.error?.message);
@@ -147,6 +165,56 @@ test('wrong binary architecture is rejected even with matching checksums', async
   rejected(verify(f.artifact), /duck-agent must be a Linux amd64 \(ELF64 EM_X86_64\) binary/);
 });
 
+test('vendored xray-core binary matching the embedded pin verifies', async (t) => {
+  const { artifact } = await fixture(t);
+  const result = verify(artifact);
+  assert.equal(result.status, 0, result.output);
+});
+
+test('stale xray-core pin (upstream ZIP digest instead of ELF digest) is rejected', async (t) => {
+  // Regression for the beta.2 release blocker: the arm64/armv7 pins held
+  // the sha256 of the upstream .zip archive while the installer hashed the
+  // extracted ELF, so every ARM install failed closed. The artifact
+  // verifier must catch this class of mismatch before publication.
+  const f = await fixture(t);
+  const zipDigest = '4d30283ae614e3057f730f67cd088a42be6fdf91f8639d82cb69e48cde80413c';
+  const installerPath = path.join(f.artifact, 'install.sh');
+  const source = (await fs.readFile(installerPath, 'utf8')).replace(
+    /^ *'amd64:Xray-linux-64:[0-9a-f]{64}'$/m,
+    `  'amd64:Xray-linux-64:${zipDigest}'`);
+  assert.match(source, new RegExp(zipDigest), 'pin rewrite found no target');
+  await fs.writeFile(installerPath, source);
+  await f.manifest();
+  rejected(verify(f.artifact), /xray-core pin mismatch for amd64/);
+});
+
+test('missing or empty xray-core license is rejected', async (t) => {
+  const f = await fixture(t);
+  await fs.rm(path.join(f.artifact, 'xray-core/XRAY_CORE_LICENSE'));
+  f.files.delete('xray-core/XRAY_CORE_LICENSE');
+  await f.manifest();
+  rejected(verify(f.artifact), /Required artifact file is missing: xray-core\/XRAY_CORE_LICENSE/);
+  await fs.writeFile(path.join(f.artifact, 'xray-core/XRAY_CORE_LICENSE'), '');
+  f.files.set('xray-core/XRAY_CORE_LICENSE', '');
+  await f.manifest();
+  rejected(verify(f.artifact), /XRAY_CORE_LICENSE is empty or missing/);
+});
+
+test('missing vendored xray-core binary is rejected', async (t) => {
+  const f = await fixture(t);
+  await fs.rm(path.join(f.artifact, 'xray-core/Xray-linux-64'));
+  f.files.delete('xray-core/Xray-linux-64');
+  await f.manifest();
+  rejected(verify(f.artifact), /Required artifact file is missing: xray-core\/Xray-linux-64/);
+});
+
+test('xray-core manifest that does not list the vendored binary is rejected', async (t) => {
+  const f = await fixture(t);
+  await fs.writeFile(path.join(f.artifact, 'xray-core/XRAY_CORE_SHA256SUMS'), 'deadbeef  Xray-linux-64\n');
+  await f.manifest();
+  rejected(verify(f.artifact), /XRAY_CORE_SHA256SUMS does not list Xray-linux-64/);
+});
+
 test('build metadata rejects malformed JSON, mismatched revisions and dirty state', async (t) => {
   const f = await fixture(t);
   const metadataPath = path.join(f.artifact, 'BUILD-INFO.json');
@@ -175,7 +243,12 @@ test('installer must match the checksummed artifact installer', async (t) => {
   const f = await fixture(t);
   await fs.appendFile(path.join(f.artifact, 'install.sh'), '\n# different installer\n');
   await f.manifest();
-  rejected(verify(f.artifact), /installer belonging to this exact artifact/);
+  // Invoke the canonical repo installer: the verifier refuses to run when
+  // the artifact's installer differs from the invoked one.
+  const result = spawnSync('/bin/bash', [installer, '--artifact', f.artifact, '--verify-artifact'], {
+    encoding: 'utf8', timeout: 15000, env: { PATH: '/usr/bin:/bin:/usr/sbin:/sbin' },
+  });
+  rejected({ status: result.status, output: result.stdout + result.stderr }, /installer belonging to this exact artifact/);
 });
 
 test('ambiguous options, symlink roots and noncanonical paths are rejected', async (t) => {
@@ -188,7 +261,9 @@ test('ambiguous options, symlink roots and noncanonical paths are rejected', asy
 
 test('host --check remains read-only on the development host', async (t) => {
   const { artifact } = await fixture(t);
-  const result = spawnSync('/bin/bash', [installer, '--artifact', artifact, '--check'], { encoding: 'utf8', timeout: 15000 });
+  // The artifact's own installer is what a host would run; the fixture's
+  // synthetic xray pin lives in that copy.
+  const result = spawnSync('/bin/bash', [path.join(artifact, 'install.sh'), '--artifact', artifact, '--check'], { encoding: 'utf8', timeout: 15000 });
   assert.equal(result.error, undefined);
   assert.match(result.stdout + result.stderr, /require root|Debian 13|systemd host|root-owned|group\/world writable|preflight passed/);
   assert.doesNotMatch(result.stdout + result.stderr, /Installed .* as an internal/);
@@ -235,7 +310,9 @@ test('unit boundary keeps API unprivileged and fixes Agent semantic service argu
   assert.match(agent, /^SupplementaryGroups=frr frrvty$/m);
   assert.match(agent, /--allowed-uid @DUCKOS_UID@ --environment test/);
   assert.match(agent, /^RuntimeDirectory=frr$/m);
-  assert.match(agent, /^RuntimeDirectoryMode=0751$/m);
+  // BETA.2 B-006: single-owner RuntimeDirectory model — 0750 on both
+  // duckos-agent (the Agent IPC dir) and frr.
+  assert.match(agent, /^RuntimeDirectoryMode=0750$/m);
   assert.match(agent, /ReadWritePaths=.*\/run\/frr.*\/var\/lib\/frr/);
   assert.match(agent, /ReadWritePaths=.*\/etc\/frr/);
   for (const unit of [api, agent]) {
@@ -315,8 +392,10 @@ test('launcher binary is in the artifact, runs as a daemon, and serves the FRR l
   // enabled so the daemon is running before any FRR
   // pathspace apply.
   assert.match(installer, /install -o root -g root -m 0644.*systemd\/duck-frr-launcher\.service/);
-  assert.match(installer, /systemctl start duck-restore\.service duck-frr-launcher\.service duck-agent\.service/);
-  assert.match(installer, /systemctl enable duck-agent\.service duck-api\.service duck-restore\.service duck-frr-launcher\.service/);
+  // BETA.2 B-009: the WG launcher joins the boot ordering with the
+  // FRR launcher and the Agent.
+  assert.match(installer, /systemctl start duck-restore\.service duck-frr-launcher\.service duck-wg-launcher\.service duck-agent\.service/);
+  assert.match(installer, /systemctl enable duck-agent\.service duck-api\.service duck-restore\.service duck-frr-launcher\.service duck-wg-launcher\.service/);
 });
 
 test('preflight tolerates any pre-existing duck-dnsmasq identity', async () => {

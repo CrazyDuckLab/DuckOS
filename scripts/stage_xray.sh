@@ -111,20 +111,35 @@ fi
 unzip -p "$ZIP" xray > "$STAGE/$BINNAME"
 chmod 0755 "$STAGE/$BINNAME"
 
-# Fetch the LICENSE file from the same release tag.
+# Fetch the LICENSE file. Xray-core does not attach a LICENSE asset
+# to its GitHub releases (that URL is a permanent 404); the
+# authoritative copy lives in the source tree at the release tag.
+# The license is mandatory in every artifact, so a failed fetch
+# fails the build instead of producing an incomplete archive.
 LICENSE="$WORK/LICENSE"
-if command -v curl >/dev/null 2>&1; then
-  curl --fail --location --silent --show-error --output "$LICENSE" \
-    "$UPSTREAM_BASE/LICENSE" || true
-fi
-if [[ -s "$LICENSE" ]]; then
-  install -m 0644 "$LICENSE" "$STAGE/XRAY_CORE_LICENSE"
-else
-  printf 'stage_xray: could not fetch upstream LICENSE; downstream install will skip it.\n' >&2
-fi
+curl --fail --location --silent --show-error --output "$LICENSE" \
+  "https://raw.githubusercontent.com/XTLS/Xray-core/v$VERSION/LICENSE"
+[[ -s "$LICENSE" ]] || { printf 'stage_xray: mandatory XRAY_CORE_LICENSE could not be staged; refusing to produce an incomplete artifact.\n' >&2; exit 1; }
+install -m 0644 "$LICENSE" "$STAGE/XRAY_CORE_LICENSE"
 
 printf '%s\n' "$VERSION" > "$STAGE/XRAY_CORE_VERSION"
 ( cd "$STAGE" && sha256sum "$BINNAME" > XRAY_CORE_SHA256SUMS )
+
+# The installer (scripts/install.sh) re-verifies the staged ELF
+# against a pin embedded at build time. Re-derive that pin here
+# from the freshly extracted binary so a drift between the two
+# lists fails the build instead of failing the install on a
+# user host. The zip digest that authenticated the download is
+# deliberately NOT an acceptable pin value: the installer hashes
+# the extracted ELF, not the archive.
+ELF_SHA=$(sha256sum < "$STAGE/$BINNAME" | awk '{print $1}')
+PINNED=$(sed -n "s/^.*'${ARCH}:${BINNAME}:\([0-9a-f]\{64\}\)'.*$/\1/p" "$ROOT/scripts/install.sh" | head -n 1)
+[[ -n "$PINNED" ]] || { printf 'stage_xray: no installer pin found for %s:%s in scripts/install.sh\n' "$ARCH" "$BINNAME" >&2; exit 1; }
+[[ "$ELF_SHA" == "$PINNED" ]] || {
+  printf 'stage_xray: installer pin mismatch for %s.\n  extracted ELF sha256: %s\n  installer pin:        %s\nUpdate XRAY_CORE_VERSIONS in scripts/install.sh (and the test trust anchor) to the extracted-ELF digest.\n' \
+    "$BINNAME" "$ELF_SHA" "$PINNED" >&2
+  exit 1
+}
 
 printf 'stage_xray: vendored %s (sha256 %s) and LICENSE under %s\n' \
   "$BINNAME" "$ACTUAL" "$STAGE"

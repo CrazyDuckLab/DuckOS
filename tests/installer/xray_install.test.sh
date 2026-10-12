@@ -165,9 +165,9 @@ patch_for_release() {
   bin=$(awk '{print $2}' "$r/xray-core/XRAY_CORE_SHA256SUMS")
   actual_sha=$(awk '{print $1}' "$r/xray-core/XRAY_CORE_SHA256SUMS")
   case "$bin" in
-    Xray-linux-64)            arch=amd64; pinned_sha=23cd9af937744d97776ee35ecad4972cf4b2109d1e0fe6be9930467608f7c8ae ;;
-    Xray-linux-arm32-v7a)     arch=armv7; pinned_sha=c7265ae13c63ca0241a037df4ef960ad37938c8a67d984cc08834b2cfdf5654b ;;
-    Xray-linux-arm64-v8a)     arch=arm64; pinned_sha=4d30283ae614e3057f730f67cd088a42be6fdf91f8639d82cb69e48cde80413c ;;
+    Xray-linux-64)            arch=amd64; pinned_sha=8255dd939c34cf966cc91517b6324dd3c8d0bcf49ffac8beca049a38c46845ed ;;
+    Xray-linux-arm32-v7a)     arch=armv7; pinned_sha=b7ea2a82185f0f7a59510b01b24a93cc3c45529dabbf3c97970ad66c49c6b882 ;;
+    Xray-linux-arm64-v8a)     arch=arm64; pinned_sha=c2d20a7045250497083afea0d79db0672f6c89a25aaaf37c92de034d6b764b04 ;;
     *) printf 'patch_for_release: unknown binary %s\n' "$bin" >&2; return 1 ;;
   esac
   helper_patched=$(printf '%s\n' "$HELPER" | \
@@ -212,7 +212,7 @@ ACTUAL=$(sha256sum < "$DIST_NOMANIFEST/xray-core/Xray-linux-64" | awk '{print $1
 # Manifest lists a different binary name with the same sha.
 printf '%s  Xray-linux-not-this-one\n' "$ACTUAL" > "$DIST_NOMANIFEST/xray-core/XRAY_CORE_SHA256SUMS"
 HELPER_PATCHED_MISSING=$(printf '%s\n' "$HELPER" | \
-  sed "s|amd64:Xray-linux-64:23cd9af937744d97776ee35ecad4972cf4b2109d1e0fe6be9930467608f7c8ae|amd64:Xray-linux-64:${ACTUAL}|")
+  sed "s|amd64:Xray-linux-64:8255dd939c34cf966cc91517b6324dd3c8d0bcf49ffac8beca049a38c46845ed|amd64:Xray-linux-64:${ACTUAL}|")
 eval "$HELPER_PATCHED_MISSING" >/dev/null
 export DUCKOS_TEST_ARCH=amd64
 out=$(install_xray_backend "$DIST_NOMANIFEST" 2>&1 || true)
