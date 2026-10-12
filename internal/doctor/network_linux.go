@@ -254,8 +254,11 @@ func readRoutes() ([]Route, error) {
 // landed by the BETA.2 corrective round.
 func hexToIP(s string) (string, error) {
 	b, err := hex.DecodeString(s)
-	if err != nil || len(b) != 4 {
+	if err != nil {
 		return "", err
+	}
+	if len(b) != 4 {
+		return "", errors.New("hexToIP: input is not 4 bytes")
 	}
 	return strconv.Itoa(int(b[3])) + "." + strconv.Itoa(int(b[2])) + "." + strconv.Itoa(int(b[1])) + "." + strconv.Itoa(int(b[0])), nil
 }
@@ -263,29 +266,34 @@ func hexToIP(s string) (string, error) {
 // hexToPrefixLength decodes the 4-byte /proc/net/route
 // Mask column and returns the canonical CIDR prefix
 // length ("/16"). The Mask column is host-byte-order;
-// we byte-swap so we count the high-order bits. A
+// we byte-swap so the mask reads MSB-first. Only
+// MSB-contiguous masks (high bits set) are accepted; a
 // non-contiguous mask returns an error so the route is
 // skipped (the kernel never writes a non-contiguous
 // IPv4 netmask in practice, so this guards future
 // regressions).
 func hexToPrefixLength(s string) (string, error) {
 	b, err := hex.DecodeString(s)
-	if err != nil || len(b) != 4 {
+	if err != nil {
 		return "", err
 	}
-	mask := uint32(b[3])<<24 | uint32(b[2])<<16 | uint32(b[1])<<8 | uint32(b[0])
-	bits := 0
-	for mask != 0 {
-		if mask&1 == 0 && bits > 0 {
-			// Non-contiguous mask.
-			return "", errors.New("non-contiguous netmask")
-		}
-		if mask&1 == 1 {
-			bits++
-		}
-		mask >>= 1
+	if len(b) != 4 {
+		return "", errors.New("hexToPrefixLength: input is not 4 bytes")
 	}
-	return strconv.Itoa(bits), nil
+	mask := uint32(b[3])<<24 | uint32(b[2])<<16 | uint32(b[1])<<8 | uint32(b[0])
+	prefix := 0
+	for m := mask; m != 0; m >>= 1 {
+		if m&1 == 1 {
+			prefix++
+		}
+	}
+	// A valid netmask is (32-prefix) high bits set. The
+	// prefix==0 case is mask==0; a shift by 32 would wrap,
+	// so it is handled by the != comparison below.
+	if prefix != 0 && mask != ^uint32(0)<<(32-prefix) {
+		return "", errors.New("non-contiguous netmask")
+	}
+	return strconv.Itoa(prefix), nil
 }
 
 func ifFlag(flags uint64, bit uint64, yes, no string) string {

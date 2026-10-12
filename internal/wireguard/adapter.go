@@ -510,7 +510,14 @@ func isExists(err error) bool {
 		return true
 	}
 	msg := err.Error()
-	return strings.Contains(msg, "File exists") || strings.Contains(msg, "Address already assigned")
+	// "interface %q already exists" is the duck-wg-launcher
+	// ownership-gate wording (the launcher refuses a second
+	// LINK_ADD for an interface it still owns and that the
+	// kernel still shows): an idempotent reconcile apply must
+	// treat it the same way as the raw iproute2 conflicts.
+	return strings.Contains(msg, "File exists") ||
+		strings.Contains(msg, "Address already assigned") ||
+		strings.Contains(msg, "already exists")
 }
 
 func isNoDevice(err error) bool {

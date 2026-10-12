@@ -30,15 +30,15 @@ import (
 	"github.com/CrazyDuckLab/DuckOS/internal/network"
 	"github.com/CrazyDuckLab/DuckOS/internal/observe"
 	"github.com/CrazyDuckLab/DuckOS/internal/qos"
+	"github.com/CrazyDuckLab/DuckOS/internal/speedlab"
 	"github.com/CrazyDuckLab/DuckOS/internal/state"
 	"github.com/CrazyDuckLab/DuckOS/internal/upgrade"
+	"github.com/CrazyDuckLab/DuckOS/internal/upnp"
 	"github.com/CrazyDuckLab/DuckOS/internal/ups"
 	"github.com/CrazyDuckLab/DuckOS/internal/vault"
+	"github.com/CrazyDuckLab/DuckOS/internal/wake"
 	"github.com/CrazyDuckLab/DuckOS/internal/wireguard"
 	"github.com/CrazyDuckLab/DuckOS/internal/xray"
-	"github.com/CrazyDuckLab/DuckOS/internal/speedlab"
-	"github.com/CrazyDuckLab/DuckOS/internal/upnp"
-	"github.com/CrazyDuckLab/DuckOS/internal/wake"
 	"github.com/CrazyDuckLab/DuckOS/internal/ztp"
 	"github.com/CrazyDuckLab/DuckOS/pkg/brand"
 	"github.com/CrazyDuckLab/DuckOS/pkg/buildinfo"
@@ -835,7 +835,11 @@ func enableWireguardService(catalogDir, configDir string, access identityAccess,
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := host.ReconcileServer(ctx, cat, adapter); err != nil {
-		return nil, errors.New("wireguard: startup reconciliation failed")
+		// Wrap the underlying op error: the launcher/ip(wg)
+		// surfaces are already sanitized (no key bytes), and
+		// an opaque message here makes startup reconciliation
+		// failures undiagnosable on a deployed host.
+		return nil, fmt.Errorf("wireguard: startup reconciliation failed: %w", err)
 	}
 	return host, nil
 }

@@ -229,22 +229,35 @@ func normaliseTarget(t Target, cfg runtimeConfig) (normalisedTarget, error) {
 // ssrfCheck applies the SSRF policy to a single host literal.
 // The allow-list match is constant-time; the address
 // classification (loopback / link-local / private) is best-
-// effort with stdlib.
+// effort with stdlib. Classification runs BEFORE the
+// allow-list admits a host: a loopback (or private) literal on
+// the operator's allow-list must still honour the
+// allow-loopback / allow-private policy flags.
 func ssrfCheck(host string, cfg runtimeConfig) error {
 	// Allow-list is the only production mechanism: empty
 	// allow-list refuses every probe. This is intentional.
 	if len(cfg.AllowedHosts) == 0 {
 		return errors.New("speedlab: no allowed hosts configured")
 	}
+	allowListed := false
 	for _, allowed := range cfg.AllowedHosts {
 		if subtle.ConstantTimeCompare([]byte(host), []byte(allowed)) == 1 {
-			return nil
+			allowListed = true
+			break
 		}
 	}
 	// Belt-and-braces: resolve and reject dangerous literal
-	// addresses even if the operator matched them.
+	// addresses even if the operator matched them. The
+	// policy flags are independent of the allow-list.
 	ips, err := net.LookupIP(host)
 	if err != nil {
+		if allowListed {
+			// The operator explicitly allowed this host and it
+			// does not resolve in this environment (e.g. a
+			// hostname known only to the probed network).
+			// Classification is best-effort; admit it.
+			return nil
+		}
 		// Do not leak the resolution error to the operator;
 		// it may disclose internal DNS.
 		return fmt.Errorf("speedlab: target host not in allow-list")
@@ -263,7 +276,10 @@ func ssrfCheck(host string, cfg runtimeConfig) error {
 			return errors.New("speedlab: private targets require allow-private")
 		}
 	}
-	return errors.New("speedlab: target host not in allow-list")
+	if !allowListed {
+		return errors.New("speedlab: target host not in allow-list")
+	}
+	return nil
 }
 
 func isRFC1918(ip net.IP) bool {

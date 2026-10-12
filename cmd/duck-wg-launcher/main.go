@@ -238,7 +238,19 @@ func executeOp(op Op, ownedMu *sync.RWMutex, owned map[string]struct{},
 	switch op.Verb {
 	case VerbLinkAdd:
 		if _, ok := owned[op.Ifname]; ok {
-			return fmt.Errorf("interface %q already exists", op.Ifname)
+			// The ownership journal survives reboots and lost
+			// namespaces; the interface itself may not. Whether
+			// this is a genuine conflict is decided by the
+			// kernel, not the journal: a live link is a real
+			// duplicate, a missing one is a stale owned entry
+			// that must recover instead of wedging startup
+			// reconciliation forever.
+			if err := runExec(ipPath, "link", "show", op.Ifname); err == nil {
+				return fmt.Errorf("interface %q already exists", op.Ifname)
+			}
+			if err := dropOwned(ownedMu, owned, stateDir, op.Ifname); err != nil {
+				return err
+			}
 		}
 		// `ip link add <name> type wireguard`
 		if err := runExec(ipPath, "link", "add", op.Ifname, "type", "wireguard"); err != nil {
