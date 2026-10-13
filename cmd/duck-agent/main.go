@@ -832,9 +832,16 @@ func enableWireguardService(catalogDir, configDir string, access identityAccess,
 		Prefix:  "/wireguard/v1/",
 	}
 	host := agent.NewWireguardHost(api, access)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	if err := host.ReconcileServer(ctx, cat, adapter); err != nil {
+	// B-013 (BETA.2): the launchers declare After=duck-agent.service
+	// (they wait on the Agent), so at boot the launcher sockets may not
+	// exist yet when this one-shot startup reconciliation dials them. A
+	// single failure left the WireGuard service disabled for the whole
+	// boot. Retry the bounded reconciliation with backoff; each attempt
+	// keeps its own 30s cap so startup latency stays bounded.
+	reconcile := func(ctx context.Context) error {
+		return host.ReconcileServer(ctx, cat, adapter)
+	}
+	if err := reconcileWithBackoff(reconcile); err != nil {
 		// Wrap the underlying op error: the launcher/ip(wg)
 		// surfaces are already sanitized (no key bytes), and
 		// an opaque message here makes startup reconciliation
@@ -842,6 +849,30 @@ func enableWireguardService(catalogDir, configDir string, access identityAccess,
 		return nil, fmt.Errorf("wireguard: startup reconciliation failed: %w", err)
 	}
 	return host, nil
+}
+
+// reconcileBackoff is the inter-attempt sleep schedule of
+// reconcileWithBackoff. Five attempts over ~20s cover a launcher that
+// is still binding its socket while systemd walks the After= chain.
+var reconcileBackoff = []time.Duration{0, 2 * time.Second, 4 * time.Second, 6 * time.Second, 8 * time.Second}
+
+// reconcileWithBackoff runs fn once per schedule entry until it
+// succeeds or the schedule is exhausted, returning the last error.
+// Each attempt keeps its own 30s cap so startup latency stays bounded.
+func reconcileWithBackoff(fn func(ctx context.Context) error) error {
+	var last error
+	for _, wait := range reconcileBackoff {
+		if wait > 0 {
+			time.Sleep(wait)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		last = fn(ctx)
+		cancel()
+		if last == nil {
+			return nil
+		}
+	}
+	return last
 }
 
 type identityAccess interface {
