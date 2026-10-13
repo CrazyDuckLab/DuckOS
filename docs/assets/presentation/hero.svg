@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="480" viewBox="0 0 1280 480" role="img" aria-labelledby="title description">
+<title id="title">DuckOS — Your network. Your rules.</title>
+<desc id="description">Local-first Linux networking by CrazyDuckLab. Official DuckOS mascot over an abstract network motif. Product artwork, not a screenshot.</desc>
+<defs><linearGradient id="surface" x2="1" y2="1"><stop stop-color="#091723"/><stop offset="1" stop-color="#102c34"/></linearGradient><radialGradient id="glow"><stop stop-color="#2b7166" stop-opacity=".4"/><stop offset="1" stop-color="#102c34" stop-opacity="0"/></radialGradient></defs>
+<rect width="1280" height="480" rx="24" fill="url(#surface)"/>
+<circle cx="1040" cy="230" r="340" fill="url(#glow)"/>
+<g fill="none" stroke="#28514f" stroke-width="1.5"><circle cx="1030" cy="223" r="168"/><circle cx="1030" cy="223" r="219"/><path d="M807 224H746V130H713M1042 440V404M1246 224h34M1042 5v49"/></g>
+<g fill="#7ce0c7"><circle cx="1030" cy="4" r="5"/><circle cx="811" cy="223" r="5"/><circle cx="1249" cy="223" r="5"/></g>
+<g fill="#e7bd54"><circle cx="923" cy="369" r="5"/><circle cx="1144" cy="98" r="5"/></g>
+<svg x="898" y="90" width="264" height="264" viewBox="0 0 64 64">
+  <title>DuckOS</title>
+  <defs>
+    <radialGradient id="duckos-body" cx="40%" cy="35%" r="80%">
+      <stop offset="0%" stop-color="#FFE15A"/>
+      <stop offset="55%" stop-color="#F5C533"/>
+      <stop offset="100%" stop-color="#C99428"/>
+    </radialGradient>
+    <linearGradient id="duckos-beak" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FF9244"/>
+      <stop offset="100%" stop-color="#D7601B"/>
+    </linearGradient>
+    <radialGradient id="duckos-shadow" cx="50%" cy="55%" r="55%">
+      <stop offset="0%" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.15"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Tail bump (back-left) -->
+  <path fill="url(#duckos-body)" d="M 6 24 Q 4 20 6 16 Q 10 18 12 22 L 12 30 Q 8 30 6 24 Z"/>
+
+  <!-- Body + head silhouette — one continuous closed path -->
+  <path fill="url(#duckos-body)" d="
+    M 14 18
+    Q 16 10 26 8
+    Q 38 7 44 14
+    Q 46 14 48 14
+    L 56 13
+    Q 60 13 60 16
+    Q 60 19 56 20
+    L 48 21
+    Q 49 28 49 34
+    Q 47 46 32 52
+    Q 18 56 8 50
+    Q 2 46 2 38
+    Q 2 30 6 26
+    Q 10 22 14 22
+    Q 14 19 14 18
+    Z"/>
+
+  <!-- Subtle underbody shadow for dimensionality -->
+  <ellipse cx="28" cy="50" rx="20" ry="5" fill="url(#duckos-shadow)"/>
+
+  <!-- Wing detail (curved teardrop on the body) -->
+  <path fill="#D89F2C" opacity="0.42" d="
+    M 22 32
+    Q 28 30 36 32
+    Q 40 38 36 42
+    Q 26 44 22 38
+    Q 20 34 22 32
+    Z"/>
+
+  <!-- Highlight sheen across the top of the head and back -->
+  <ellipse cx="28" cy="14" rx="16" ry="4" fill="#FFFFFF" opacity="0.22"/>
+
+  <!-- Beak — warm orange, flat horizontal wedge -->
+  <path fill="url(#duckos-beak)" d="
+    M 48 17
+    L 60 16
+    Q 62 16 62 18
+    Q 62 20 60 21
+    L 54 22
+    L 48 21
+    Z"/>
+
+  <!-- Beak shadow (mouth line) -->
+  <path fill="#8C3F0E" opacity="0.45" d="M 49 19 L 60 18.7"/>
+
+  <!-- Eye -->
+  <circle cx="34" cy="14" r="2.2" fill="#1A1A1A"/>
+  <circle cx="34.7" cy="13.3" r="0.7" fill="#FFFFFF"/>
+</svg>
+<g font-family="Arial, Helvetica, sans-serif">
+<text x="64" y="72" font-size="20" letter-spacing="3" fill="#83d9c2">CRAZYDUCKLAB / OPEN SOURCE</text>
+<text x="60" y="213" font-size="126" font-weight="700" letter-spacing="-5" fill="#f6f9f7">DuckOS</text>
+<text x="64" y="280" font-size="44" font-weight="600" letter-spacing="-1" fill="#e9c765">Your network. Your rules.</text>
+<text x="66" y="327" font-size="29" fill="#b5cdd0">Local-first Linux networking.</text>
+<path d="M64 371h616" stroke="#2a4d53"/>
+<text x="66" y="414" font-size="20" fill="#9fb9c0">WEB UI + API</text><text x="245" y="414" font-size="20" fill="#9fb9c0">SAFE APPLY</text><text x="414" y="414" font-size="20" fill="#9fb9c0">BOUNDED PRIVILEGES</text>
+<text x="1030" y="413" text-anchor="middle" font-size="18" letter-spacing="2" fill="#83d9c2">QUACK, RESPONSIBLY.</text>
+</g></svg>
