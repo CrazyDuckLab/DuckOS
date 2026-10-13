@@ -1,22 +1,22 @@
 VM A REACHABILITY — BLOCKED
 
 VM A: duck-beta-01
-Expected management eth0: 172.18.4.102/16
+Expected management eth0: [redacted management address]
 
-From the operator workstation (172.18.4.77):
+From the operator workstation ([redacted management address]):
 
-  $ ping -c 1 -W 1 172.18.4.102
-  --- 172.18.4.102 ping statistics ---
+  $ ping -c 1 -W 1 [redacted management address]
+  --- [redacted management address] ping statistics ---
   1 packets transmitted, 0 packets received, 100% packet loss
 
-  $ nc -z -G 3 172.18.4.102 22
+  $ nc -z -G 3 [redacted management address] 22
   (no response)
 
-  $ arp -an | grep 172.18.4.102
+  $ arp -an | grep [redacted management address]
   (no ARP entry)
 
 A scan of /24 showed all 15 probed hosts
-(172.18.4.1, 172.18.4.2, ..., 172.18.4.250)
+([redacted management address], [redacted management address], ..., [redacted management address])
 time out. The lab subnet is unreachable from this
 workstation. The ICMP echo is filtered or the L2
 path between the operator workstation and the lab
@@ -41,7 +41,7 @@ from this side.
 SUGGESTED OPERATOR ACTIONS
 ==========================
 - restore lab-network connectivity from the
-  operator workstation to the 172.18.4.0/24
+  operator workstation to the [redacted management address]
   segment;
 - re-run TASK 5 (WireGuard, Xray, UPnP, RBAC,
   FRR) on VM A;

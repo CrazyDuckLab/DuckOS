@@ -1,6 +1,6 @@
 BETA.2 PRE-LIVE CORRECTIVE GATE — VM A FOCUSED LIVE PROOF
 
-Repository: /Users/v.fomenko/Documents/Codex/DuckOS-public
+Repository: [redacted local checkout]
 Branch: beta2/lab-qa
 HEAD: 99785312850520ac51655dde52614302587fceaf
 Worktree: clean
@@ -9,8 +9,8 @@ beta.1 / XU4 / VM B / origin/main / GitHub release: untouched
 ==================================================
 CONNECTIVITY EVIDENCE
 ==================================================
-VM A (172.18.4.102 / duck-beta-01): REACHABLE
-VM B (172.18.4.149 / duck-dev-01): UNREACHABLE (already on
+VM A ([redacted management address] / duck-beta-01): REACHABLE
+VM B ([redacted management address] / duck-dev-01): UNREACHABLE (already on
 VM-B-REBOOT-BLOCKED from TASK 7; not touched here)
 
 ==================================================
@@ -170,12 +170,12 @@ MANAGEMENT SAFETY
 RESULT: PASS
 
 eth0 unchanged = YES
-  before: 172.18.4.102/16 fe80::2d37:e160:858e:7fe5/64
-  after:  172.18.4.102/16 fe80::2d37:e160:858e:7fe5/64
+  before: [redacted management address] fe80::2d37:e160:858e:7fe5/64
+  after:  [redacted management address] fe80::2d37:e160:858e:7fe5/64
 
 Default route unchanged = YES
-  before: default via 172.18.1.254 dev eth0
-  after:  default via 172.18.1.254 dev eth0
+  before: default via [redacted management address] dev eth0
+  after:  default via [redacted management address] dev eth0
 
 Management ownership preserved = YES
   (no corrective-round change mutates eth0,

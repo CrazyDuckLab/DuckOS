@@ -1,10 +1,10 @@
 # DuckOS development workflow
 
-Status: local executable foundation workflow
-Last updated: 2026-09-07
+Status: beta.2 source and Linux qualification workflow
+Last updated: 2026-10-13
 
 This document defines local builds and how exact source revisions move from
-the development Mac to GitHub and, later, Linux build/test targets. Test
+the development Mac to GitHub and Linux build/test targets. Test
 execution evidence is kept separately from source and cross-build claims.
 
 ## Repository identity
@@ -81,6 +81,12 @@ with behavior. Never rewrite or discard another contributor's uncommitted work
 without explicit coordination.
 
 ## Current command surface
+
+Run the complete `make check` suite on Linux: several packages and tests require
+Linux kernel interfaces. macOS supports editing, frontend/installer checks and
+cross-builds; `GOOS=linux go vet ./...` provides cross-target static analysis,
+not native runtime evidence. Do not treat clean-host witness refusals on an
+installed target as passes. See [current qualification](qualification-beta2.md).
 
 `bash scripts/bootstrap.sh` downloads SHA-256-pinned Go 1.27.1 and Node 24.20.0
 into ignored `.tools/`. It supports macOS and Linux amd64/arm64, requires curl,

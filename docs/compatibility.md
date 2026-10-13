@@ -18,8 +18,9 @@ the same two-node live matrix as AMD64. The physical ODROID XU4 was not part of
 final beta.2 qualification. No per-device physical hardware matrix is established.
 
 The AMD64 matrix covers the qualified runtime and targeted networking flows,
-not arbitrary NICs, Wi-Fi hardware, FRR BGP routing or production readiness.
-See [the qualification report](../beta2-final-report.md).
+including FRR H10 BGP advertise/withdraw/restart on AMD64. It does not cover
+arbitrary NICs, Wi-Fi hardware or production readiness.
+See [current qualification](qualification-beta2.md).
 
 ## Host and hardware boundaries
 

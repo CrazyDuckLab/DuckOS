@@ -1,13 +1,32 @@
+<img src="web/public/duck.svg" alt="DuckOS rubber duck logo" width="64">
+
 # DuckOS
 
 **A local-first Linux network operating platform for routers, gateways, VPS / edge nodes and self-hosted appliances.**
 
 DuckOS brings network management, diagnostics and recovery into a web interface
-on Debian 13 with systemd, without a mandatory cloud service.
+on Debian 13 with systemd, without a mandatory cloud service. The Web UI and
+authenticated API share a declarative, intent-based configuration model. A
+source-built CLI uses the same API; the beta.2 archive does not install `duck`.
 
 **v0.1.0-beta.2 is beta software and fresh-install-only.** There is no qualified
 in-place upgrade from beta.1. Evaluate it on an isolated network with console
 access; it is not a production-ready router release.
+
+## Design principles
+
+Local operation, IPv4/IPv6 configuration, inspectable diagnostics and explicit
+desired/observed/verified states guide the architecture. Safe Apply requires
+confirmation and retains a rollback path. Contextual explanations and CLI/API
+references help operators inspect actions before applying them. Implemented
+controls and qualified workflows are distinguished in the [limitations](docs/beta-limitations.md).
+
+```text
+Web UI / source-built CLI → authenticated API / Engine → local Agent IPC
+                                                       → bounded launchers → Linux
+```
+
+See [architecture](docs/architecture.md) and [security](docs/security-model.md).
 
 ## Beta.2 highlights
 
@@ -22,6 +41,13 @@ access; it is not a production-ready router release.
   TTL, revoke and cleanup; Wake-on-LAN and Speed Lab.
 - RBAC and network-object fixes; Easy / Full UI improvements;
   English, Russian, German and Spanish.
+
+## Interface preview
+
+Authentic historical beta.1 capture of System Overview; this illustrates the
+interface, not beta.2 qualification or complete feature availability.
+
+<img src="docs/assets/screenshots/02-system-overview.png" alt="Historical DuckOS beta.1 System Overview" width="800">
 
 ## Choose your platform
 
@@ -63,8 +89,8 @@ Management remains on loopback; the Agent uses private local IPC.
 - Beta software; fresh installation required; no qualified beta.1 → beta.2 upgrade.
 - No UPnP IGD, SSDP/M-SEARCH, NAT-PMP or PCP network protocol frontends.
 - ARM64 / ARMv7 have build and artifact evidence, not the complete AMD64 live matrix.
-- FRR launcher qualification does not establish live BGP routing: the final lab
-  did not have zebra/bgpd installed.
+- FRR live BGP advertise/withdraw/restart passed on AMD64; other routing protocols
+  and arbitrary hardware are outside that qualification.
 - No public OTA channel, automatic LAN HTTPS onboarding or mDNS discovery.
 - Hardware, Wi-Fi chipset and power-loss behavior require additional evidence.
 
@@ -78,7 +104,8 @@ a reachable API alone is not proof that the network is healthy.
 - [User guide](docs/user/README.md) · [Documentation index](docs/README.md)
 - [Architecture](docs/architecture.md) · [Security model](docs/security-model.md)
 - [Changelog](CHANGELOG.md) · [Release notes](docs/release-notes.md)
-- [Qualification evidence](beta2-final-report.md)
+- [Current qualification summary](docs/qualification-beta2.md) · [Historical evidence](beta2-final-report.md)
+- [CLI and API](docs/cli-api.md)
 - [Troubleshooting](docs/troubleshooting.md)
 
 Report bugs through the repository issue templates with sanitized logs and build
@@ -94,7 +121,8 @@ make check
 make build-all
 ```
 
-Pinned tools live inside the checkout. Artifacts record full source identity in
+Run the full `make check` suite on Linux; macOS supports cross-builds and
+portable checks. Pinned tools live inside the checkout. Artifacts record full source identity in
 `BUILD-INFO.json`; runtime `VERSION` is `1.0.0-dev.<12-character-commit>`.
 The public beta name is separate from that internal build identifier.
 

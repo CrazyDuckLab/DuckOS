@@ -20,8 +20,10 @@ Safe Apply, explicit confirmation and management protection remain required.
 Do not infer a complete multi-WAN, DHCP/DNS, NetBird or arbitrary hardware matrix
 from the release highlights.
 
-FRR launcher startup and refusal behavior were verified. The final lab lacked
-zebra/bgpd; live BGP routing is not established by that evidence.
+FRR live H10 BGP advertise/withdraw/restart passed on AMD64 at the current
+qualified source. FRR is an optional Debian dependency: the installer attempts
+to provision it and reports it unavailable if that fails. This evidence does
+not qualify every FRR protocol or deployment topology.
 
 Port Mapping includes the backend, Trusted LAN Registry, nftables lifecycle,
 TTL expiry, revoke and cleanup. **UPnP IGD, SSDP/M-SEARCH, NAT-PMP and PCP network

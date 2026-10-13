@@ -62,6 +62,11 @@ contract and the `Active + Previous` invariant.
 
 ## Owner reset
 
+The beta.2 archive does not install `duck`. These commands require the
+[source-built CLI](../cli-api.md); stop `duck-api` before offline reset.
+Keep console access and review the consequences before proceeding.
+
+
 If the Owner account is lost and no other admin can recover it, the
 CLI exposes a destructive one-shot recovery: `sudo duck owner reset`.
 This deletes every Owner account on the device. Other users are

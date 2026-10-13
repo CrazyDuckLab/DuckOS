@@ -1,6 +1,6 @@
 BETA.2 PRE-LIVE CORRECTIVE GATE + VM A FOCUSED PROOF — FINAL REPORT
 
-Repository: /Users/v.fomenko/Documents/Codex/DuckOS-public
+Repository: [redacted local checkout]
 Branch: beta2/lab-qa
 HEAD: bef81e4 (commit added by this round)
 Expected: ea2f3b845465f65bfe43ab4ea51bc55af1e8304e
@@ -158,8 +158,8 @@ areas.
 ==================================================
 5. VM A FOCUSED LIVE PROOF
 ==================================================
-NOT RUN. VM A (172.18.4.102) is unreachable from
-this operator workstation. The full 172.18.4.0/24
+NOT RUN. VM A ([redacted management address]) is unreachable from
+this operator workstation. The full [redacted management address]
 lab subnet does not respond to ICMP / TCP / ARP
 from this side. The same reachability failure
 also affects VM B (which is the network-not-DuckOS
@@ -195,7 +195,7 @@ FRR NATIVE OWNERSHIP: BLOCKED on lab-network reachability.
 6. MANAGEMENT SAFETY
 ==================================================
 NOT VERIFIED LIVE on VM A (BLOCKED on lab-network
-reachability). VM A's eth0 (172.18.4.102/16) is
+reachability). VM A's eth0 ([redacted management address]) is
 sacred; no corrective round changes the install.sh
 or systemd unit files in a way that would mutate
 the management interface.
@@ -229,5 +229,5 @@ Source/test gate is fully green (no known failing
 tests in changed blocker areas, cross-build clean
 for amd64 / arm64 / armv7, web tsc + 193/193
 vitest pass). Restore lab-network connectivity
-from 172.18.4.77 to 172.18.4.0/24; re-run TASK 5
+from [redacted management address] to [redacted management address]; re-run TASK 5
 on VM A to cross the live gate."

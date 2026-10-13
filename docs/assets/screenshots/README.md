@@ -61,7 +61,7 @@ returned:
   "architecture": "amd64",
   "environment": "test",
   "interfaces": ["lo:up", "eth0:up", "eth1:up", "eth2:up"],
-  "default_route": "default via 172.18.1.254 dev eth0"
+  "default_route": "default via [redacted management address] dev eth0"
 }
 ```
 

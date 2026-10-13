@@ -41,8 +41,9 @@ competing lifecycle ownership. Peer materialization, idempotent address handling
 and reboot startup defects were corrected.
 
 FRR uses a separate privileged launcher and native `frr.service` is masked.
-The final lab verified launcher startup and explicit refusal behavior; zebra
-and bgpd were not installed there, so this is not a live BGP routing claim.
+Live H10 BGP advertise/withdraw/restart passed on AMD64 at the final qualified
+runtime source. FRR is an optional Debian package: the installer attempts to
+provision it and reports routing protocols unavailable if provisioning fails.
 
 Port Mapping ships the backend, Trusted LAN Registry and nftables mapping
 lifecycle with TTL, revoke and cleanup. **UPnP IGD, SSDP/M-SEARCH, NAT-PMP and PCP
@@ -92,15 +93,17 @@ No signed `.duck` beta.1 → beta.2 upgrade package is supplied.
 - Fresh install required; no qualified beta.1 → beta.2 in-place upgrade.
 - No UPnP IGD / SSDP-M-SEARCH, NAT-PMP or PCP protocol frontends.
 - ARM64 and ARMv7 did not undergo the complete AMD64 final two-node live matrix.
-- FRR daemon data-plane routing, physical board/chipset variance and power-loss
-  behavior are not established by the final VM qualification.
+- Other FRR protocols, physical board/chipset variance and power-loss behavior
+  are not established by the final VM qualification.
+- The archive does not install the standalone `duck` CLI; see [CLI/API](https://github.com/CrazyDuckLab/DuckOS/blob/v0.1.0-beta.2/docs/cli-api.md).
 - No public OTA delivery channel, automatic LAN TLS onboarding or mDNS discovery.
 
 ## Verification and source identity
 
 The full live qualification used product commit
-`90be1e00ae6c364f25d195ffe5223e8525e1310c` and build
-`1.0.0-dev.90be1e00ae6c`. Documentation/report-only follow-ups do not alter the
+`cdaae71f276a055b1425d8a603931ace33f57906` and build
+`1.0.0-dev.cdaae71f276a`. This supersedes the earlier `90be1e0` evidence.
+See [the current qualification summary](https://github.com/CrazyDuckLab/DuckOS/blob/v0.1.0-beta.2/docs/qualification-beta2.md). Documentation/report-only follow-ups do not alter the
 qualified product behavior. Final archives must be built from the same release
 commit as the annotated tag; `BUILD-INFO.json` records that full source commit,
 and `VERSION` uses `1.0.0-dev.<12-character-commit>`.

@@ -1,6 +1,6 @@
 Beta.2 Blocker Corrective Round — Final Report
 
-Repository: /Users/v.fomenko/Documents/Codex/DuckOS-public
+Repository: [redacted local checkout]
 Branch: beta2/lab-qa
 HEAD: ecb09902e52e480f59d2f5400480f66f8e3f95bb
 Expected: 0fa2a77fcdcb
@@ -433,15 +433,15 @@ VM B STATUS
 VM-B-REBOOT-BLOCKED.
 
 Read-only diagnosis from the operator workstation
-(172.18.4.77) at 2026-10-06T18:23:33+03:00:
+([redacted management address]) at 2026-10-06T18:23:33+03:00:
 
-  - ICMP ping 172.18.4.149: 100% packet loss
+  - ICMP ping [redacted management address]: 100% packet loss
   - ARP entry: (incomplete) on en0; no MAC
     observable from this side
   - TCP probes (22, 80, 443, 8080, 8443): no
     response within 2s
   - DNS lookup 'vm-b': NXDOMAIN
-  - Local DHCP lease: 172.18.4.77 (so VM B's
+  - Local DHCP lease: [redacted management address] (so VM B's
     address is not a local DHCP artifact)
 
 Cause: undetermined from read-only observation.

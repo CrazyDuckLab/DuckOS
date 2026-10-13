@@ -17,7 +17,7 @@ The qualifier "best-effort community support" means there is **no
 service-level agreement, no formal security certification, and no
 public security response timeline** for the public beta. A
 vulnerability found today will be addressed in the next planned
-release. Use the new block and the recovery primitives; never deploy
+release. Use the installation and recovery guides; never deploy
 this beta as a production gateway.
 
 ## Current security model (summary)
@@ -50,8 +50,9 @@ the high-level, public-facing summary.
   automatically. Closing the browser ends the session.
 - There is **no** built-in MFA, passkey, or WebAuthn support in this
   beta. The Owner password is the only factor.
-- A lost Owner account is recovered through the documented CLI path
-  (`sudo duck owner reset`). This is logged in the audit log.
+- Owner reset exists in the source-built CLI, which is not installed by the
+  beta.2 archive. Follow [CLI availability](docs/cli-api.md) and the recovery
+  guide; stop the API before offline recovery. It is logged in the audit log.
 
 ### Privilege separation
 
@@ -124,7 +125,7 @@ The preferred private reporting route, once the public repository
 is live, is **GitHub Private Vulnerability Reporting**:
 
 1. On the public DuckOS repository, open the **Security** tab.
-3. Click **Report a vulnerability** to open a private advisory
+2. Click **Report a vulnerability** to open a private advisory
    draft. The maintainer team is notified privately; the issue is
    never visible to the public until the maintainer chooses to
    disclose it.

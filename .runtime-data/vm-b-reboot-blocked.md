@@ -1,21 +1,21 @@
 VM-B-REBOOT-BLOCKED
 
 Read-only reachability diagnosis from the lab
-operator workstation (172.18.4.77). Captured at
+operator workstation ([redacted management address]). Captured at
 2026-10-06T18:23:33+03:00.
 
-TARGET: 172.18.4.149/16 (management expected on
+TARGET: [redacted management address] (management expected on
 eth0 per the BETA.2 wiring). The BETA.2 live
 qualification reported VM B unreachable after a
 scheduled reboot.
 
 == L3 ==
 
-  $ ping -c 3 -W 2 172.18.4.149
-  PING 172.18.4.149 (172.18.4.149): 56 data bytes
+  $ ping -c 3 -W 2 [redacted management address]
+  PING [redacted management address] ([redacted management address]): 56 data bytes
   Request timeout for icmp_seq 0
   Request timeout for icmp_seq 1
-  --- 172.18.4.149 ping statistics ---
+  --- [redacted management address] ping statistics ---
   3 packets transmitted, 0 packets received, 100% packet loss
 
   100% packet loss. ICMP echo either filtered or the
@@ -23,8 +23,8 @@ scheduled reboot.
 
 == L2 ==
 
-  $ arp -an | grep -i 172.18.4.149
-  ? (172.18.4.149) at (incomplete) on en0 ifscope [ethernet]
+  $ arp -an | grep -i [redacted management address]
+  ? ([redacted management address]) at (incomplete) on en0 ifscope [ethernet]
 
   ARP entry exists with "incomplete" status. The
   operator workstation sent an ARP request but never
@@ -39,15 +39,15 @@ scheduled reboot.
 
 == L4 ==
 
-  $ nc -z -G 2 172.18.4.149 22
+  $ nc -z -G 2 [redacted management address] 22
   (no response)
-  $ nc -z -G 2 172.18.4.149 80
+  $ nc -z -G 2 [redacted management address] 80
   (no response)
-  $ nc -z -G 2 172.18.4.149 443
+  $ nc -z -G 2 [redacted management address] 443
   (no response)
-  $ nc -z -G 2 172.18.4.149 8080
+  $ nc -z -G 2 [redacted management address] 8080
   (no response)
-  $ nc -z -G 2 172.18.4.149 8443
+  $ nc -z -G 2 [redacted management address] 8443
   (no response)
 
   No TCP service responds on the canonical ports.
@@ -69,8 +69,8 @@ scheduled reboot.
 == DHCP / lease shape ==
 
   The operator workstation's own lease is for
-  172.18.4.77 (yiaddr=172.18.4.77 in the DHCP ACK).
-  172.18.4.149 is therefore NOT a DHCP artifact on
+  [redacted management address] (yiaddr=[redacted management address] in the DHCP ACK).
+  [redacted management address] is therefore NOT a DHCP artifact on
   this workstation. The address is statically
   managed on the VM B host, or managed by a separate
   DHCP scope not observed here.

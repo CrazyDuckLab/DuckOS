@@ -1,9 +1,9 @@
 # Contributing to DuckOS
 
-DuckOS has an executable read-only foundation. Contributions establish the
-product, contracts, toolchain, and testable architecture; they must not
-present planned behavior as implemented or introduce networking code before
-the blocking foundation decisions are accepted.
+DuckOS beta.2 includes a Linux networking runtime and a qualified subset of
+operator workflows. Contributions must preserve privilege boundaries and Safe
+Apply, and distinguish implementation from observed and qualified behavior.
+See [current qualification](docs/qualification-beta2.md) and [limitations](docs/beta-limitations.md).
 
 ## Licensing model and contributor rights
 
@@ -37,6 +37,8 @@ tracks; authorship and copyright remain with the original contributor.
 Trademark use is a separate policy. Contributing code does not grant
 any right to use the DuckOS name, wordmark, rubber-duck logo, or
 other product identity. See [`TRADEMARKS.md`](TRADEMARKS.md).
+
+Follow the [community conduct policy](CODE_OF_CONDUCT.md) in project discussions.
 
 ## Before making a change
 
@@ -83,9 +85,10 @@ and ad-hoc file synchronization are not part of the workflow. A Linux system
 such as `duck-dev-01` is a build/test target only: it receives an exact
 committed revision from `CrazyDuckLab/DuckOS` through GitHub.
 
-At the current stage, do not install, configure, or modify `duck-dev-01`.
-Target provisioning, credentials, isolation, and test invocation require a
-later documented stage. Results from Linux count as evidence only when tied to
+Do not install, configure, or modify a shared qualification target without
+explicit authorization. Use disposable isolated Linux environments for tests
+that require a clean host; installed-system witness refusals are not passes.
+Results from Linux count as evidence only when tied to
 the exact Git commit and environment described by
 [`docs/testing.md`](docs/testing.md).
 
@@ -115,11 +118,11 @@ evidence still required. Networking, security, update, storage, and recovery
 claims eventually require real Linux boundaries, isolated client traffic,
 reboot/failure tests, and native architecture evidence.
 
-Run `make check` for formatting, static analysis, Go race/unit/contract tests,
+On Linux, run `make check` for formatting, static analysis, Go race/unit/contract tests,
 TypeScript and browser component tests, and installer preflight tests. Run
 `make build-all` for the production frontend and Linux architecture builds.
 Applicable integration/security checks remain mandatory; do not turn a skipped
-native Linux check into a pass. See `docs/evidence/executable-foundation.md`.
+native Linux check into a pass. See [testing](docs/testing.md) and [current qualification](docs/qualification-beta2.md).
 
 ## Pull request checklist
 

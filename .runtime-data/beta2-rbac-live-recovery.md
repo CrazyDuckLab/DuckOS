@@ -1,6 +1,6 @@
 # BETA.2 RBAC LIVE Recovery
 
-Repository: /Users/v.fomenko/Documents/Codex/DuckOS-public
+Repository: [redacted local checkout]
 Branch: beta2/lab-qa
 HEAD: 53c10351acb14f13d4a6e2b216f5115f49b5c282 (RBAC LIVE)
 Worktree: clean
@@ -94,14 +94,14 @@ correct and remains in this commit.
 Commit ea8be0a kept the byte-swap only for Destination /
 Gateway (host byte order) and added hexToPrefixLength for
 the Mask column. The Mask column was correctly read but
-the engine still produced '172.18.0.0/255.255.0.0', and
+the engine still produced '[redacted management address]5.255.0.0', and
 ValidateCIDRBody refuses '.' after '/' so the
 rbac_redacted rbac issue persisted — see commit 53c1035
 follow-up.
 
 Commit 53c1035 split hexToIP back into hexToIP (no swap,
 Mask column) and added hexToPrefixLength that emits the
-canonical '/N' prefix length (172.18.0.0/16) instead of
+canonical '/N' prefix length ([redacted management address]) instead of
 the 4-byte dotted-quad mask. The cidrIDPattern regex
 admits '/N' (it is what every CIDR test case uses).
 
@@ -109,7 +109,7 @@ After 53c1035 + lab redeploy + agent restart + labowner
 session re-login:
 
    GET /api/v1/objects/network.route
-   -> items: [{"ref":{"kind":"network.route","id":"0.0.0.0/0"}}, {"ref":{"kind":"network.route","id":"172.18.0.0/16"}}]
+   -> items: [{"ref":{"kind":"network.route","id":"0.0.0.0/0"}}, {"ref":{"kind":"network.route","id":"[redacted management address]"}}]
    -> issues: []   <-- no rbac_redacted
    -> total=2, items=2
 
@@ -230,8 +230,8 @@ native frr.service masked, frr@.service disabled — PASS
 MANAGEMENT SAFETY
 ==================================================
 
-eth0 = 172.18.4.102/16 (unchanged)
-default route via 172.18.1.254 dev eth0 (unchanged)
+eth0 = [redacted management address] (unchanged)
+default route via [redacted management address] dev eth0 (unchanged)
 eth1, eth2 = DOWN (unchanged)
 
 MANAGEMENT SAFETY: PASS.

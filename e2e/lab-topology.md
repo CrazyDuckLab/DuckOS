@@ -2,7 +2,7 @@
 
 Built on `duck-dev-01` (Debian 13). All assets are disposable and
 isolated from the protected management boundary
-(`eth0` 172.18.4.149/16, GW 172.18.1.254).
+(`eth0` [redacted management address], GW [redacted management address]).
 
 ## Topology
 
@@ -50,6 +50,6 @@ done
 
 ## Guard rails
 
-- eth0 / 172.18.4.149/16 / 172.18.1.254 are NEVER referenced from the lab.
+- eth0 / [redacted management address] / [redacted management address] are NEVER referenced from the lab.
 - Lab bridges use 10.99.99.0/24 and fd00:99::/64, both outside the management subnet.
 - All test assets (dummy, veth, ns) are removed by the teardown snippet.

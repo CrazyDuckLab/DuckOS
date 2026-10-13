@@ -1,6 +1,6 @@
 # BETA.2 Overnight Final Corrective + Live Qualification
 
-Repository: /Users/v.fomenko/Documents/Codex/DuckOS-public
+Repository: [redacted local checkout]
 Branch: beta2/lab-qa
 Final HEAD: ce8ca0e (fix(runtime-dir): RuntimeDirectoryMode=0750 + comment)
 Worktree: clean (everything committed, no push)
@@ -53,8 +53,8 @@ VM B installed HEAD (a8186cced8f8):
 2. VM A BASELINE
 ==================================================
 
-Management: eth0 = 172.18.4.102/16 unchanged
-Default route: via 172.18.1.254 dev eth0 unchanged
+Management: eth0 = [redacted management address] unchanged
+Default route: via [redacted management address] dev eth0 unchanged
 eth1, eth2: DOWN (disposable, untouched)
 duckos_release: 1.0.0-dev.a8186cced8f8 (HEAD at deploy time)
 
@@ -62,20 +62,20 @@ duckos_release: 1.0.0-dev.a8186cced8f8 (HEAD at deploy time)
 3. VM B BASELINE
 ==================================================
 
-Management: eth0 = 172.18.4.22/16 (NEW BASELINE — old 172.18.4.149 obsolete after snapshot restore)
-Default route: via 172.18.1.254 dev eth0
+Management: eth0 = [redacted management address] (NEW BASELINE — old [redacted management address] obsolete after snapshot restore)
+Default route: via [redacted management address] dev eth0
 eth1, eth2: present, disposable
 duckos_release (after fresh install): 1.0.0-dev.a8186cced8f8
 
 VM-B-AUTH-BLOCKED: the VM-B SSH alias (duck-dev-01 → duckdev
-user @ 172.18.4.22) refused every auth method attempted during
+user @ [redacted management address]) refused every auth method attempted during
 this run:
 
-  ssh -i ~/.ssh/duckos-dev duckdev@172.18.4.22        →  rejected
-  ssh -i ~/.ssh/id_ed25519 root@172.18.4.22           →  rejected
+  ssh -i ~/.ssh/duckos-dev <lab-user>@[redacted management address]        →  rejected
+  ssh -i ~/.ssh/id_ed25519 root@[redacted management address]           →  rejected
   ssh -i ~/.ssh/id_ed25519_crazyducklab_github root@  →  rejected
   ssh -o PreferredAuthentications=password root@       →  rejected
-  ssh via VM A bounce (duckdev@172.18.4.22)           →  rejected
+  ssh via VM A bounce (<lab-user>@[redacted management address])           →  rejected
 
 The VM B sshd offered publickey+password; both failed. The
 VM B ~/.ssh/authorized_keys for duckdev was reset by the fresh
@@ -135,7 +135,7 @@ VM A (post-deploy):
   GET /api/v1/auth/me (labowner Owner session)
     -> {"id":"...","role":"owner",...}
   GET /api/v1/overview
-    -> hostname=duck-beta-01, eth0=172.18.4.102/16,
+    -> hostname=duck-beta-01, eth0=[redacted management address],
        fe80::2d37:e160:858e:7fe5/64
 
 VM B (post-install):
@@ -423,13 +423,13 @@ Residue (documented, not deleted because some required DELETE revision):
 ==================================================================================
 
 VM A:
-  ETH0 UNCHANGED:                  YES  (172.18.4.102/16)
-  DEFAULT ROUTE UNCHANGED:          YES  (172.18.1.254 dev eth0)
+  ETH0 UNCHANGED:                  YES  ([redacted management address])
+  DEFAULT ROUTE UNCHANGED:          YES  ([redacted management address] dev eth0)
   MANAGEMENT OWNERSHIP PRESERVED:   YES
 
 VM B (verified via VM A sshd observation; no SSH available):
-  ETH0 UNCHANGED:                   LIKELY (172.18.4.22/16 unchanged at install)
-  DEFAULT ROUTE UNCHANGED:           LIKELY (via 172.18.1.254)
+  ETH0 UNCHANGED:                   LIKELY ([redacted management address] unchanged at install)
+  DEFAULT ROUTE UNCHANGED:           LIKELY (via [redacted management address])
   MANAGEMENT OWNERSHIP PRESERVED:   LIKELY
   (Direct verification BLOCKED — VM-B-AUTH-BLOCKED.)
 
@@ -509,7 +509,7 @@ All carry regressions (8 new trusted-LAN runtime tests + the
 22. REMAINING BLOCKERS
 ==================================================================================
 
-B1. VM-B-AUTH-BLOCKED — VM B SSH (duckdev@172.18.4.22)
+B1. VM-B-AUTH-BLOCKED — VM B SSH (<lab-user>@[redacted management address])
    consistently refused every key. Console access required to push
    back the lab pubkey. Affects: PHASE 8 WG cross-validation,
    PHASE 16 reboot recovery on VM B.

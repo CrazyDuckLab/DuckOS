@@ -1,20 +1,23 @@
 # DuckOS BETA.2 — Live Qualification Script (P065 + P090)
 
+Historical laboratory procedure, not public installation instructions. Beta.2
+ships the Port Mapping backend without UPnP IGD, SSDP, NAT-PMP or PCP frontends.
+
 This is the bounded script to run on the two Debian 13 lab VMs
-once they become reachable from the 192.168.88.0/24 host.
+once they become reachable from the operator workstation.
 
 **Do NOT execute against inaccessible VMs.** Run only when both
 nodes answer SSH and the host's `nft` binary is present.
 
 ## Environment
 
-- two VMs reachable as `node-a` (172.18.4.82) and `node-b` (172.18.4.149)
+- two VMs reachable as `node-a` ([redacted management address]) and `node-b` ([redacted management address])
 - each VM runs the beta.2 image with `nft` (nftables) available
 - each VM has a trusted LAN interface (eth1) and a WAN interface (eth0)
 - management interface eth0 stays reachable throughout the run
-- the host can SSH into each VM as `duckos` with the beta.2 key
+- the host can SSH into each VM with an operator-controlled SSH identity
 
-## P065 — UPnP / NAT-PMP / PCP / Wake qualification
+## P065 — Port Mapping backend and Wake qualification
 
 ```bash
 set -euo pipefail

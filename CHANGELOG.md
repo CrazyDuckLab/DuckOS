@@ -9,7 +9,8 @@ Beta prerelease; fresh installation only. No qualified beta.1 → beta.2 in-plac
 - Protected Xray credential materialization through Vault; corrected empty-inbound daemon lifecycle.
 - Improved WireGuard launcher dispatch, peer materialization, address idempotence and boot startup; qualified two simultaneous two-node tunnels.
 - Kept duck-agent at zero Linux capabilities and duck-wg-launcher at CAP_NET_ADMIN only.
-- Added FRR launcher ownership and native daemon conflict handling.
+- Added FRR launcher ownership and native daemon conflict handling; live AMD64 H10 BGP advertise/withdraw/restart passed.
+- Fixed WireGuard peer dispatch through the launcher, terminal Speed Lab slot release, and bounded WireGuard startup reconciliation retries.
 - Delivered Port Mapping backend, Trusted LAN enforcement, nftables lifecycle, TTL/revoke/cleanup, Wake-on-LAN and Speed Lab.
 - Fixed RBAC/network objects, Easy / Full UI and runtime IPC/systemd reliability; retained EN/RU/DE/ES.
 

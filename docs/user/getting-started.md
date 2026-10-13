@@ -48,8 +48,8 @@ the bootstrap authentication. The first Owner is created during
 enrollment and is the only account that exists.
 
 1. The UI prompts for a username, a display name, and a password.
-2. Choose a strong password. There is no minimum enforced by the
-   server; the UI recommends 14 characters or more.
+2. Choose a strong unique password of 15–128 characters; the server
+   enforces this range (and a maximum of 512 UTF-8 bytes).
 3. Submit. The browser is redirected to the dashboard.
 
 After enrollment, the browser holds a session token. The token lives in

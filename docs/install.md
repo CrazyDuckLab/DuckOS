@@ -50,7 +50,15 @@ sudo apt-get update
 sudo apt-get install iproute2 nftables curl ca-certificates passwd coreutils findutils python3
 ```
 
-The installer checks prerequisites. FRR handling and native daemon masking are
+The installer checks prerequisites. For WireGuard operations, install
+`wireguard-tools`; FRR routing requires `frr`. Install `libcap2-bin` so the
+installer can set the constrained launcher file capabilities:
+
+```bash
+sudo apt-get install wireguard-tools frr libcap2-bin
+```
+
+FRR handling and native daemon masking are
 part of its actual install flow; inspect its output and preserve any failure.
 `duckos` and `duck-dnsmasq` are service identities: use a separate administrator
 account. The current installer tolerates existing names; that does not make
@@ -110,6 +118,12 @@ when the first-run enrollment screen requires it. Create an Owner with a strong
 unique passphrase; do not paste the credential into issues, chats or logs.
 Follow [getting started](user/getting-started.md).
 There is no automatic mDNS discovery or browser-trusted LAN TLS onboarding.
+
+## CLI availability
+
+The archive contains six service binaries and the Web UI; it does not install
+the standalone `duck` CLI. Use the UI or authenticated API for routine access.
+See [CLI/API](cli-api.md) before following a guide that uses `duck`.
 
 ## Failure and recovery
 

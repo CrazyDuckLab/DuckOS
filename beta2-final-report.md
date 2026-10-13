@@ -1,5 +1,7 @@
-> Public release preparation note: the authoritative qualification identity is
+> Historical evidence: this report records the earlier qualification at
 > `90be1e00ae6c364f25d195ffe5223e8525e1310c` / `1.0.0-dev.90be1e00ae6c`.
+> Current qualification is `cdaae71f276a055b1425d8a603931ace33f57906`;
+> see [the current summary](docs/qualification-beta2.md).
 > The accepted report follow-up commit is `6fb4c132a631502f62677fe0050fb878d4b43578`.
 > Older report/deploy identifiers below are historical notes, not the final public
 > release identity. Final release artifacts record their own source in BUILD-INFO.
@@ -169,7 +171,7 @@
 ## NO PUSH confirmation
 - No `git push` was issued at any point in this run. The remote `origin/beta2/lab-qa` was not touched.
 - `git tag -l` shows no new tag. `beta.1` (`v0.1.0-beta.1`) is untouched.
-- `/Users/v.fomenko/Documents/Codex/DuckOS-ui-v1` was not opened or modified.
+- `[redacted local checkout]` was not opened or modified.
 - The physical ODROID-XU4 was not touched; all qualification runs were on the two lab VMs.
 
 ## Remaining blockers
