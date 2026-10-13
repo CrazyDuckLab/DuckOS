@@ -1,85 +1,48 @@
-# Public roadmap
+# DuckOS direction
 
-Beta.2 current scope supersedes older delivery-stage summaries below: official
-AMD64 / ARM64 / ARMv7 artifacts, qualified AMD64 WireGuard and Xray paths,
-Port Mapping backend, Wake and Speed Lab. See [release notes](release-notes.md)
-and [limitations](beta-limitations.md) for evidence and remaining gates.
+**Provisional priorities, not a delivery schedule.** Beta.2 is the current
+published prerelease. Planned work below is not a claim of existing support;
+implementation, integration and qualification must each be established.
+No beta.3 completion or release dates are promised.
 
-This page is the public roadmap. It exists to be honest about what
-ships in V1 beta and what does not. It does not contain promises
-beyond the V1 frozen frontend baseline.
+![Published beta.2 → deeper workflows → broader deployment](assets/presentation/roadmap.svg)
 
-## V1 BETA — now
+## Published: v0.1.0-beta.2
 
-The V1 beta is the **only** state a public visitor can use today.
+Official AMD64, ARM64 and ARMv7 artifacts; two-node AMD64 live evidence;
+WireGuard and Xray traffic scenarios; FRR H10; local identity/RBAC, Vault,
+Safe Apply foundations, diagnostics, Speed Lab, Wake-on-LAN and Port Mapping
+backend. ARM artifact verification does not establish equivalent live evidence.
+See [release notes](release-notes.md), [qualification](qualification-beta2.md)
+and [limitations](beta-limitations.md).
 
-- React / TypeScript UI with **Easy Mode** and **Full Mode**.
-- Real Linux observation through React → API → Engine → privileged
-  Agent for the **read-only** surfaces. The current system observes
-  Linux state; transactional network activation is gated.
-- First Owner enrollment, password login, built-in RBAC, expiring /
-  revocable sessions.
-- Doctor subsystem that surfaces findings.
-- Global search and Inspector.
-- English / Russian / German / Spanish.
-- IPv6-first data model.
-- Local-first operation; no mandatory SaaS dependency.
-- `amd64` build target is qualified; `arm64` and `armv7` are
-  reference-supported only.
+## Next directions: deeper operator workflows
 
-The V1 beta does **not** include the following, even though they
-appear in the V1 catalog:
+| Direction | Work to develop and qualify |
+|---|---|
+| Port Mapping | Public UPnP IGD / SSDP, NAT-PMP and PCP protocol frontends; backend already ships |
+| Core networking | WAN/LAN, DHCP/DNS and firewall workflow improvements, wider Safe Apply integration and evidence |
+| VPN Center | Coherent VPN workflows, split tunneling and policy integration |
+| Multi-WAN | Failover and policy routing workflows with controlled fault/recovery evidence |
+| Traffic and QoS | Traffic monitoring, resource bounds and QoS/SQM workflows |
+| Wi-Fi | Driver-aware management and native hardware qualification |
 
-- Live WAN / LAN / VLAN / DHCP / DNS / firewall / route / policy
-  configuration through the public web UI.
-- Multi-WAN live activation.
-- WireGuard / Xray / NetBird live activation.
-- Live Client provisioning and subscriptions.
-- Doctor remediation automation.
-- Update supervisor with the `Active + Previous` invariant on a
-  running system.
+These areas include existing models or foundations as well as future work.
+Their inclusion does not mean the complete public operator workflow ships today.
+Priority and scope may change after design review and testing.
 
-These are tracked under [`docs/beta-limitations.md`](beta-limitations.md).
+## Broader deployment: evidence before promises
 
-## LATER — V1 → 1.0
+- **OTA delivery:** build on signed offline update foundations; qualify trust,
+  state preservation and rollback before a public delivery channel.
+- **Recovery:** expand interruption, failure, power-loss and management-access
+  evidence; retain explicit operator recovery paths.
+- **System images:** explore bootable deployment artifacts beyond the current
+  Debian-host installer; no image is promised by beta.2.
+- **Hardware:** native ARM64/ARMv7, NIC and Wi-Fi coverage; physical board
+  qualification remains separate from cross-build verification.
 
-The LATER bucket is the same V1 catalog, not new features. It is the
-list of subsystems that are not yet wired up to Safe Apply through the
-public UI, in the rough order in which they would be wired up:
-
-1. Live network configuration through the public UI.
-2. Multi-WAN live activation with policy routing.
-3. WireGuard server and peer live activation.
-4. Xray live activation with subscription import.
-5. Live client provisioning with QR / `.conf` exports.
-6. Live update supervisor with the `Active + Previous` invariant
-   reachable from the UI.
-7. Bounded product logging, audit retention / export, support
-   bundle redaction.
-
-These items are engineering. They are not yet qualified for V1, and
-their order is a working order, not a delivery commitment.
-
-## FUTURE — beyond 1.0
-
-The FUTURE bucket is **explicitly not part of V1 and not part of the
-2026 work**. Items here are mentioned for context only.
-
-- A central management / controller product (sometimes referred to in
-  earlier internal notes as "UltraDuck") is **not** part of V1. It is
-  not in the public catalog, not in the V1 frozen frontend, and not
-  scheduled. Do not imply it exists.
-- Cloud-hosted control plane. **Not** part of V1; not a roadmap
-  commitment.
-- A managed commercial offering. **Not** part of V1.
-
-## What this roadmap deliberately does not do
-
-- It does not promise dates.
-- It does not promise a 1.0 release date.
-- It does not promise feature parity with any other product.
-- It does not promise that the FUTURE bucket will ever ship.
-
-A clean roadmap is honest about scope. The LATER bucket is the only
-place where engineering commitments are recorded. The FUTURE bucket
-is for context only.
+The local-first model, IPv4/IPv6 support, privilege separation, observable evidence
+and management protection remain design constraints. Product scope and registered
+choices are maintained in [the specification](product-spec-1.0.md) and [ADRs](adr/).
+A mandatory cloud service or central controller is not part of this roadmap.

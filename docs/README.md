@@ -11,6 +11,7 @@
 
 ## Architecture and security
 
+- [Inside DuckOS: diagrams and control/packet paths](platform-overview.md).
 - [Architecture](architecture.md), [configuration model](config-model.md) and [route compilation](route-compilation.md).
 - [Security model](security-model.md), [vulnerability reporting](../SECURITY.md) and [network privacy](privacy-network-egress.md).
 - [Safe Apply](user/safe-apply.md), [update foundations](update-system.md) and [storage policy](storage-policy.md).
