@@ -20,14 +20,14 @@ import (
 
 // listenUDP binds one NAT-PMP/PCP socket on addr:port and
 // serves it until ctx or the returned cancel fires.
-func listenUDP(ctx context.Context, srv *Server, networkRef string, addr netip.Addr, port int) (*udpSocket, error) {
+func listenUDP(ctx context.Context, srv *Server, networkRef string, addr netip.Addr, port int, bind Bind) (*udpSocket, error) {
 	laddr := net.UDPAddrFromAddrPort(netip.AddrPortFrom(addr, uint16(port)))
 	conn, err := net.ListenUDP("udp4", laddr)
 	if err != nil {
 		return nil, err
 	}
 	cctx, cancel := context.WithCancel(ctx)
-	s := &udpSocket{conn: conn, cancel: cancel}
+	s := &udpSocket{conn: conn, cancel: cancel, bind: bind}
 	go s.serve(cctx, srv, networkRef, addr)
 	return s, nil
 }
@@ -62,6 +62,19 @@ func (s *udpSocket) serve(ctx context.Context, srv *Server, networkRef string, l
 		// L3 segment shape: loopback and multicast sources are
 		// never valid mapping clients.
 		if fromAddr.IsLoopback() || fromAddr.IsMulticast() {
+			continue
+		}
+		// Cross-subnet guard: the source must live on one of
+		// the bind's on-link prefixes. A routed packet from a
+		// foreign subnet is refused and journaled.
+		if !s.bind.InPrefixes(fromAddr) {
+			srv.Journal().Add(Rejection{
+				At:         time.Now().UTC(),
+				Protocol:   "udp",
+				ClientIP:   fromAddr.String(),
+				NetworkRef: networkRef,
+				Reason:     "cross-subnet source refused",
+			})
 			continue
 		}
 		packet := buf[:n:n]

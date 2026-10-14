@@ -37,8 +37,29 @@ type Bind struct {
 	// Addrs are the interface's local IPv4 addresses (one
 	// listener socket set per address).
 	Addrs []netip.Addr
+	// Prefixes are the interface's on-link IPv4 subnets.
+	// When non-empty, a mapping client whose source address
+	// falls outside every prefix is refused as cross-subnet
+	// (beta.3 security requirement). Empty means "unknown
+	// topology": the check degrades to accept and the
+	// allow-list remains the control.
+	Prefixes []netip.Prefix
 	// Protocols selects which listeners start for this bind.
 	Protocols []upnp.Protocol
+}
+
+// InPrefixes reports whether addr falls inside at least one
+// of the bind's on-link prefixes.
+func (b Bind) InPrefixes(addr netip.Addr) bool {
+	if len(b.Prefixes) == 0 {
+		return true
+	}
+	for _, p := range b.Prefixes {
+		if p.Contains(addr) {
+			return true
+		}
+	}
+	return false
 }
 
 // IGDControlPort is the LAN-side HTTP/SOAP port of the UPnP
@@ -86,6 +107,9 @@ type bindRuntime struct {
 type udpSocket struct {
 	conn   *net.UDPConn
 	cancel context.CancelFunc
+	// bind carries the on-link prefixes for the cross-subnet
+	// source guard.
+	bind Bind
 }
 
 // NewFrontends wires the listener layer to the Server core.
@@ -115,10 +139,12 @@ func (f *Frontends) ReconcileEnabled() error {
 		if err != nil || len(addrs) == 0 {
 			continue
 		}
+		prefixes, _ := LocalIPv4Prefixes(iface)
 		binds = append(binds, Bind{
 			NetworkRef: n.NetworkRef,
 			Iface:      iface,
 			Addrs:      addrs,
+			Prefixes:   prefixes,
 			Protocols:  n.Protocols,
 		})
 	}
@@ -254,7 +280,7 @@ func (f *Frontends) startBind(ctx context.Context, b Bind) (*bindRuntime, error)
 			continue
 		}
 		if protocols[upnp.ProtoNATPMP] || protocols[upnp.ProtoPCP] {
-			s, err := listenUDP(cctx, f.srv, b.NetworkRef, addr, 5351)
+			s, err := listenUDP(cctx, f.srv, b.NetworkRef, addr, 5351, b)
 			if err != nil {
 				lastErr = err
 			} else {
@@ -332,6 +358,40 @@ func LocalIPv4Addrs(iface string) ([]netip.Addr, error) {
 		if ipn.Is4() && !ipn.IsUnspecified() {
 			out = append(out, ipn)
 		}
+	}
+	return out, nil
+}
+
+// LocalIPv4Prefixes lists the on-link IPv4 subnets of a
+// kernel interface (address + mask).
+func LocalIPv4Prefixes(iface string) ([]netip.Prefix, error) {
+	ifi, err := net.InterfaceByName(iface)
+	if err != nil {
+		return nil, err
+	}
+	addrs, err := ifi.Addrs()
+	if err != nil {
+		return nil, err
+	}
+	var out []netip.Prefix
+	for _, a := range addrs {
+		ipnet, ok := a.(*net.IPNet)
+		if !ok {
+			continue
+		}
+		ip4 := ipnet.IP.To4()
+		if ip4 == nil {
+			continue
+		}
+		addr, ok := netip.AddrFromSlice(ip4)
+		if !ok || !addr.Is4() || addr.IsUnspecified() {
+			continue
+		}
+		bits, _ := ipnet.Mask.Size()
+		if bits <= 0 || bits > 32 {
+			continue
+		}
+		out = append(out, netip.PrefixFrom(addr, bits))
 	}
 	return out, nil
 }

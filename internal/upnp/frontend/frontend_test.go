@@ -332,3 +332,20 @@ func TestRateBudgetWindowResets(t *testing.T) {
 		t.Fatal("window did not reset")
 	}
 }
+
+func TestBindCrossSubnetGuard(t *testing.T) {
+	lan := netip.MustParsePrefix("192.168.10.1/24")
+	b := Bind{NetworkRef: "lan-1", Prefixes: []netip.Prefix{lan}}
+	if !b.InPrefixes(netip.MustParseAddr("192.168.10.50")) {
+		t.Fatal("on-link client refused")
+	}
+	if b.InPrefixes(netip.MustParseAddr("10.20.30.40")) {
+		t.Fatal("cross-subnet source accepted")
+	}
+	// Unknown topology degrades to accept; allow-list remains
+	// the control.
+	empty := Bind{}
+	if !empty.InPrefixes(netip.MustParseAddr("10.20.30.40")) {
+		t.Fatal("empty prefixes must not reject")
+	}
+}

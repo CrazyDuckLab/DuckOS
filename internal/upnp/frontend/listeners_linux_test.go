@@ -21,7 +21,7 @@ func loopbackBind(t *testing.T) *udpSocket {
 	t.Helper()
 	addr := netip.MustParseAddr("127.0.0.1")
 	s, _ := newTestServer(t, nil)
-	sock, err := listenUDP(t.Context(), s, "lan.test", addr, 0)
+	sock, err := listenUDP(t.Context(), s, "lan.test", addr, 0, Bind{})
 	if err != nil {
 		t.Fatalf("listenUDP: %v", err)
 	}
