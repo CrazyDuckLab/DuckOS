@@ -17,6 +17,7 @@ package agent
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -26,6 +27,7 @@ import (
 	"time"
 
 	"github.com/CrazyDuckLab/DuckOS/internal/identity"
+	"github.com/CrazyDuckLab/DuckOS/internal/network"
 	"github.com/CrazyDuckLab/DuckOS/internal/wan"
 )
 
@@ -92,14 +94,91 @@ type WanHost struct {
 	mu     sync.Mutex
 	store  *WanStore
 	Access UPnPAccess
+	// network is the journal-first NetworkService. When nil
+	// the apply verb reports 501 (staging-only mode).
+	network *NetworkService
 }
 
-// NewWanHost wires the host.
-func NewWanHost(store *WanStore, acc UPnPAccess) (*WanHost, error) {
+// NewWanHost wires the host. network may be nil (the apply
+// verb then stays 501); when wired, apply composes a
+// network.Config candidate and admits it through the SAME
+// journal-first pipeline the network API uses.
+func NewWanHost(store *WanStore, acc UPnPAccess, network *NetworkService) (*WanHost, error) {
 	if _, err := store.Load(); err != nil {
 		return nil, err
 	}
-	return &WanHost{store: store, Access: acc}, nil
+	return &WanHost{store: store, Access: acc, network: network}, nil
+}
+
+// composeCandidate merges one provider into the current
+// journaled network configuration. Returns the candidate
+// JSON ready for SubmitCandidate.
+func composeWANCandidate(current json.RawMessage, p wan.Provider) (json.RawMessage, error) {
+	if len(current) == 0 {
+		return nil, errors.New("wan: no enrolled network configuration to compose onto")
+	}
+	var cfg network.Config
+	dec := json.NewDecoder(strings.NewReader(string(current)))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&cfg); err != nil {
+		return nil, fmt.Errorf("wan: current configuration undecodable: %w", err)
+	}
+	ifaceID := "wan-" + p.ID
+	// Remove any previous composition of this provider, then
+	// add the new interface and route entries.
+	ifaces := cfg.Interfaces[:0]
+	for _, i := range cfg.Interfaces {
+		if i.ID != ifaceID {
+			ifaces = append(ifaces, i)
+		}
+	}
+	cfg.Interfaces = ifaces
+	routes := cfg.Routes[:0]
+	for _, r := range cfg.Routes {
+		if r.Interface != ifaceID {
+			routes = append(routes, r)
+		}
+	}
+	cfg.Routes = routes
+	entry := network.Interface{
+		ID:         ifaceID,
+		Name:       p.Link,
+		Role:       "wan",
+		Kind:       "physical",
+		MTU:        1500,
+		DHCPClient: "none",
+	}
+	switch p.Mode {
+	case wan.ModeDHCP:
+		entry.DHCPClient = "ipv4"
+		entry.AcceptRA = true
+	case wan.ModeStatic:
+		if p.Static == nil {
+			return nil, errors.New("wan: static mode requires a static config")
+		}
+		entry.Addresses = append(entry.Addresses, p.Static.Address)
+	default:
+		return nil, fmt.Errorf("wan: mode %s cannot be applied yet", p.Mode)
+	}
+	cfg.Interfaces = append(cfg.Interfaces, entry)
+	if p.Mode == wan.ModeStatic && p.Static.Gateway != "" {
+		cfg.Routes = append(cfg.Routes, network.Route{
+			ID:          ifaceID + "-default",
+			Interface:   ifaceID,
+			Destination: "0.0.0.0/0",
+			Gateway:     p.Static.Gateway,
+			Metric:      100,
+			Table:       254,
+		})
+	}
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("wan: composed candidate invalid: %w", err)
+	}
+	out, err := json.Marshal(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // ServeHTTP dispatches /agent/v1/wan/*:
@@ -113,6 +192,12 @@ func (h *WanHost) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	tail := strings.Trim(strings.TrimPrefix(r.URL.EscapedPath(), WanPath), "/")
+	// The engine proxy composes WanPath + "/wan/v1/" + verb;
+	// strip the version segment so the canonical verb reaches
+	// the switch.
+	if strings.HasPrefix(tail, "wan/v1/") {
+		tail = strings.TrimPrefix(tail, "wan/v1/")
+	}
 	switch {
 	case r.Method == http.MethodGet && tail == "providers":
 		h.authorized(w, r, identity.Observe, h.handleGetProviders)
@@ -129,10 +214,7 @@ func (h *WanHost) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			h.handleDelete(w, r, id)
 		})
 	case r.Method == http.MethodPost && tail == "apply":
-		h.authorized(w, r, identity.ConfigureNetwork, func(w http.ResponseWriter, r *http.Request) {
-			fwrProblem(w, 501, "not_implemented",
-				"Live WAN apply is pending the managed-routing Safe Apply integration; the configuration is staged only.")
-		})
+		h.authorized(w, r, identity.ConfigureNetwork, h.handleApply)
 	default:
 		w.Header().Set("Allow", "GET, PUT, DELETE, POST")
 		fwrProblem(w, 404, "not_found", "WAN endpoint not found.")
@@ -245,6 +327,69 @@ func (h *WanHost) handleDelete(w http.ResponseWriter, r *http.Request, id string
 	}
 	log.Printf("wan: removed staged provider %s (by %s)", id, clientAddrOf(r))
 	writeFwrJSON(w, http.StatusOK, map[string]any{"status": "removed"})
+}
+
+// handleApply admits the staged provider through the
+// journal-first network pipeline: compose candidate →
+// SubmitCandidate (validate, journal, apply via networkd,
+// verify, confirmation window, automatic rollback).
+// 🔴 РИСК by design: the confirmation window and rollback
+// are the management-access protection, and the managed
+// routing adapter refuses destructive changes to the
+// management interface upstream.
+func (h *WanHost) handleApply(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	var body struct {
+		ID string `json:"id"`
+	}
+	dec := json.NewDecoder(io.LimitReader(r.Body, 4<<10))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&body); err != nil || body.ID == "" {
+		fwrProblem(w, 400, "invalid_request", "Body must be {\"id\":string}.")
+		return
+	}
+	h.mu.Lock()
+	networkSvc := h.network
+	h.mu.Unlock()
+	if networkSvc == nil {
+		fwrProblem(w, 501, "not_implemented",
+			"Live WAN apply is not wired on this agent: the journal-first network service is unavailable.")
+		return
+	}
+	current, revision, err := networkSvc.CurrentCandidate()
+	if err != nil {
+		fwrProblem(w, 503, "journal_unavailable", err.Error())
+		return
+	}
+	providers := h.providers()
+	var provider *wan.Provider
+	for i := range providers {
+		if providers[i].ID == body.ID {
+			provider = &providers[i]
+			break
+		}
+	}
+	if provider == nil {
+		fwrProblem(w, 404, "not_found", "No staged provider with this id.")
+		return
+	}
+	candidate, err := composeWANCandidate(current, *provider)
+	if err != nil {
+		fwrProblem(w, 422, "invalid_candidate", err.Error())
+		return
+	}
+	job, err := networkSvc.SubmitCandidate(revision, "", candidate, "api:"+clientAddrOf(r), "wan apply "+provider.ID, 300*time.Second)
+	if err != nil {
+		fwrProblem(w, 409, "admission_conflict", err.Error())
+		return
+	}
+	log.Printf("wan: applied provider %s (tx=%s, by %s)", provider.ID, job.TransactionID, clientAddrOf(r))
+	writeFwrJSON(w, http.StatusAccepted, map[string]any{
+		"status":        "admitted",
+		"transactionId": job.TransactionID,
+		"phase":         job.Phase,
+		"note":          "applied via the journal-first network pipeline; it rolls back automatically unless confirmed",
+	})
 }
 
 func (h *WanHost) handleStatus(w http.ResponseWriter, r *http.Request) {

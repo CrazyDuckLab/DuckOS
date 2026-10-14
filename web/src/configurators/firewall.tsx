@@ -20,6 +20,7 @@ import { RuntimeEvidencePanel } from "../components/forms/Panels";
 import { UnsupportedFeature } from "../components/UnsupportedFeature";
 import {
   deleteFirewallRule,
+  firewallTxControl,
   listFirewallObserved,
   listFirewallRules,
   putFirewallRule,
@@ -91,7 +92,7 @@ export function FirewallRulesPage({
     }
     try {
       await putFirewallRule(client.token(), rule, new AbortController().signal);
-      setStatus(`Applied rule ${rule.id} (verified on the kernel table).`);
+      setStatus(`Rule ${rule.id} admitted through Safe Apply; it rolls back automatically unless confirmed within the window.`);
       setDraft({ ...EMPTY_RULE });
       await refresh();
     } catch (e) {
@@ -158,7 +159,44 @@ export function FirewallRulesPage({
       <div className="v1-card">
         <div className="card-head">
           <h3>{"Forward rules"}</h3>
+          {config?.transaction?.transactionId && (
+            <span className="v1-pill" data-state={config.transaction.phase === "awaiting-confirmation" ? "warn" : "muted"}>
+              tx {config.transaction.transactionId.slice(0, 8)} · {config.transaction.phase}
+            </span>
+          )}
         </div>
+        {config?.transaction?.transactionId &&
+          config.transaction.phase === "awaiting-confirmation" && (
+            <div className="v1-row" style={{ marginBottom: "var(--v1-s2)" }}>
+              <button
+                type="button"
+                className="v1-button"
+                onClick={() => {
+                  void firewallTxControl(
+                    client.token(),
+                    "confirm",
+                    config.transaction!.transactionId!,
+                    new AbortController().signal,
+                  ).then(refresh);
+                }}
+              >
+                Confirm change
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void firewallTxControl(
+                    client.token(),
+                    "rollback",
+                    config.transaction!.transactionId!,
+                    new AbortController().signal,
+                  ).then(refresh);
+                }}
+              >
+                Roll back now
+              </button>
+            </div>
+          )}
         <p className="v1-mute">
           {"V1 manages FORWARD rules in the exclusively-owned inet duckos_fw table. Every change applies atomically with verify + rollback; the status below reflects the kernel readback, not just the API response."}
         </p>

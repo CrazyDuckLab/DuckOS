@@ -76,6 +76,13 @@ func (h *DhcpHost) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	tail := strings.TrimPrefix(r.URL.EscapedPath(), DhcpPath)
 	tail = strings.Trim(tail, "/")
+	// The engine proxy composes DhcpPath + "/dhcp/v1/" + verb;
+	// strip the version segment so the canonical verb reaches
+	// the switch.
+	if strings.HasPrefix(tail, "dhcp/v1/") {
+		tail = strings.TrimPrefix(tail, "dhcp/v1/")
+	}
+	tail = strings.Trim(tail, "/")
 	switch {
 	case r.Method == http.MethodGet && tail == "leases":
 		h.handleLeases(w, r)

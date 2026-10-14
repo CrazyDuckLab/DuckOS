@@ -223,8 +223,8 @@ func main() {
 	// renders FORWARD rules into the exclusively-owned
 	// inet duckos_fw table with atomic apply + verify +
 	// rollback; see internal/agent/fw_host.go.
-	if fwrHost, fwrErr := agent.NewFirewallRulesHost(
-		"/var/lib/duckos-agent/fwrules.json",
+	if fwrHost, fwrErr := agent.NewFirewallRulesService(
+		"/var/lib/duckos-agent/fw-state",
 		"/var/lib/duckos-agent/fw-stage",
 		"nft",
 		networkAccess,
@@ -234,18 +234,6 @@ func main() {
 	} else {
 		log.Printf("firewall rule management is not enabled: %v", fwrErr)
 	}
-	// beta.4: WAN provider staging + kernel observation. Live
-	// apply is explicitly refused (501) until the managed-
-	// routing Safe Apply integration lands.
-	if wanHost, wanErr := agent.NewWanHost(
-		agent.NewWanStore("/var/lib/duckos-agent/wan-providers.json"),
-		networkAccess,
-	); wanErr == nil {
-		handler.EnableWAN(wanHost)
-		log.Print("wan management is enabled (staging + observation; live apply pending)")
-	} else {
-		log.Printf("wan management is not enabled: %v", wanErr)
-	}
 	if frrHost, err := enableFRRService(*frrNetNS, *frrPathspace, *frrStateDir); err == nil {
 		defer frrHost.Close()
 		handler.EnableFRR(frrHost)
@@ -253,11 +241,28 @@ func main() {
 	} else {
 		log.Printf("frr service is not enabled: %v", err)
 	}
+	var networkServiceRef *agent.NetworkService
 	if service, err := enableNetworkService(); err == nil {
 		handler.EnableNetwork(service)
+		networkServiceRef = service
 		log.Print("network service is enabled; apply requests will be admitted after second-stage gate")
 	} else {
 		log.Printf("network service is not enabled: %v", err)
+	}
+
+	// beta.4: WAN provider staging + kernel observation, wired
+	// to the journal-first network service so apply composes a
+	// network.Config candidate (apply rolls back automatically
+	// unless confirmed).
+	if wanHost, wanErr := agent.NewWanHost(
+		agent.NewWanStore("/var/lib/duckos-agent/wan-providers.json"),
+		networkAccess,
+		networkServiceRef,
+	); wanErr == nil {
+		handler.EnableWAN(wanHost)
+		log.Print("wan management is enabled (staging + observation + journal-first apply)")
+	} else {
+		log.Printf("wan management is not enabled: %v", wanErr)
 	}
 	if qosHost, err := enableQoSService(*qosStateDir); err == nil {
 		defer qosHost.Close()

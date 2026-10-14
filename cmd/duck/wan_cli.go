@@ -66,7 +66,18 @@ func wanCmd(args []string) error {
 		}
 		return authedCall(cf, http.MethodDelete, "/api/v1/wan/providers/"+*id, nil, "wan remove")
 	case "apply":
-		return errors.New("wan apply: live WAN apply is pending the managed-routing Safe Apply integration (🔴 РИСК); configuration can be staged only")
+		fs := flag.NewFlagSet("wan apply", flag.ContinueOnError)
+		cf := addCommonFlags(fs)
+		id := fs.String("id", "", "Staged provider id to apply")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *id == "" {
+			return errors.New("wan apply: --id is required")
+		}
+		fmt.Fprintln(os.Stderr, "⚠  WAN apply mutates a live uplink through the journal-first pipeline; it rolls back automatically unless confirmed (duck network confirm --tx). 🔴 РИСК: wrong uplink changes can drop management access.")
+		body, _ := json.Marshal(map[string]string{"id": *id})
+		return authedCall(cf, http.MethodPost, "/api/v1/wan/apply", body, "wan apply")
 	default:
 		return errors.New("wan: unknown operation " + args[0])
 	}

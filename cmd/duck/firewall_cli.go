@@ -13,9 +13,28 @@ import (
 
 func firewallCmd(args []string) error {
 	if len(args) == 0 {
-		return errors.New("firewall: missing operation (rules | observed | add | update | delete | disable | enable)")
+		return errors.New("firewall: missing operation (status | rules | observed | add | update | delete | disable | enable | confirm | rollback)")
 	}
 	switch args[0] {
+	case "status":
+		fs := flag.NewFlagSet("firewall status", flag.ContinueOnError)
+		cf := addCommonFlags(fs)
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		return authedCall(cf, http.MethodGet, "/api/v1/firewall/rules/status", nil, "firewall status")
+	case "confirm", "rollback":
+		fs := flag.NewFlagSet("firewall "+args[0], flag.ContinueOnError)
+		cf := addCommonFlags(fs)
+		tx := fs.String("tx", "", "Transaction id to confirm or roll back")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *tx == "" {
+			return errors.New("firewall " + args[0] + ": --tx is required")
+		}
+		body, _ := json.Marshal(map[string]string{"transactionId": *tx})
+		return authedCall(cf, http.MethodPost, "/api/v1/firewall/rules/"+args[0], body, "firewall "+args[0])
 	case "rules":
 		fs := flag.NewFlagSet("firewall rules", flag.ContinueOnError)
 		cf := addCommonFlags(fs)

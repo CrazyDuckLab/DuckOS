@@ -481,10 +481,44 @@ export interface FirewallRule {
   comment?: string;
 }
 
+export interface FirewallTxJob {
+  transactionId?: string;
+  phase?: string;
+}
+
 export interface FirewallRulesConfig {
   rules: FirewallRule[];
   store?: string;
+  revision?: string;
+  transaction?: FirewallTxJob;
+  confirmWindow?: number;
   observedAt: string;
+}
+
+export async function firewallTxControl(
+  token: string,
+  action: "confirm" | "rollback",
+  transactionId: string,
+  signal: AbortSignal,
+): Promise<void> {
+  const response = await fetch(`/api/v1/firewall/rules/${action}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ transactionId }),
+    cache: "no-store",
+    credentials: "omit",
+    signal,
+  });
+  if (!response.ok) {
+    throw new APIError(
+      response.status,
+      `Firewall ${action} failed (HTTP ${response.status}).`,
+    );
+  }
 }
 
 export interface FirewallObservedSnapshot {

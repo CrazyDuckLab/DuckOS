@@ -64,6 +64,12 @@ func (h *FirewallHost) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	tail := strings.Trim(strings.TrimPrefix(r.URL.EscapedPath(), FirewallPath), "/")
+	// The engine proxy composes FirewallPath + "/firewall/v1/"
+	// + verb; strip the version segment so the canonical verb
+	// reaches the switch.
+	if strings.HasPrefix(tail, "firewall/v1/") {
+		tail = strings.TrimPrefix(tail, "firewall/v1/")
+	}
 	switch {
 	case r.Method == http.MethodGet && tail == "observed":
 		h.handleRules(w, r)

@@ -8,8 +8,11 @@
 package fwrules
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/CrazyDuckLab/DuckOS/internal/network"
 )
 
 // TableName is the exclusively-owned nftables table.
@@ -101,4 +104,19 @@ func sanitizeComment(c string) string {
 	c = strings.ReplaceAll(c, "\"", "'")
 	c = strings.ReplaceAll(c, "\\", "")
 	return c
+}
+
+// DecodeSnapshotObjects decodes an `nft -j list table inet
+// duckos_fw` readback into the validated object list. Empty
+// output (table absent) decodes to an empty list, not an
+// error, so Verify can distinguish the two states.
+func DecodeSnapshotObjects(raw []byte) ([]json.RawMessage, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	snap, err := network.DecodeNFTSnapshot(raw)
+	if err != nil {
+		return nil, err
+	}
+	return snap.Objects, nil
 }

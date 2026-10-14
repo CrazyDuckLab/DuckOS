@@ -65,10 +65,14 @@ Subcommands (each is a separate concern, all share the loopback API):
   firewall add/update     stage and apply a rule (--file rule.json)
   firewall delete         delete a rule (--id)
   firewall enable/disable toggle a rule (--id)
+  firewall status         print the journaled ruleset and transaction state
+  firewall confirm        confirm the pending rule transaction (--tx)
+  firewall rollback       roll back the pending rule transaction (--tx)
   wan status              print the observed kernel state of every link
   wan providers           print the staged WAN provider configuration
   wan stage               validate and stage a WAN provider (--file provider.json)
   wan remove              remove a staged WAN provider (--id)
+  wan apply               apply a staged WAN provider via Safe Apply (--id)
 
 Use --help on any subcommand for arguments.
 `

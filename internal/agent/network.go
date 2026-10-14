@@ -324,3 +324,57 @@ func networkJSON(w http.ResponseWriter, code int, value any) {
 	w.WriteHeader(code)
 	_, _ = w.Write(data)
 }
+
+// CurrentCandidate returns the journaled current network
+// configuration and its revision id. The WAN composer uses
+// it as the base for delta candidates.
+func (s *NetworkService) CurrentCandidate() (json.RawMessage, string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return nil, "", errors.New("network service is closed")
+	}
+	snapshot, err := s.controller.Status()
+	if err != nil {
+		return nil, "", err
+	}
+	return snapshot.Current.Config, snapshot.Current.ID, nil
+}
+
+// SubmitCandidate admits a composed candidate into the same
+// journal-first pipeline the public network API uses
+// (validation, journal, apply, verify, confirmation window,
+// automatic rollback). requestID may be empty for a
+// generated one.
+func (s *NetworkService) SubmitCandidate(expected, requestID string, candidate json.RawMessage, actor, reason string, confirmWindow time.Duration) (safeapply.Job, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed || s.controlBusy {
+		return safeapply.Job{}, errors.New("network service is busy or closed")
+	}
+	if s.startup.State() != "ready" {
+		return safeapply.Job{}, errors.New("network startup is incomplete")
+	}
+	if requestID == "" {
+		return s.worker.Submit(expected, candidate, actor, reason, confirmWindow)
+	}
+	return s.worker.SubmitRequest(expected, requestID, candidate, actor, reason, confirmWindow)
+}
+
+// TransactionStatus exposes the pending transaction state
+// (phase, id) for composed-candidate callers.
+func (s *NetworkService) TransactionStatus() (safeapply.Job, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	job, _, err := s.worker.Status()
+	return job, err
+}
+
+// ConfirmTransaction / RollbackTransaction drive the
+// confirmation window for candidates admitted through
+// SubmitCandidate. Both are fire-and-forget like the IPC
+// path: the worker serializes.
+func (s *NetworkService) ConfirmTransaction(id string) { go func() { _ = s.controller.Confirm(id) }() }
+func (s *NetworkService) RollbackTransaction(id string) {
+	go func() { _ = s.controller.Rollback(id) }()
+}
