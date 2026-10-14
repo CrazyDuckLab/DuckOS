@@ -34,6 +34,7 @@ import (
 	"github.com/CrazyDuckLab/DuckOS/internal/state"
 	"github.com/CrazyDuckLab/DuckOS/internal/upgrade"
 	"github.com/CrazyDuckLab/DuckOS/internal/upnp"
+	"github.com/CrazyDuckLab/DuckOS/internal/upnp/frontend"
 	"github.com/CrazyDuckLab/DuckOS/internal/ups"
 	"github.com/CrazyDuckLab/DuckOS/internal/vault"
 	"github.com/CrazyDuckLab/DuckOS/internal/wake"
@@ -1039,7 +1040,22 @@ func enableUPnPService(access identityAccess) (*agent.UPnPHost, error) {
 	}
 	rt := upnp.NewRuntime(mgr, backend)
 	go rt.Start(context.Background())
-	return agent.NewUPnPHost(rt, access, registry, enrollment), nil
+	host := agent.NewUPnPHost(rt, access, registry, enrollment)
+	// beta.3: attach the protocol frontends (SSDP responder,
+	// NAT-PMP/PCP UDP listeners, IGD control). The listener
+	// layer is disabled until an operator enables a trusted
+	// network through the API; ReconcileEnabled is re-run on
+	// every enable/disable through UPnPHost.
+	fe := frontend.NewFrontends(
+		frontend.NewServer(frontend.DefaultLimits(), nil, rt),
+		rt,
+		func(ref string) (string, bool) {
+			iface, ok := registry.ResolvedInterfaces(enrollment)[ref]
+			return iface, ok
+		},
+	)
+	host.AttachFrontends(fe)
+	return host, nil
 }
 
 // upnpEnrollmentSnapshot loads the Agent's enrollment.json

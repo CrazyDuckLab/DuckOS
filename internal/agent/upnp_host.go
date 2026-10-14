@@ -21,6 +21,7 @@ import (
 
 	"github.com/CrazyDuckLab/DuckOS/internal/identity"
 	"github.com/CrazyDuckLab/DuckOS/internal/upnp"
+	"github.com/CrazyDuckLab/DuckOS/internal/upnp/frontend"
 )
 
 // UPnPPath is the IPC route prefix for the production
@@ -62,6 +63,48 @@ type UPnPHost struct {
 	Access     UPnPAccess
 	Registry   *upnp.TrustedLANRegistry
 	Enrollment upnp.EnrollmentSnapshot
+	// Frontends is the optional protocol-listener layer
+	// (beta.3). When nil the host behaves exactly as in
+	// beta.2: the runtime only mutates through explicit
+	// operator/API requests and nothing listens on the LAN.
+	Frontends UPnPFrontendController
+}
+
+// UPnPFrontendController is the narrow contract the host
+// uses to drive and observe the protocol-listener layer.
+// *frontend.Frontends satisfies it on linux.
+type UPnPFrontendController interface {
+	ReconcileEnabled() error
+	StopAll()
+	// Snapshot returns the listener status, the protocol-core
+	// counters and the recent rejection journal entries.
+	Snapshot() (frontend.FrontendsStatus, frontend.Status, []frontend.Rejection)
+}
+
+// AttachFrontends wires the listener layer. Call once during
+// agent boot before serving IPC.
+func (h *UPnPHost) AttachFrontends(f UPnPFrontendController) {
+	h.mu.Lock()
+	h.Frontends = f
+	h.mu.Unlock()
+}
+
+// reconcileFrontends re-aligns listeners with the current
+// enabled-network set. Failures are non-fatal: the runtime
+// state is still authoritative and the state document
+// reports the listener truth.
+func (h *UPnPHost) reconcileFrontends() {
+	h.mu.Lock()
+	f := h.Frontends
+	h.mu.Unlock()
+	if f == nil {
+		return
+	}
+	if err := f.ReconcileEnabled(); err != nil {
+		// Logged upstream by the controller; the IPC result
+		// must not fail because a socket could not bind.
+		_ = err
+	}
 }
 
 // NewUPnPHost wires the upnp.Runtime into the host.
@@ -184,13 +227,38 @@ func (h *UPnPHost) handleState(w http.ResponseWriter, r *http.Request, src UPnPS
 	if _, ok := h.authorize(w, r, identity.Observe); !ok {
 		return
 	}
+	h.mu.Lock()
+	ctl := h.Frontends
+	h.mu.Unlock()
 	out := struct {
 		Stats    upnp.RuntimeStats `json:"stats"`
 		Networks []upnp.Network    `json:"networks"`
 		Mappings []upnp.Mapping    `json:"mappings"`
+		// Frontends carries the beta.3 protocol-listener
+		// surface. Nil when the agent did not attach the
+		// listener layer (cross-platform test stubs).
+		Frontends *frontendStateDoc `json:"frontends,omitempty"`
 	}{Stats: src.Stats(), Networks: src.Networks(), Mappings: src.Mappings()}
+	if ctl != nil {
+		fs, core, rejections := ctl.Snapshot()
+		out.Frontends = &frontendStateDoc{
+			Status:     fs,
+			Counters:   core,
+			Rejections: rejections,
+		}
+	}
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(out)
+}
+
+// frontendStateDoc is the beta.3 extension of the public
+// UPnP state document. Only observed truth: running listeners,
+// monotonic counters, and refused requests the Operator can
+// inspect.
+type frontendStateDoc struct {
+	Status     frontend.FrontendsStatus `json:"status"`
+	Counters   frontend.Status          `json:"counters"`
+	Rejections []frontend.Rejection     `json:"rejections"`
 }
 
 func (h *UPnPHost) handleEnable(w http.ResponseWriter, r *http.Request, ref string, src UPnPSource, acc UPnPAccess) {
@@ -235,6 +303,10 @@ func (h *UPnPHost) handleEnable(w http.ResponseWriter, r *http.Request, ref stri
 		upnpProblem(w, 400, "invalid_request", err.Error())
 		return
 	}
+	// Align the protocol listeners with the new enabled
+	// network set. Non-fatal: the runtime state is already
+	// committed and the state document reports listener truth.
+	h.reconcileFrontends()
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -252,6 +324,9 @@ func (h *UPnPHost) handleDisable(w http.ResponseWriter, r *http.Request, ref str
 	if h.Registry != nil {
 		_ = h.Registry.Revoke(ref)
 	}
+	// Listeners for the revoked network are torn down by the
+	// same reconcile pass that tears down revoked trust.
+	h.reconcileFrontends()
 	w.WriteHeader(http.StatusNoContent)
 }
 
