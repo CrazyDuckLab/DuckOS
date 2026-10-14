@@ -365,8 +365,10 @@ func TestBindCrossSubnetGuard(t *testing.T) {
 
 func TestNATPMPSourcePortMismatchRefused(t *testing.T) {
 	s, sink := newTestServer(t, nil)
-	base := time.Unix(1000000, 0)
-	s.core.nowFn = func() time.Time { return base.Add(10 * time.Second) }
+	// Epoch is measured from server start (real clock), so the
+	// fake clock must stay ahead of it.
+	base := time.Now().Add(10 * time.Second)
+	s.core.nowFn = func() time.Time { return base }
 	// natPMPReqBadSrc claims internal port 5000 but "arrives"
 	// from a different source port.
 	res := s.HandleNATPMP(natPMPReqBadSrc(1, 5000, 0, 600), clientIP(), 0, lanNet)
