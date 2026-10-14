@@ -29,9 +29,9 @@ evidence; untested rows are marked NOT VERIFIED.
 | Pairing | Verdict | Evidence |
 |---|---|---|
 | Firewall rules (inet duckos_fw) ↔ Port Mapping (inet duckos_upnp) ↔ management policy (inet duckos) | COMPATIBLE (by construction) | Three exclusively-owned tables; every mutation renders only its own table; no global flush anywhere. Cross-table integration test on live kernel: **PENDING LIVE QUALIFICATION**. |
-| Firewall rules ↔ Safe Apply | INTEGRATED (host-level transaction) | Every mutation is staged → validated → applied as one atomic nft batch → verified by kernel readback → auto-restored on failure (fw_host.go). Journal-first safeapply store integration (state.OpenExisting) remains future work — documented. |
+| Firewall rules ↔ Safe Apply | INTEGRATED (journal-first) | Mutations admit through a dedicated safeapply.Controller instance (own durable journal, Preflight, atomic batch, readback Verify, Restore, confirm window, auto-rollback, crash recovery) — same engine as the network path, second instance, no parallel design (fw_host.go). |
 | Firewall rules ↔ management access | SAFE BY BOUNDARY | V1 renders FORWARD rules only; input filtering stays with the management policy owner, so UI rules cannot lock out eth0. |
-| WAN staging ↔ managed routing | STAGED ONLY | WAN mutations validate + persist and are reported as staged; the apply verb returns 501 until the networkd enrollment + Safe Apply integration exists. No parallel network configuration engine. |
+| WAN apply ↔ managed routing | INTEGRATED (journal-first) | WAN apply composes a network.Config candidate (replacing prior provider entries idempotently) and admits it via NetworkService.SubmitCandidate; the managed-routing adapter enforces management protection upstream. PPPoE/L2TP apply refused until real provider runtimes exist. |
 | WAN observation ↔ kernel | READ-ONLY | net.Interface + /proc/net/route reads only (observe_linux.go). |
 
 ## Known interaction risks
