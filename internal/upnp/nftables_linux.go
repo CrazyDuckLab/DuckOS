@@ -34,6 +34,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -47,6 +48,9 @@ type NftablesBackend struct {
 	binPath     string
 	stagingDir  string
 	trustedIfxs []string
+	// active is the backend's authoritative view of the
+	// mappings currently rendered into inet duckos_upnp.
+	active []Mapping
 	// validateOnly skips the `nft -f` load step so the
 	// constructor can probe `nft` availability without
 	// mutating the kernel. Production wiring always sets
@@ -143,17 +147,92 @@ func (n *NftablesBackend) UntrustIface(iface string) {
 	n.trustedIfxs = out
 }
 
-// Add renders and applies the mapping. Returns an explicit
-// error if the nft staging file fails validation so the
-// runtime can roll back the Manager state.
+// active carries the backend's view of the mappings that
+// are currently rendered into the kernel table. The runtime
+// serialized every Add/Remove through this backend, so this
+// view can never race; it is the source for the atomic
+// full-table replacement batch.
+//
+// Lifecycle design (beta.3 hardening, replaces the beta.2
+// per-mapping additive render + whole-table flush):
+//
+//   - Every Add and Remove renders ONE self-contained nft
+//     transaction: ensure-table + delete-table + create
+//     table/chains + one rule per active mapping. `nft -f`
+//     applies the file as a single atomic transaction, so
+//     there is never a window with missing or stale rules
+//     and removing mapping A can never touch mapping B.
+//   - The add-delete-add table idiom makes the batch
+//     idempotent (the table may or may not exist) and wipes
+//     stale rules from a previous process run at the first
+//     mutation after restart.
+//   - No rule handles are used: rules are re-derived from
+//     the active set on every change, so an unrelated
+//     subsystem mutating its own tables cannot invalidate
+//     our identifiers.
+//   - A failed `nft` run leaves `active` untouched, keeping
+//     in-memory and kernel state consistent.
 func (n *NftablesBackend) Add(m Mapping) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	rendered, err := renderMapping(m)
+	next := make([]Mapping, 0, len(n.active)+1)
+	replaced := false
+	for _, existing := range n.active {
+		if existing.ID == m.ID {
+			next = append(next, m) // renewal: same id replaces
+			replaced = true
+			continue
+		}
+		next = append(next, existing)
+	}
+	if !replaced {
+		next = append(next, m)
+	}
+	rendered, err := renderTable(next)
 	if err != nil {
 		return err
 	}
-	stage := filepath.Join(n.stagingDir, m.ID+".nft")
+	if err := n.apply(rendered); err != nil {
+		return err
+	}
+	n.active = next
+	return nil
+}
+
+// Remove drops the mapping and re-renders the remaining
+// active set. Removing an unknown id is a no-op success so
+// retries and restart recovery are idempotent.
+func (n *NftablesBackend) Remove(id string) error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	found := false
+	next := make([]Mapping, 0, len(n.active))
+	for _, existing := range n.active {
+		if existing.ID == id {
+			found = true
+			continue
+		}
+		next = append(next, existing)
+	}
+	if !found {
+		return nil
+	}
+	rendered, err := renderTable(next)
+	if err != nil {
+		return err
+	}
+	if err := n.apply(rendered); err != nil {
+		return err
+	}
+	n.active = next
+	return nil
+}
+
+// apply stages and loads one nft transaction. On any failure
+// the active set is left untouched so the caller (runtime)
+// and the kernel stay consistent.
+func (n *NftablesBackend) apply(rendered []byte) error {
+	stage := filepath.Join(n.stagingDir, "duckos-upnp.batch.nft")
 	if err := os.WriteFile(stage, rendered, 0o600); err != nil {
 		return fmt.Errorf("upnp: stage write failed: %w", err)
 	}
@@ -166,29 +245,6 @@ func (n *NftablesBackend) Add(m Mapping) error {
 	if err := cmd.Run(); err != nil {
 		_ = os.Remove(stage)
 		return fmt.Errorf("upnp: nft -f failed: %w: %s", err, strings.TrimSpace(stderr.String()))
-	}
-	return nil
-}
-
-// Remove deletes the staging file and asks nft to flush
-// the corresponding rule. Remove failures are non-fatal —
-// the runtime emits a MappingEvent but does not block.
-func (n *NftablesBackend) Remove(id string) error {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	stage := filepath.Join(n.stagingDir, id+".nft")
-	if _, err := os.Stat(stage); err == nil {
-		_ = os.Remove(stage)
-	}
-	if n.validateOnly {
-		return nil
-	}
-	// Best-effort flush. The runtime tolerates errors.
-	cmd := exec.Command(n.binPath, "flush", "table", "inet", "duckos_upnp")
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("upnp: nft flush failed: %w: %s", err, strings.TrimSpace(stderr.String()))
 	}
 	return nil
 }
@@ -219,22 +275,47 @@ func WanRefusedErr() error { return WanRefused }
 // live in the cross-platform file (upnp.go) so the Agent and
 // API packages can refer to them from darwin builds.
 
-// renderMapping produces a minimal nftables snippet that
-// installs one DNAT rule for the dynamic mapping. The full
-// port-range / multi-protocol case is intentionally out of
-// V1 scope; the bounded surface is one mapping per id.
-func renderMapping(m Mapping) ([]byte, error) {
+// renderTable produces ONE self-contained nft transaction
+// that atomically replaces inet duckos_upnp with exactly one
+// DNAT rule per mapping (sorted by id for deterministic
+// rule order). The add-table/delete-table/add-table idiom
+// makes the batch correct whether or not the table exists
+// and clears stale rules left by a previous process run.
+//
+// The full port-range case is intentionally out of V1
+// scope; the bounded surface is one mapping per id.
+func renderTable(mappings []Mapping) ([]byte, error) {
+	sorted := append([]Mapping(nil), mappings...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].ID < sorted[j].ID })
+	var b strings.Builder
+	b.WriteString("# duckos.upnp atomic table replacement\n")
+	b.WriteString("add table inet duckos_upnp\n")
+	b.WriteString("delete table inet duckos_upnp\n")
+	b.WriteString("add table inet duckos_upnp\n")
+	b.WriteString("add chain inet duckos_upnp prerouting { type nat hook prerouting priority -100 ; }\n")
+	for _, m := range sorted {
+		rule, err := renderRule(m)
+		if err != nil {
+			return nil, err
+		}
+		b.WriteString(rule)
+	}
+	return []byte(b.String()), nil
+}
+
+// renderRule renders one DNAT rule line.
+func renderRule(m Mapping) (string, error) {
 	if m.ID == "" {
-		return nil, errors.New("upnp: mapping id is required")
+		return "", errors.New("upnp: mapping id is required")
 	}
 	if m.ExternalPort < 1 || m.ExternalPort > 65535 {
-		return nil, errors.New("upnp: externalPort out of range")
+		return "", errors.New("upnp: externalPort out of range")
 	}
 	if m.InternalPort < 1 || m.InternalPort > 65535 {
-		return nil, errors.New("upnp: internalPort out of range")
+		return "", errors.New("upnp: internalPort out of range")
 	}
 	if m.InternalHost == "" {
-		return nil, errors.New("upnp: internalHost is required")
+		return "", errors.New("upnp: internalHost is required")
 	}
 	// The empty transport keeps beta.2 renderings (tcp) stable.
 	transport := string(m.Transport)
@@ -242,15 +323,10 @@ func renderMapping(m Mapping) ([]byte, error) {
 		transport = string(TransportTCP)
 	}
 	if transport != string(TransportTCP) && transport != string(TransportUDP) {
-		return nil, fmt.Errorf("upnp: unsupported transport %q", transport)
+		return "", fmt.Errorf("upnp: unsupported transport %q", transport)
 	}
-	var b strings.Builder
-	b.WriteString("# duckos.upnp mapping\n")
-	b.WriteString("add table inet duckos_upnp\n")
-	b.WriteString("add chain inet duckos_upnp prerouting { type nat hook prerouting priority -100 ; }\n")
-	b.WriteString(fmt.Sprintf(
-		"add rule inet duckos_upnp prerouting %s dport %d dnat to %s:%d\n",
-		transport, m.ExternalPort, m.InternalHost, m.InternalPort,
-	))
-	return []byte(b.String()), nil
+	return fmt.Sprintf(
+		"add rule inet duckos_upnp prerouting %s dport %d dnat ip to %s:%d comment \"duckos_upnp:%s\"\n",
+		transport, m.ExternalPort, m.InternalHost, m.InternalPort, m.ID,
+	), nil
 }
