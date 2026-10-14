@@ -19,6 +19,7 @@ import { PageFrame } from "../components/PageFrame";
 import { StatePanel } from "../components/forms/States";
 import { RuntimeEvidencePanel } from "../components/forms/Panels";
 import { UnsupportedFeature } from "../components/UnsupportedFeature";
+import { listFirewallRules, type FirewallRulesSnapshot } from "../api";
 import type { Overview } from "../../../shared/api/types";
 
 export function FirewallRulesPage({
@@ -31,9 +32,13 @@ export function FirewallRulesPage({
   client: APIClient;
 }) {
   const [result, setResult] = useState<FetchResult<Overview> | null>(null);
+  const [snapshot, setSnapshot] = useState<FirewallRulesSnapshot | null>(null);
   useEffect(() => {
     const ctl = new AbortController();
     client.fetchOverview({ signal: ctl.signal }).then(setResult);
+    listFirewallRules(client.token(), ctl.signal)
+      .then(setSnapshot)
+      .catch(() => setSnapshot(null));
     return () => ctl.abort();
   }, [client]);
   if (!result)
@@ -66,13 +71,36 @@ export function FirewallRulesPage({
       />
       <div className="v1-card">
         <div className="card-head">
-          <h3>Rule editor columns (live workspace contract)</h3>
+          <h3>Owned-table snapshot (read-only)</h3>
         </div>
         <p className="v1-mute">
-          The live firewall workspace needs a typed /api/v1/firewall/rules
-          endpoint that returns chains and rules with these columns. Until then
-          the page renders here as a contract-gap stub.
+          beta.4 exposes the observed inet/duckos table through
+          /api/v1/firewall/rules. Typed chain/rule CRUD is still a contract
+          gap — the editor below stays unimplemented on purpose.
         </p>
+        {snapshot && (
+          <ul
+            className="v1-row"
+            style={{
+              gap: "var(--v1-s2)",
+              flexWrap: "wrap",
+              listStyle: "none",
+              padding: 0,
+            }}
+          >
+            <li className="v1-pill">
+              objects: <strong>{snapshot.objects.length}</strong>
+            </li>
+            <li className="v1-pill">
+              empty: <strong>{String(snapshot.empty)}</strong>
+            </li>
+            {snapshot.error && (
+              <li className="v1-pill" data-state="warn">
+                {snapshot.error}
+              </li>
+            )}
+          </ul>
+        )}
         <ul
           className="v1-row"
           style={{

@@ -60,6 +60,7 @@ Subcommands (each is a separate concern, all share the loopback API):
   upnp disable            disable port mapping on a network (--network)
   upnp revoke             revoke one dynamic mapping (--id)
   dhcp leases             print the DHCP server's lease table (read-only)
+  firewall rules          print the observed DuckOS-owned nftables table (read-only)
 
 Use --help on any subcommand for arguments.
 `
@@ -127,6 +128,8 @@ func dispatch(args []string) error {
 		return upnpCmd(rest)
 	case "dhcp":
 		return dhcpCmd(rest)
+	case "firewall":
+		return firewallCmd(rest)
 	case "config":
 		return configCmd(rest)
 	case "provenance":

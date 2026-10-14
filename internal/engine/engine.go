@@ -1292,6 +1292,41 @@ func (e *Engine) DhcpProxy(ctx context.Context, method, path, token string, body
 	return resp.StatusCode, data, resp.Header.Get("Content-Type"), nil
 }
 
+// FirewallProxy proxies the public /api/v1/firewall/* request
+// to the privileged Agent /agent/v1/firewall/* IPC. Read-only
+// observation of the DuckOS-owned nftables table; mutation
+// stays with the Safe Apply configuration path.
+func (e *Engine) FirewallProxy(ctx context.Context, method, path, token string, body io.Reader) (status int, data []byte, contentType string, err error) {
+	if e == nil {
+		return 0, nil, "", errors.New("engine not configured")
+	}
+	tail := strings.TrimPrefix(path, "/api/v1/firewall/")
+	if tail == "" {
+		tail = path
+	}
+	target := "http://agent" + agent.FirewallPath + "/firewall/v1/" + strings.TrimPrefix(tail, "/")
+	req, err := http.NewRequestWithContext(ctx, method, target, body)
+	if err != nil {
+		return 0, nil, "", err
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := e.client.Do(req)
+	if err != nil {
+		return 0, nil, "", errors.New("Agent is unavailable")
+	}
+	defer resp.Body.Close()
+	data, err = io.ReadAll(io.LimitReader(resp.Body, DhcpMaxBytes+1))
+	if err != nil {
+		return resp.StatusCode, nil, resp.Header.Get("Content-Type"), errors.New("Agent firewall response read failed")
+	}
+	if len(data) > DhcpMaxBytes {
+		return resp.StatusCode, nil, resp.Header.Get("Content-Type"), errors.New("Agent firewall response exceeds size limit")
+	}
+	return resp.StatusCode, data, resp.Header.Get("Content-Type"), nil
+}
+
 func (e *Engine) overview(ctx context.Context, force bool) ([]byte, error) {
 	for {
 		e.mu.Lock()

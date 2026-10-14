@@ -216,6 +216,9 @@ func main() {
 		leasePath = "/var/lib/misc/dnsmasq.leases"
 	}
 	handler.EnableDHCP(agent.NewDhcpHost(agent.FileLeaseReader(leasePath), networkAccess, leasePath))
+	// beta.4: read-only firewall snapshot of the owned
+	// inet/duckos table so the UI can show kernel truth.
+	handler.EnableFirewall(agent.NewFirewallHost(agent.LiveSnapshotProvider(), networkAccess))
 	if frrHost, err := enableFRRService(*frrNetNS, *frrPathspace, *frrStateDir); err == nil {
 		defer frrHost.Close()
 		handler.EnableFRR(frrHost)

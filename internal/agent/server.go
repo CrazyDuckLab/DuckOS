@@ -9,6 +9,7 @@ import (
 	"github.com/CrazyDuckLab/DuckOS/internal/firstrun"
 	"github.com/CrazyDuckLab/DuckOS/internal/lifecycle"
 	"github.com/CrazyDuckLab/DuckOS/internal/model"
+	"github.com/CrazyDuckLab/DuckOS/internal/network"
 	"net/http"
 	"strings"
 	"time"
@@ -48,6 +49,7 @@ type Handler struct {
 	upnp      *UPnPHost
 	wake      *WakeHost
 	dhcp      *DhcpHost
+	firewall  *FirewallHost
 	frr       *FRRHost
 	slots     chan struct{}
 	network   *NetworkService
@@ -278,6 +280,12 @@ func (h *Handler) EnableDHCP(host *DhcpHost) {
 	h.dhcp = host
 }
 
+// EnableFirewall registers the read-only firewall snapshot
+// host. It never mutates rule state.
+func (h *Handler) EnableFirewall(host *FirewallHost) {
+	h.firewall = host
+}
+
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
@@ -447,6 +455,16 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.wake.ServeHTTP(w, r)
+		return
+	}
+	if strings.HasPrefix(r.URL.EscapedPath(), FirewallPath) {
+		if h.firewall == nil {
+			NewFirewallHost(func() (network.NFTSnapshot, error) {
+				return network.NFTSnapshot{}, errors.New("firewall: observation source is not wired")
+			}, nil).ServeHTTP(w, r)
+			return
+		}
+		h.firewall.ServeHTTP(w, r)
 		return
 	}
 	if strings.HasPrefix(r.URL.EscapedPath(), DhcpPath) {

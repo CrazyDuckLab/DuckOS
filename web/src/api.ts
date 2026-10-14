@@ -391,6 +391,35 @@ export async function listDhcpLeases(
   return (await response.json()) as DhcpLeases;
 }
 
+// Firewall observation (beta.4): read-only snapshot of the
+// DuckOS-owned nftables table. Write CRUD is intentionally
+// not exposed yet.
+export interface FirewallRulesSnapshot {
+  objects: unknown[];
+  empty: boolean;
+  observedAt: string;
+  error?: string;
+}
+
+export async function listFirewallRules(
+  token: string,
+  signal: AbortSignal,
+): Promise<FirewallRulesSnapshot> {
+  const response = await fetch("/api/v1/firewall/rules", {
+    headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
+    cache: "no-store",
+    credentials: "omit",
+    signal,
+  });
+  if (!response.ok) {
+    throw new APIError(
+      response.status,
+      `Firewall rules failed (HTTP ${response.status}).`,
+    );
+  }
+  return (await response.json()) as FirewallRulesSnapshot;
+}
+
 export async function sendWake(
   token: string,
   body: {
