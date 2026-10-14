@@ -217,7 +217,7 @@ func (h *WanHost) handlePut(w http.ResponseWriter, r *http.Request, id string) {
 	}
 	log.Printf("wan: staged provider %s mode=%s (by %s)", id, body.Provider.Mode, clientAddrOf(r))
 	writeFwrJSON(w, http.StatusOK, map[string]any{
-		"status": "staged",
+		"status":  "staged",
 		"applied": false,
 	})
 }
