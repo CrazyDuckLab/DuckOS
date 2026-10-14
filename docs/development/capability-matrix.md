@@ -31,6 +31,15 @@ Legend: **IMPLEMENTED** (backend + tests), **PARTIAL** (working but incomplete s
 | IPv6 frontends (PCP/NAT-PMP over IPv6, MLD) | NOT IMPLEMENTED | Out of beta.3 scope, documented gap |
 | WAN-side discovery suppression | IMPLEMENTED (structural) | Listeners bind trusted-LAN addresses only; WAN refusal upstream in registry/runtime |
 
+## beta.4 observation surfaces (implemented on develop/beta4-router-core)
+
+| Capability | State | Evidence |
+|---|---|---|
+| DHCP lease observation `/api/v1/dhcp/leases` | IMPLEMENTED (beta.4) | `internal/dhcpsnoop/dnsmasq.go` (parser + tests), `internal/agent/dhcp_host.go`, Engine/API proxy, `duck dhcp leases`, DhcpLeasesPage real feed with fallback. **NOT VERIFIED** against a live dnsmasq. |
+| Firewall owned-table snapshot `/api/v1/firewall/rules` | IMPLEMENTED (beta.4, read-only) | `internal/agent/firewall_host.go`, Engine/API proxy, `duck firewall rules`, FirewallRulesPage snapshot panel. Typed rule CRUD remains NOT IMPLEMENTED by contract. |
+| Firewall rules CRUD (write) | NOT IMPLEMENTED | Blocked on the typed chain/rule contract; mutation stays behind Safe Apply. |
+| WAN manager runtime | NOT IMPLEMENTED | `internal/wan` remains a model contract; no Linux runtime in this milestone. |
+
 ## Router core (beta.4 scope)
 
 | Capability | State | Evidence |
