@@ -24,6 +24,16 @@ evidence; untested rows are marked NOT VERIFIED.
 | Firewall snapshot ↔ firewall mutation | READ-ONLY | The surface has no mutation verb; changes stay behind Safe Apply (`internal/safeapply/`). |
 | UI ↔ Public API | TESTED | All new UI data flows through `/api/v1/*` with Bearer auth (`web/src/api.ts`); no direct Agent IPC access from the Web UI. |
 
+## beta.4 firewall / WAN ↔ rest of the system
+
+| Pairing | Verdict | Evidence |
+|---|---|---|
+| Firewall rules (inet duckos_fw) ↔ Port Mapping (inet duckos_upnp) ↔ management policy (inet duckos) | COMPATIBLE (by construction) | Three exclusively-owned tables; every mutation renders only its own table; no global flush anywhere. Cross-table integration test on live kernel: **PENDING LIVE QUALIFICATION**. |
+| Firewall rules ↔ Safe Apply | INTEGRATED (host-level transaction) | Every mutation is staged → validated → applied as one atomic nft batch → verified by kernel readback → auto-restored on failure (fw_host.go). Journal-first safeapply store integration (state.OpenExisting) remains future work — documented. |
+| Firewall rules ↔ management access | SAFE BY BOUNDARY | V1 renders FORWARD rules only; input filtering stays with the management policy owner, so UI rules cannot lock out eth0. |
+| WAN staging ↔ managed routing | STAGED ONLY | WAN mutations validate + persist and are reported as staged; the apply verb returns 501 until the networkd enrollment + Safe Apply integration exists. No parallel network configuration engine. |
+| WAN observation ↔ kernel | READ-ONLY | net.Interface + /proc/net/route reads only (observe_linux.go). |
+
 ## Known interaction risks
 
 1. **`duckos_upnp` Remove() flushes the whole table** (`nft flush table inet duckos_upnp` on Remove). With multiple active mappings a single Remove momentarily drops sibling rules until the next Add re-renders them. Beta.2 behaviour, preserved unchanged; must be replaced with per-rule deletes before beta.3 live qualification. **PENDING LIVE QUALIFICATION.**

@@ -37,8 +37,10 @@ Legend: **IMPLEMENTED** (backend + tests), **PARTIAL** (working but incomplete s
 |---|---|---|
 | DHCP lease observation `/api/v1/dhcp/leases` | IMPLEMENTED (beta.4) | `internal/dhcpsnoop/dnsmasq.go` (parser + tests), `internal/agent/dhcp_host.go`, Engine/API proxy, `duck dhcp leases`, DhcpLeasesPage real feed with fallback. **NOT VERIFIED** against a live dnsmasq. |
 | Firewall owned-table snapshot `/api/v1/firewall/rules` | IMPLEMENTED (beta.4, read-only) | `internal/agent/firewall_host.go`, Engine/API proxy, `duck firewall rules`, FirewallRulesPage snapshot panel. Typed rule CRUD remains NOT IMPLEMENTED by contract. |
-| Firewall rules CRUD (write) | NOT IMPLEMENTED | Blocked on the typed chain/rule contract; mutation stays behind Safe Apply. |
-| WAN manager runtime | NOT IMPLEMENTED | `internal/wan` remains a model contract; no Linux runtime in this milestone. |
+| Firewall rules CRUD (typed, inet duckos_fw, forward-only) | IMPLEMENTED (beta.4) | `internal/fwrules` (model+render+tests), `internal/agent/fw_host.go` (staged apply: nft -c check → load → kernel readback verify → automatic restore of previous ruleset on failure), `/api/v1/firewall/rules(+/observed)`, `duck firewall …`, Web editor. **NOT VERIFIED** against a live kernel. |
+| Firewall input/output rule filtering | NOT IMPLEMENTED (deliberate V1 boundary) | Forward-only so a UI rule cannot cut management access; documented in `internal/fwrules`. |
+| WAN manager (DHCP + static IPv4) | IMPLEMENTED (beta.4, staging + observation) | `internal/wan/config.go` (validation+tests), `observe_linux.go`, `internal/agent/wan_host.go`, `/api/v1/wan/*`, `duck wan …`, P017 feeds. Live apply explicitly refused (501) — **PENDING managed-routing Safe Apply integration**. |
+| WAN manager (PPPoE / L2TP) | STUB | Model contracts only, per beta.2 baseline. |
 
 ## Router core (beta.4 scope)
 
