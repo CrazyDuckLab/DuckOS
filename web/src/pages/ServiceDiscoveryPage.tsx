@@ -20,6 +20,7 @@ import {
   type UPnPNetwork,
   type UPnPMapping,
   type UPnPState,
+  type UPnPRejection,
   type WakeResult,
 } from "../api";
 import type { APIClient } from "../api/client";
@@ -356,7 +357,10 @@ export function ServiceDiscoveryPage({ page, bundle, client }: Props) {
             ) : (
               mappings.map((m: UPnPMapping) => (
                 <tr key={m.id}>
-                  <td>{m.protocol}</td>
+                  <td>
+                    {m.protocol}
+                    {m.transport ? `/${m.transport}` : ""}
+                  </td>
                   <td>{m.clientIp}</td>
                   <td>{m.externalPort}</td>
                   <td>
@@ -373,6 +377,74 @@ export function ServiceDiscoveryPage({ page, bundle, client }: Props) {
                       {t("upnp.revoke")}
                     </button>
                   </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="v4-card" aria-labelledby="upnp-listeners-title">
+        <div className="card-head">
+          <h2 id="upnp-listeners-title">{t("upnp.listenersTitle")}</h2>
+          <span
+            className="v4-pill"
+            data-kind={state?.frontends?.status.running ? "good" : "muted"}
+          >
+            {state?.frontends?.status.running
+              ? t("upnp.serviceOn")
+              : t("upnp.listenersOff")}
+          </span>
+        </div>
+        {state?.frontends && (
+          <table className="v4-table">
+            <tbody>
+              <tr>
+                <td>{t("upnp.listenersExternal")}</td>
+                <td>{state.frontends.counters.externalIpv4 || "—"}</td>
+              </tr>
+              <tr>
+                <td>{t("upnp.listenersRequests")}</td>
+                <td>{state.frontends.counters.requestsTotal}</td>
+              </tr>
+              <tr>
+                <td>{t("upnp.listenersDenied")}</td>
+                <td>{state.frontends.counters.requestsDenied}</td>
+              </tr>
+              <tr>
+                <td>{t("upnp.listenersCreated")}</td>
+                <td>{state.frontends.counters.mappingsCreated}</td>
+              </tr>
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div className="v4-card" aria-labelledby="upnp-rejections-title">
+        <div className="card-head">
+          <h2 id="upnp-rejections-title">{t("upnp.rejectionsTitle")}</h2>
+        </div>
+        <table className="v4-table">
+          <thead>
+            <tr>
+              <th>{t("upnp.mappingProtocol")}</th>
+              <th>{t("upnp.mappingClient")}</th>
+              <th>{t("upnp.runtimeState")}</th>
+              <th>Reason</th>
+            </tr>
+          </thead>
+          <tbody>
+            {!state?.frontends || state.frontends.rejections.length === 0 ? (
+              <tr>
+                <td colSpan={4}>{t("upnp.noRejections")}</td>
+              </tr>
+            ) : (
+              state.frontends.rejections.map((r: UPnPRejection, i: number) => (
+                <tr key={i}>
+                  <td>{r.protocol}</td>
+                  <td>{r.clientIp}</td>
+                  <td>{r.networkRef || "—"}</td>
+                  <td>{r.reason}</td>
                 </tr>
               ))
             )}

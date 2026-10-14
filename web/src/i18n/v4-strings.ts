@@ -429,6 +429,14 @@ interface V4 {
   "upnp.macInvalid": string;
   "upnp.sendWake": string;
   "upnp.notOnline": string;
+  "upnp.listenersTitle": string;
+  "upnp.listenersOff": string;
+  "upnp.listenersExternal": string;
+  "upnp.listenersRequests": string;
+  "upnp.listenersDenied": string;
+  "upnp.listenersCreated": string;
+  "upnp.rejectionsTitle": string;
+  "upnp.noRejections": string;
 }
 
 const en: V4Bundle = {
@@ -951,6 +959,14 @@ const en: V4Bundle = {
   "upnp.sendWake": "Send magic packet",
   "upnp.notOnline":
     "Wake only confirms packet transmission, not that the device is online.",
+  "upnp.listenersTitle": "Protocol listeners",
+  "upnp.listenersOff": "No protocol listeners are running.",
+  "upnp.listenersExternal": "Observed external address",
+  "upnp.listenersRequests": "Requests handled",
+  "upnp.listenersDenied": "Requests refused",
+  "upnp.listenersCreated": "Mappings created",
+  "upnp.rejectionsTitle": "Rejected requests",
+  "upnp.noRejections": "No refused requests recorded.",
 };
 
 const ru: V4Bundle = {
@@ -1476,6 +1492,14 @@ const ru: V4Bundle = {
   "upnp.sendWake": "Отправить magic-пакет",
   "upnp.notOnline":
     "Wake только подтверждает отправку пакета, а не то, что устройство включилось.",
+  "upnp.listenersTitle": "Прослушиватели протоколов",
+  "upnp.listenersOff": "Прослушиватели протоколов не запущены.",
+  "upnp.listenersExternal": "Наблюдаемый внешний адрес",
+  "upnp.listenersRequests": "Обработано запросов",
+  "upnp.listenersDenied": "Отклонено запросов",
+  "upnp.listenersCreated": "Создано пробросов",
+  "upnp.rejectionsTitle": "Отклонённые запросы",
+  "upnp.noRejections": "Отклонённых запросов нет.",
 };
 
 const de: V4Bundle = {
@@ -1990,6 +2014,14 @@ const de: V4Bundle = {
   "upnp.sendWake": "Magic-Paket senden",
   "upnp.notOnline":
     "Wake bestätigt nur den Versand des Pakets, nicht dass das Gerät online ist.",
+  "upnp.listenersTitle": "Protokolllistener",
+  "upnp.listenersOff": "Es laufen keine Protokolllistener.",
+  "upnp.listenersExternal": "Beobachtete externe Adresse",
+  "upnp.listenersRequests": "Anfragen verarbeitet",
+  "upnp.listenersDenied": "Anfragen abgelehnt",
+  "upnp.listenersCreated": "Freigaben erstellt",
+  "upnp.rejectionsTitle": "Abgelehnte Anfragen",
+  "upnp.noRejections": "Keine abgelehnten Anfragen aufgezeichnet.",
 };
 
 const es: V4Bundle = {
@@ -2505,6 +2537,14 @@ const es: V4Bundle = {
   "upnp.sendWake": "Enviar paquete mágico",
   "upnp.notOnline":
     "Wake solo confirma el envío del paquete, no que el dispositivo esté en línea.",
+  "upnp.listenersTitle": "Escuchas de protocolo",
+  "upnp.listenersOff": "No hay escuchas de protocolo en ejecución.",
+  "upnp.listenersExternal": "Dirección externa observada",
+  "upnp.listenersRequests": "Solicitudes atendidas",
+  "upnp.listenersDenied": "Solicitudes rechazadas",
+  "upnp.listenersCreated": "Mapeos creados",
+  "upnp.rejectionsTitle": "Solicitudes rechazadas",
+  "upnp.noRejections": "No hay solicitudes rechazadas registradas.",
 };
 
 const v4: V4Messages = { en, ru, de, es };

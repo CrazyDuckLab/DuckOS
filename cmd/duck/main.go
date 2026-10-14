@@ -55,6 +55,10 @@ Subcommands (each is a separate concern, all share the loopback API):
   diagjobs                print the contextual diagnostic job list
   upgrade                 print the upgrade activation status
   backup                  print the backup catalog / restore plan
+  upnp state              print the port-mapping runtime, listeners and rejection journal
+  upnp enable             enable port mapping on a trusted network (--network --iface --protocols --ttl)
+  upnp disable            disable port mapping on a network (--network)
+  upnp revoke             revoke one dynamic mapping (--id)
 
 Use --help on any subcommand for arguments.
 `
@@ -118,6 +122,8 @@ func dispatch(args []string) error {
 		return wireguardCmd(rest)
 	case "xray":
 		return xrayCmd(rest)
+	case "upnp":
+		return upnpCmd(rest)
 	case "config":
 		return configCmd(rest)
 	case "provenance":

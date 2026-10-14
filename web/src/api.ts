@@ -195,6 +195,7 @@ export interface UPnPMapping {
   id: string;
   networkRef: string;
   protocol: UPnPProtocol;
+  transport?: "tcp" | "udp";
   clientIp: string;
   externalPort: number;
   internalPort: number;
@@ -211,10 +212,41 @@ export interface UPnPStats {
   stopped: boolean;
 }
 
+export interface UPnPFrontendsStatus {
+  running: boolean;
+  ifaces?: string[];
+  networks?: string[];
+}
+
+export interface UPnPFrontendsCounters {
+  running: boolean;
+  startedAt?: string;
+  boundIfaces?: string[];
+  externalIpv4?: string;
+  requestsTotal: number;
+  requestsDenied: number;
+  mappingsCreated: number;
+}
+
+export interface UPnPRejection {
+  at: string;
+  protocol: string;
+  clientIp: string;
+  networkRef?: string;
+  reason: string;
+}
+
+export interface UPnPFrontends {
+  status: UPnPFrontendsStatus;
+  counters: UPnPFrontendsCounters;
+  rejections: UPnPRejection[];
+}
+
 export interface UPnPState {
   stats: UPnPStats;
   networks: UPnPNetwork[];
   mappings: UPnPMapping[];
+  frontends?: UPnPFrontends;
 }
 
 export interface WakeResult {
