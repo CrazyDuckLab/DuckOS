@@ -167,11 +167,14 @@ func (e *testEngine) UPnPProxy(_ context.Context, _, _, token string, _ io.Reade
 	e.lastToken = token
 	return 200, []byte(`{"ok":true}`), "application/json", nil
 }
-func (e *testEngine) FirewallProxy(_ context.Context, _, _, token string, _ io.Reader) (int, []byte, string, error) {
+func (e *testEngine) FirewallProxy(_ context.Context, method, _, token string, _ io.Reader) (int, []byte, string, error) {
 	if token == "" {
 		return 401, []byte(`{"error":{"code":"unauthorized","message":"token required"}}`), "application/json", nil
 	}
-	return 200, []byte(`{"objects":[],"empty":true,"observedAt":"2026-01-01T00:00:00Z"}`), "application/json", nil
+	if strings.Contains(method, "PUT") || strings.Contains(method, "DELETE") {
+		return 200, []byte(`{"status":"applied"}`), "application/json", nil
+	}
+	return 200, []byte(`{"rules":[],"observedAt":"2026-01-01T00:00:00Z"}`), "application/json", nil
 }
 
 func (e *testEngine) DhcpProxy(_ context.Context, _, _, token string, _ io.Reader) (int, []byte, string, error) {

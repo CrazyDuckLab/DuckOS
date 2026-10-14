@@ -50,6 +50,7 @@ type Handler struct {
 	wake      *WakeHost
 	dhcp      *DhcpHost
 	firewall  *FirewallHost
+	fwrulesH  *FirewallRulesHost
 	frr       *FRRHost
 	slots     chan struct{}
 	network   *NetworkService
@@ -286,6 +287,13 @@ func (h *Handler) EnableFirewall(host *FirewallHost) {
 	h.firewall = host
 }
 
+// EnableFirewallRules registers the typed firewall rule
+// management host (beta.4). Mutations apply atomically with
+// verify + rollback inside the host.
+func (h *Handler) EnableFirewallRules(host *FirewallRulesHost) {
+	h.fwrulesH = host
+}
+
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
@@ -455,6 +463,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.wake.ServeHTTP(w, r)
+		return
+	}
+	if strings.HasPrefix(r.URL.EscapedPath(), FirewallRulesPath) {
+		if h.fwrulesH == nil {
+			fwrRulesUnavailable().ServeHTTP(w, r)
+			return
+		}
+		h.fwrulesH.ServeHTTP(w, r)
 		return
 	}
 	if strings.HasPrefix(r.URL.EscapedPath(), FirewallPath) {

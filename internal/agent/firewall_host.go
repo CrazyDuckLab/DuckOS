@@ -56,13 +56,16 @@ func LiveSnapshotProvider() SnapshotProvider {
 
 // ServeHTTP dispatches /agent/v1/firewall/*:
 //
-//	GET /firewall/v1/rules -> { objects, fingerprint, observedAt, error? }
+//	GET /firewall/v1/observed -> { objects, empty, observedAt, error? }
+//
+// (beta.4: the typed rule surface moved to /agent/v1/fwrules;
+// this host keeps the raw owned-table snapshot.)
 func (h *FirewallHost) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	tail := strings.Trim(strings.TrimPrefix(r.URL.EscapedPath(), FirewallPath), "/")
 	switch {
-	case r.Method == http.MethodGet && tail == "rules":
+	case r.Method == http.MethodGet && tail == "observed":
 		h.handleRules(w, r)
 	default:
 		w.Header().Set("Allow", "GET")

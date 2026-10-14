@@ -60,7 +60,11 @@ Subcommands (each is a separate concern, all share the loopback API):
   upnp disable            disable port mapping on a network (--network)
   upnp revoke             revoke one dynamic mapping (--id)
   dhcp leases             print the DHCP server's lease table (read-only)
-  firewall rules          print the observed DuckOS-owned nftables table (read-only)
+  firewall rules          print the typed firewall rule configuration
+  firewall observed       print the observed inet duckos_fw table snapshot
+  firewall add/update     stage and apply a rule (--file rule.json)
+  firewall delete         delete a rule (--id)
+  firewall enable/disable toggle a rule (--id)
 
 Use --help on any subcommand for arguments.
 `

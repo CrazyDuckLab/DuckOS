@@ -219,6 +219,21 @@ func main() {
 	// beta.4: read-only firewall snapshot of the owned
 	// inet/duckos table so the UI can show kernel truth.
 	handler.EnableFirewall(agent.NewFirewallHost(agent.LiveSnapshotProvider(), networkAccess))
+	// beta.4: typed firewall rule management. The V1 surface
+	// renders FORWARD rules into the exclusively-owned
+	// inet duckos_fw table with atomic apply + verify +
+	// rollback; see internal/agent/fw_host.go.
+	if fwrHost, fwrErr := agent.NewFirewallRulesHost(
+		"/var/lib/duckos-agent/fwrules.json",
+		"/var/lib/duckos-agent/fw-stage",
+		"nft",
+		networkAccess,
+	); fwrErr == nil {
+		handler.EnableFirewallRules(fwrHost)
+		log.Print("firewall rule management is enabled on inet duckos_fw (forward rules only)")
+	} else {
+		log.Printf("firewall rule management is not enabled: %v", fwrErr)
+	}
 	if frrHost, err := enableFRRService(*frrNetNS, *frrPathspace, *frrStateDir); err == nil {
 		defer frrHost.Close()
 		handler.EnableFRR(frrHost)

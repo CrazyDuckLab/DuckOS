@@ -1304,6 +1304,32 @@ func (e *Engine) FirewallProxy(ctx context.Context, method, path, token string, 
 	if tail == "" {
 		tail = path
 	}
+	// The typed rule surface (beta.4) and the raw snapshot
+	// live on different IPC hosts; route by tail.
+	if strings.HasPrefix(tail, "rules") {
+		target := "http://agent" + agent.FirewallRulesPath + "/fwrules/v1/" + strings.TrimPrefix(tail, "/")
+		req, err := http.NewRequestWithContext(ctx, method, target, body)
+		if err != nil {
+			return 0, nil, "", err
+		}
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		resp, err := e.client.Do(req)
+		if err != nil {
+			return 0, nil, "", errors.New("Agent is unavailable")
+		}
+		defer resp.Body.Close()
+		data, err = io.ReadAll(io.LimitReader(resp.Body, DhcpMaxBytes+1))
+		if err != nil {
+			return resp.StatusCode, nil, resp.Header.Get("Content-Type"), errors.New("Agent firewall response read failed")
+		}
+		return resp.StatusCode, data, resp.Header.Get("Content-Type"), nil
+	}
+	tail = strings.TrimPrefix(tail, "objects")
+	if tail == "" {
+		tail = "observed"
+	}
 	target := "http://agent" + agent.FirewallPath + "/firewall/v1/" + strings.TrimPrefix(tail, "/")
 	req, err := http.NewRequestWithContext(ctx, method, target, body)
 	if err != nil {

@@ -391,10 +391,30 @@ export async function listDhcpLeases(
   return (await response.json()) as DhcpLeases;
 }
 
-// Firewall observation (beta.4): read-only snapshot of the
-// DuckOS-owned nftables table. Write CRUD is intentionally
-// not exposed yet.
-export interface FirewallRulesSnapshot {
+// Firewall management (beta.4): typed rule CRUD on the
+// exclusively-owned inet duckos_fw table (forward rules
+// only), plus the read-only kernel snapshot.
+export interface FirewallRule {
+  id: string;
+  enabled: boolean;
+  action: "accept" | "drop" | "reject";
+  direction: "forward";
+  protocol: "tcp" | "udp" | "any";
+  srcPrefix?: string;
+  dstPrefix?: string;
+  dstPort?: number;
+  inIface?: string;
+  outIface?: string;
+  comment?: string;
+}
+
+export interface FirewallRulesConfig {
+  rules: FirewallRule[];
+  store?: string;
+  observedAt: string;
+}
+
+export interface FirewallObservedSnapshot {
   objects: unknown[];
   empty: boolean;
   observedAt: string;
@@ -404,7 +424,7 @@ export interface FirewallRulesSnapshot {
 export async function listFirewallRules(
   token: string,
   signal: AbortSignal,
-): Promise<FirewallRulesSnapshot> {
+): Promise<FirewallRulesConfig> {
   const response = await fetch("/api/v1/firewall/rules", {
     headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
     cache: "no-store",
@@ -417,7 +437,107 @@ export async function listFirewallRules(
       `Firewall rules failed (HTTP ${response.status}).`,
     );
   }
-  return (await response.json()) as FirewallRulesSnapshot;
+  return (await response.json()) as FirewallRulesConfig;
+}
+
+export async function listFirewallObserved(
+  token: string,
+  signal: AbortSignal,
+): Promise<FirewallObservedSnapshot> {
+  const response = await fetch("/api/v1/firewall/rules/observed", {
+    headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
+    cache: "no-store",
+    credentials: "omit",
+    signal,
+  });
+  if (!response.ok) {
+    throw new APIError(
+      response.status,
+      `Firewall observation failed (HTTP ${response.status}).`,
+    );
+  }
+  return (await response.json()) as FirewallObservedSnapshot;
+}
+
+export async function putFirewallRule(
+  token: string,
+  rule: FirewallRule,
+  signal: AbortSignal,
+): Promise<void> {
+  const response = await fetch(
+    `/api/v1/firewall/rules/${encodeURIComponent(rule.id)}`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ rule }),
+      cache: "no-store",
+      credentials: "omit",
+      signal,
+    },
+  );
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new APIError(
+      response.status,
+      `Firewall rule apply failed (HTTP ${response.status}). ${detail}`,
+    );
+  }
+}
+
+export async function deleteFirewallRule(
+  token: string,
+  id: string,
+  signal: AbortSignal,
+): Promise<void> {
+  const response = await fetch(
+    `/api/v1/firewall/rules/${encodeURIComponent(id)}`,
+    {
+      method: "DELETE",
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
+      cache: "no-store",
+      credentials: "omit",
+      signal,
+    },
+  );
+  if (!response.ok) {
+    throw new APIError(
+      response.status,
+      `Firewall rule delete failed (HTTP ${response.status}).`,
+    );
+  }
+}
+
+export async function setFirewallRuleEnabled(
+  token: string,
+  id: string,
+  enabled: boolean,
+  signal: AbortSignal,
+): Promise<void> {
+  const response = await fetch(
+    `/api/v1/firewall/rules/${encodeURIComponent(id)}/enabled`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ enabled }),
+      cache: "no-store",
+      credentials: "omit",
+      signal,
+    },
+  );
+  if (!response.ok) {
+    throw new APIError(
+      response.status,
+      `Firewall rule update failed (HTTP ${response.status}).`,
+    );
+  }
 }
 
 export async function sendWake(
