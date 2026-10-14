@@ -177,6 +177,13 @@ func (e *testEngine) FirewallProxy(_ context.Context, method, _, token string, _
 	return 200, []byte(`{"rules":[],"observedAt":"2026-01-01T00:00:00Z"}`), "application/json", nil
 }
 
+func (e *testEngine) WanProxy(_ context.Context, _, _, token string, _ io.Reader) (int, []byte, string, error) {
+	if token == "" {
+		return 401, []byte(`{"error":{"code":"unauthorized","message":"token required"}}`), "application/json", nil
+	}
+	return 200, []byte(`{"providers":[],"applied":false}`), "application/json", nil
+}
+
 func (e *testEngine) DhcpProxy(_ context.Context, _, _, token string, _ io.Reader) (int, []byte, string, error) {
 	if token == "" {
 		return 401, []byte(`{"error":{"code":"unauthorized","message":"token required"}}`), "application/json", nil

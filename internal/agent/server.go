@@ -51,6 +51,7 @@ type Handler struct {
 	dhcp      *DhcpHost
 	firewall  *FirewallHost
 	fwrulesH  *FirewallRulesHost
+	wan       *WanHost
 	frr       *FRRHost
 	slots     chan struct{}
 	network   *NetworkService
@@ -294,6 +295,13 @@ func (h *Handler) EnableFirewallRules(host *FirewallRulesHost) {
 	h.fwrulesH = host
 }
 
+// EnableWAN registers the beta.4 WAN staging/observation
+// host. Live apply is refused until the managed-routing
+// integration exists.
+func (h *Handler) EnableWAN(host *WanHost) {
+	h.wan = host
+}
+
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
@@ -463,6 +471,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.wake.ServeHTTP(w, r)
+		return
+	}
+	if strings.HasPrefix(r.URL.EscapedPath(), WanPath) {
+		if h.wan == nil {
+			fwrProblem(w, 503, "unavailable", "WAN management is not wired on this agent.")
+			return
+		}
+		h.wan.ServeHTTP(w, r)
 		return
 	}
 	if strings.HasPrefix(r.URL.EscapedPath(), FirewallRulesPath) {

@@ -391,6 +391,79 @@ export async function listDhcpLeases(
   return (await response.json()) as DhcpLeases;
 }
 
+// WAN management (beta.4): staged provider configuration and
+// kernel observation. Live apply is explicitly refused by the
+// backend until the managed-routing Safe Apply integration.
+export interface WanProvider {
+  id: string;
+  name: string;
+  link: string;
+  mode: "dhcp" | "static" | "pppoe" | "l2tp";
+  enabled: boolean;
+  static?: { address: string; gateway?: string; dnsServers?: string[] };
+}
+
+export interface WanProvidersDoc {
+  providers: WanProvider[];
+  applied: boolean;
+  note?: string;
+  observedAt: string;
+}
+
+export interface WanObservation {
+  link: string;
+  up: boolean;
+  mtu: number;
+  hardware?: string;
+  ipv4?: string[];
+  ipv6?: string[];
+  defaultRouteV4?: string;
+  observedAt: string;
+}
+
+export interface WanStatusDoc {
+  observations: WanObservation[];
+  observedAt: string;
+}
+
+export async function listWanProviders(
+  token: string,
+  signal: AbortSignal,
+): Promise<WanProvidersDoc> {
+  const response = await fetch("/api/v1/wan/providers", {
+    headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
+    cache: "no-store",
+    credentials: "omit",
+    signal,
+  });
+  if (!response.ok) {
+    throw new APIError(
+      response.status,
+      `WAN providers failed (HTTP ${response.status}).`,
+    );
+  }
+  return (await response.json()) as WanProvidersDoc;
+}
+
+export async function fetchWanStatus(
+  token: string,
+  signal: AbortSignal,
+): Promise<WanStatusDoc> {
+  const response = await fetch("/api/v1/wan/status", {
+    headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
+    cache: "no-store",
+    credentials: "omit",
+    signal,
+  });
+  if (!response.ok) {
+    throw new APIError(
+      response.status,
+      `WAN status failed (HTTP ${response.status}).`,
+    );
+  }
+  return (await response.json()) as WanStatusDoc;
+}
+
 // Firewall management (beta.4): typed rule CRUD on the
 // exclusively-owned inet duckos_fw table (forward rules
 // only), plus the read-only kernel snapshot.

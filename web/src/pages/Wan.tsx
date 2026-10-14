@@ -8,6 +8,12 @@ import { APIClient, type FetchResult } from "../api/client";
 import { type Locale } from "../i18n/messages";
 import { V4PageFrame } from "../components/PageFrame";
 import { v4t } from "../i18n/v4-strings";
+import {
+  fetchWanStatus,
+  listWanProviders,
+  type WanProvidersDoc,
+  type WanStatusDoc,
+} from "../api";
 import type { Overview } from "../../../shared/api/types";
 import type { PageMeta } from "../pages/registry";
 
@@ -36,9 +42,20 @@ export function WanConnectionsPage({
   const locale = useLocale();
   const [overview, setOverview] = useState<FetchResult<Overview> | null>(null);
   const [query, setQuery] = useState("");
+  const [providers, setProviders] = useState<WanProvidersDoc | null>(null);
+  const [wanStatus, setWanStatus] = useState<WanStatusDoc | null>(null);
   useEffect(() => {
     const ctl = new AbortController();
     client.fetchOverview({ signal: ctl.signal }).then(setOverview);
+    // beta.4: staged configuration + kernel observation. Both
+    // feeds are optional: an older agent simply keeps the
+    // page on its overview-derived view.
+    listWanProviders(client.token(), ctl.signal)
+      .then(setProviders)
+      .catch(() => setProviders(null));
+    fetchWanStatus(client.token(), ctl.signal)
+      .then(setWanStatus)
+      .catch(() => setWanStatus(null));
     return () => ctl.abort();
   }, [client]);
 
@@ -108,6 +125,24 @@ export function WanConnectionsPage({
             ).replace(/^\d+\s*/, "")}
           </span>
         </div>
+        {providers && providers.providers.length > 0 && (
+          <p className="v4-mute v4-fs-s">
+            {providers.providers.length} staged WAN provider(s):{" "}
+            {providers.providers
+              .map((p) => `${p.id} (${p.mode}, ${p.link})`)
+              .join(", ")}
+            {" — "}
+            {providers.note}
+          </p>
+        )}
+        {wanStatus && (
+          <p className="v4-mute v4-fs-s">
+            Observed:{" "}
+            {wanStatus.observations
+              .map((o) => `${o.link}=${o.up ? "up" : "down"}`)
+              .join(", ") || "no links"}
+          </p>
+        )}
         {defaultRoute && (
           <p className="v4-mute v4-fs-s">
             {v4t(locale, "pageWan.defaultGateway")}{" "}

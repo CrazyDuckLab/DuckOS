@@ -234,6 +234,18 @@ func main() {
 	} else {
 		log.Printf("firewall rule management is not enabled: %v", fwrErr)
 	}
+	// beta.4: WAN provider staging + kernel observation. Live
+	// apply is explicitly refused (501) until the managed-
+	// routing Safe Apply integration lands.
+	if wanHost, wanErr := agent.NewWanHost(
+		agent.NewWanStore("/var/lib/duckos-agent/wan-providers.json"),
+		networkAccess,
+	); wanErr == nil {
+		handler.EnableWAN(wanHost)
+		log.Print("wan management is enabled (staging + observation; live apply pending)")
+	} else {
+		log.Printf("wan management is not enabled: %v", wanErr)
+	}
 	if frrHost, err := enableFRRService(*frrNetNS, *frrPathspace, *frrStateDir); err == nil {
 		defer frrHost.Close()
 		handler.EnableFRR(frrHost)
