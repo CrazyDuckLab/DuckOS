@@ -71,6 +71,9 @@ type Lease struct {
 	Expiry   int64  `json:"expiry"`
 	Trusted  bool   `json:"trusted"`
 	Observed int64  `json:"observed"`
+	// Hostname is the client-reported hostname (dnsmasq lease
+	// source). Empty when the client did not report one.
+	Hostname string `json:"hostname,omitempty"`
 }
 
 // Valid reports whether l is well-formed.

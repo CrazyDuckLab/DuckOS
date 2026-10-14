@@ -1249,6 +1249,49 @@ func (e *Engine) WakeProxy(ctx context.Context, method, path, token string, body
 	return resp.StatusCode, data, resp.Header.Get("Content-Type"), nil
 }
 
+// DhcpMaxBytes bounds the lease observation response.
+const DhcpMaxBytes = 4 << 20
+
+// DhcpProxy proxies the public /api/v1/dhcp/* request to the
+// privileged Agent /agent/v1/dhcp/* IPC. The surface is
+// read-only: lease state belongs to the DHCP server and the
+// API only reports what it persists.
+//
+// beta.4 production-path contract:
+//
+//	PUBLIC -> Engine.DhcpProxy -> Agent IPC
+//	        -> DhcpHost -> dnsmasq lease file
+func (e *Engine) DhcpProxy(ctx context.Context, method, path, token string, body io.Reader) (status int, data []byte, contentType string, err error) {
+	if e == nil {
+		return 0, nil, "", errors.New("engine not configured")
+	}
+	tail := strings.TrimPrefix(path, "/api/v1/dhcp/")
+	if tail == "" {
+		tail = path
+	}
+	target := "http://agent" + agent.DhcpPath + "/dhcp/v1/" + strings.TrimPrefix(tail, "/")
+	req, err := http.NewRequestWithContext(ctx, method, target, body)
+	if err != nil {
+		return 0, nil, "", err
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := e.client.Do(req)
+	if err != nil {
+		return 0, nil, "", errors.New("Agent is unavailable")
+	}
+	defer resp.Body.Close()
+	data, err = io.ReadAll(io.LimitReader(resp.Body, DhcpMaxBytes+1))
+	if err != nil {
+		return resp.StatusCode, nil, resp.Header.Get("Content-Type"), errors.New("Agent DHCP response read failed")
+	}
+	if len(data) > DhcpMaxBytes {
+		return resp.StatusCode, nil, resp.Header.Get("Content-Type"), errors.New("Agent DHCP response exceeds size limit")
+	}
+	return resp.StatusCode, data, resp.Header.Get("Content-Type"), nil
+}
+
 func (e *Engine) overview(ctx context.Context, force bool) ([]byte, error) {
 	for {
 		e.mu.Lock()

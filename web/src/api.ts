@@ -355,6 +355,42 @@ export async function revokeUPnPMapping(
   }
 }
 
+// DHCP lease observation (beta.4): read-only view of what
+// the DHCP server actually persists. The API may be missing
+// (older agent) — callers fall back to the derived view.
+export interface DhcpLeaseRow {
+  mac: string;
+  ip: string;
+  hostname?: string;
+  expiry: number;
+}
+
+export interface DhcpLeases {
+  leases: DhcpLeaseRow[];
+  source: string;
+  observedAt: string;
+  error?: string;
+}
+
+export async function listDhcpLeases(
+  token: string,
+  signal: AbortSignal,
+): Promise<DhcpLeases> {
+  const response = await fetch("/api/v1/dhcp/leases", {
+    headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
+    cache: "no-store",
+    credentials: "omit",
+    signal,
+  });
+  if (!response.ok) {
+    throw new APIError(
+      response.status,
+      `DHCP leases failed (HTTP ${response.status}).`,
+    );
+  }
+  return (await response.json()) as DhcpLeases;
+}
+
 export async function sendWake(
   token: string,
   body: {

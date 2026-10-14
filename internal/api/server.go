@@ -122,6 +122,9 @@ type Engine interface {
 	// only the Agent is allowed to dial UDP/9. P065
 	// production-path contract.
 	WakeProxy(ctx context.Context, method, path, token string, body io.Reader) (status int, data []byte, contentType string, err error)
+	// DhcpProxy proxies the public /api/v1/dhcp/* read-only
+	// lease observation to the Agent IPC (beta.4).
+	DhcpProxy(ctx context.Context, method, path, token string, body io.Reader) (status int, data []byte, contentType string, err error)
 }
 type Handler struct {
 	updaterHealthKey []byte
@@ -296,11 +299,11 @@ func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]string{"status": "ok", "schemaVersion": model.SchemaVersion})
 		return
 	}
-	if r.URL.Path != "/api/v1/overview" && r.URL.Path != "/api/v1/ready" && r.URL.Path != "/api/v1/readiness" && r.URL.Path != "/api/v1/doctor" && r.URL.Path != "/api/v1/topology" && r.URL.Path != "/api/v1/multiwan" && r.URL.Path != "/api/v1/qos" && r.URL.Path != "/api/v1/qos/apply" && r.URL.Path != "/api/v1/qos/rollback" && r.URL.Path != "/api/v1/ups" && r.URL.Path != "/api/v1/ups/probe" && r.URL.Path != "/api/v1/migrate" && r.URL.Path != "/api/v1/sites" && r.URL.Path != "/api/v1/wifi" && r.URL.Path != "/api/v1/upgrade" && r.URL.Path != "/api/v1/upgrade/stage" && r.URL.Path != "/api/v1/upgrade/activate" && r.URL.Path != "/api/v1/upgrade/rollback" && r.URL.Path != "/api/v1/backup" && r.URL.Path != "/api/v1/backup/restore" && r.URL.Path != "/api/v1/frr" && r.URL.Path != "/api/v1/frr/apply" && r.URL.Path != "/api/v1/frr/rollback" && r.URL.Path != "/api/v1/ztp/issue" && r.URL.Path != "/api/v1/ztp/redeem" && !strings.HasPrefix(r.URL.Path, "/api/v1/wireguard/") && r.URL.Path != "/api/v1/wireguard" && !strings.HasPrefix(r.URL.Path, "/api/v1/xray/") && r.URL.Path != "/api/v1/xray" && !strings.HasPrefix(r.URL.Path, "/api/v1/vault/") && r.URL.Path != "/api/v1/vault" && !strings.HasPrefix(r.URL.Path, "/api/v1/speedlab/") && r.URL.Path != "/api/v1/speedlab" && !strings.HasPrefix(r.URL.Path, "/api/v1/upnp/") && r.URL.Path != "/api/v1/upnp" && !strings.HasPrefix(r.URL.Path, "/api/v1/wake/") && r.URL.Path != "/api/v1/wake" {
+	if r.URL.Path != "/api/v1/overview" && r.URL.Path != "/api/v1/ready" && r.URL.Path != "/api/v1/readiness" && r.URL.Path != "/api/v1/doctor" && r.URL.Path != "/api/v1/topology" && r.URL.Path != "/api/v1/multiwan" && r.URL.Path != "/api/v1/qos" && r.URL.Path != "/api/v1/qos/apply" && r.URL.Path != "/api/v1/qos/rollback" && r.URL.Path != "/api/v1/ups" && r.URL.Path != "/api/v1/ups/probe" && r.URL.Path != "/api/v1/migrate" && r.URL.Path != "/api/v1/sites" && r.URL.Path != "/api/v1/wifi" && r.URL.Path != "/api/v1/upgrade" && r.URL.Path != "/api/v1/upgrade/stage" && r.URL.Path != "/api/v1/upgrade/activate" && r.URL.Path != "/api/v1/upgrade/rollback" && r.URL.Path != "/api/v1/backup" && r.URL.Path != "/api/v1/backup/restore" && r.URL.Path != "/api/v1/frr" && r.URL.Path != "/api/v1/frr/apply" && r.URL.Path != "/api/v1/frr/rollback" && r.URL.Path != "/api/v1/ztp/issue" && r.URL.Path != "/api/v1/ztp/redeem" && !strings.HasPrefix(r.URL.Path, "/api/v1/wireguard/") && r.URL.Path != "/api/v1/wireguard" && !strings.HasPrefix(r.URL.Path, "/api/v1/xray/") && r.URL.Path != "/api/v1/xray" && !strings.HasPrefix(r.URL.Path, "/api/v1/vault/") && r.URL.Path != "/api/v1/vault" && !strings.HasPrefix(r.URL.Path, "/api/v1/speedlab/") && r.URL.Path != "/api/v1/speedlab" && !strings.HasPrefix(r.URL.Path, "/api/v1/upnp/") && r.URL.Path != "/api/v1/upnp" && !strings.HasPrefix(r.URL.Path, "/api/v1/wake/") && r.URL.Path != "/api/v1/wake" && !strings.HasPrefix(r.URL.Path, "/api/v1/dhcp/") {
 		problem(w, r, 404, errorCategoryFromCode("not_found"), "not_found", "Unknown API operation.")
 		return
 	}
-	readOnly := r.URL.Path == "/api/v1/overview" || r.URL.Path == "/api/v1/ready" || r.URL.Path == "/api/v1/readiness" || r.URL.Path == "/api/v1/doctor" || r.URL.Path == "/api/v1/topology" || r.URL.Path == "/api/v1/multiwan" || r.URL.Path == "/api/v1/qos" || r.URL.Path == "/api/v1/ups" || r.URL.Path == "/api/v1/sites" || r.URL.Path == "/api/v1/wifi" || r.URL.Path == "/api/v1/upgrade" || r.URL.Path == "/api/v1/backup" || (strings.HasPrefix(r.URL.Path, "/api/v1/wireguard/") && r.Method == http.MethodGet) || r.URL.Path == "/api/v1/wireguard" && r.Method == http.MethodGet || (strings.HasPrefix(r.URL.Path, "/api/v1/xray/") && r.Method == http.MethodGet) || r.URL.Path == "/api/v1/xray" && r.Method == http.MethodGet
+	readOnly := strings.HasPrefix(r.URL.Path, "/api/v1/dhcp/") || r.URL.Path == "/api/v1/overview" || r.URL.Path == "/api/v1/ready" || r.URL.Path == "/api/v1/readiness" || r.URL.Path == "/api/v1/doctor" || r.URL.Path == "/api/v1/topology" || r.URL.Path == "/api/v1/multiwan" || r.URL.Path == "/api/v1/qos" || r.URL.Path == "/api/v1/ups" || r.URL.Path == "/api/v1/sites" || r.URL.Path == "/api/v1/wifi" || r.URL.Path == "/api/v1/upgrade" || r.URL.Path == "/api/v1/backup" || (strings.HasPrefix(r.URL.Path, "/api/v1/wireguard/") && r.Method == http.MethodGet) || r.URL.Path == "/api/v1/wireguard" && r.Method == http.MethodGet || (strings.HasPrefix(r.URL.Path, "/api/v1/xray/") && r.Method == http.MethodGet) || r.URL.Path == "/api/v1/xray" && r.Method == http.MethodGet
 	// Per-path method enforcement (G03): the blanket
 	// outer GET/HEAD gate has been removed, so each
 	// endpoint enforces its own method and body contract.
@@ -410,6 +413,10 @@ func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.handleWakeProxy(w, r, identity.ForwardedToken(h.assertionKey, user))
+		return
+	}
+	if strings.HasPrefix(r.URL.Path, "/api/v1/dhcp/") {
+		h.handleDhcpProxy(w, r, identity.ForwardedToken(h.assertionKey, user))
 		return
 	}
 	if r.URL.Path == "/api/v1/ready" {
@@ -1057,6 +1064,40 @@ func (h *Handler) handleSpeedLabProxy(w http.ResponseWriter, r *http.Request, to
 		body = io.LimitReader(r.Body, 4<<10)
 	}
 	status, data, contentType, err := h.engine.SpeedLabProxy(r.Context(), r.Method, r.URL.Path, token, body)
+	if err != nil {
+		problem(w, r, 503, errorCategoryFromCode("agent_unavailable"), "agent_unavailable", err.Error())
+		return
+	}
+	if contentType != "" {
+		w.Header().Set("Content-Type", contentType)
+	} else {
+		w.Header().Set("Content-Type", "application/json")
+	}
+	w.WriteHeader(status)
+	if len(data) > 0 {
+		_, _ = w.Write(data)
+	}
+}
+
+// handleDhcpProxy proxies the public /api/v1/dhcp/* request
+// to the privileged Agent /agent/v1/dhcp/* IPC through
+// Engine.DhcpProxy.
+//
+// beta.4 production-path contract:
+//
+//	PUBLIC -> handleDhcpProxy -> Engine.DhcpProxy
+//	        -> Agent /agent/v1/dhcp/dhcp/v1/leases -> DhcpHost
+//	        -> dnsmasq lease file (read-only)
+func (h *Handler) handleDhcpProxy(w http.ResponseWriter, r *http.Request, token string) {
+	if r.ContentLength > 64<<10 {
+		problem(w, r, 413, errorCategoryFromCode("payload_too_large"), "payload_too_large", "DHCP payload exceeds 64 KiB.")
+		return
+	}
+	var body io.Reader
+	if r.Body != nil {
+		body = io.LimitReader(r.Body, 64<<10)
+	}
+	status, data, contentType, err := h.engine.DhcpProxy(r.Context(), r.Method, r.URL.Path, token, body)
 	if err != nil {
 		problem(w, r, 503, errorCategoryFromCode("agent_unavailable"), "agent_unavailable", err.Error())
 		return

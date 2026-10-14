@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+
+	"github.com/CrazyDuckLab/DuckOS/internal/dhcpsnoop"
 	"github.com/CrazyDuckLab/DuckOS/internal/firstrun"
 	"github.com/CrazyDuckLab/DuckOS/internal/lifecycle"
 	"github.com/CrazyDuckLab/DuckOS/internal/model"
@@ -45,6 +47,7 @@ type Handler struct {
 	speedlab  *SpeedLabHost
 	upnp      *UPnPHost
 	wake      *WakeHost
+	dhcp      *DhcpHost
 	frr       *FRRHost
 	slots     chan struct{}
 	network   *NetworkService
@@ -268,6 +271,13 @@ func (h *Handler) EnableWake(host *WakeHost) {
 	h.wake = host
 }
 
+// EnableDHCP registers the read-only DHCP lease observation
+// host. The host never mutates lease state; it reports what
+// the DHCP server persists.
+func (h *Handler) EnableDHCP(host *DhcpHost) {
+	h.dhcp = host
+}
+
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
@@ -437,6 +447,16 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.wake.ServeHTTP(w, r)
+		return
+	}
+	if strings.HasPrefix(r.URL.EscapedPath(), DhcpPath) {
+		if h.dhcp == nil {
+			NewDhcpHost(func() ([]dhcpsnoop.Lease, error) {
+				return nil, errors.New("dhcp: lease source is not wired")
+			}, nil, "unwired").ServeHTTP(w, r)
+			return
+		}
+		h.dhcp.ServeHTTP(w, r)
 		return
 	}
 	if r.URL.EscapedPath() != OverviewPath {

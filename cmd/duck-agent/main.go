@@ -47,6 +47,7 @@ import (
 
 func main() {
 	socket := flag.String("socket", "/run/duckos-agent/agent.sock", "Privileged Agent Unix socket")
+	flagDhcpLeaseFile := flag.String("dhcp-lease-file", "/var/lib/misc/dnsmasq.leases", "dnsmasq lease file read for /api/v1/dhcp/leases observation")
 	allowedUID := flag.Int64("allowed-uid", -1, "Required exact API user UID from Linux SO_PEERCRED")
 	environment := flag.String("environment", "test", "dev, test or production")
 	agentAssertionKeyFile := flag.String("agent-assertion-key-file", "/etc/duckos/agent-assertion.key", "Private HMAC key used to verify API-to-Agent principal assertions")
@@ -206,6 +207,15 @@ func main() {
 	} else {
 		log.Printf("wake service is not enabled: %v", wakeErr)
 	}
+	// beta.4: read-only DHCP lease observation backed by the
+	// dnsmasq lease file. The lease path is a flag so a
+	// deployment that moves the dnsmasq lease directory can
+	// re-point the observation without code changes.
+	leasePath := *flagDhcpLeaseFile
+	if leasePath == "" {
+		leasePath = "/var/lib/misc/dnsmasq.leases"
+	}
+	handler.EnableDHCP(agent.NewDhcpHost(agent.FileLeaseReader(leasePath), networkAccess, leasePath))
 	if frrHost, err := enableFRRService(*frrNetNS, *frrPathspace, *frrStateDir); err == nil {
 		defer frrHost.Close()
 		handler.EnableFRR(frrHost)

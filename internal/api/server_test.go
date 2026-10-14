@@ -167,6 +167,13 @@ func (e *testEngine) UPnPProxy(_ context.Context, _, _, token string, _ io.Reade
 	e.lastToken = token
 	return 200, []byte(`{"ok":true}`), "application/json", nil
 }
+func (e *testEngine) DhcpProxy(_ context.Context, _, _, token string, _ io.Reader) (int, []byte, string, error) {
+	if token == "" {
+		return 401, []byte(`{"error":{"code":"unauthorized","message":"token required"}}`), "application/json", nil
+	}
+	return 200, []byte(`{"leases":[],"source":"test","observedAt":"2026-01-01T00:00:00Z"}`), "application/json", nil
+}
+
 func (e *testEngine) WakeProxy(_ context.Context, _, _, token string, _ io.Reader) (int, []byte, string, error) {
 	e.lastToken = token
 	return 200, []byte(`{"ok":true}`), "application/json", nil

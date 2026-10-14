@@ -59,6 +59,7 @@ Subcommands (each is a separate concern, all share the loopback API):
   upnp enable             enable port mapping on a trusted network (--network --iface --protocols --ttl)
   upnp disable            disable port mapping on a network (--network)
   upnp revoke             revoke one dynamic mapping (--id)
+  dhcp leases             print the DHCP server's lease table (read-only)
 
 Use --help on any subcommand for arguments.
 `
@@ -124,6 +125,8 @@ func dispatch(args []string) error {
 		return xrayCmd(rest)
 	case "upnp":
 		return upnpCmd(rest)
+	case "dhcp":
+		return dhcpCmd(rest)
 	case "config":
 		return configCmd(rest)
 	case "provenance":

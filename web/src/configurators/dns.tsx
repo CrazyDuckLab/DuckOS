@@ -7,6 +7,7 @@
  */
 import { useEffect, useState } from "react";
 import { APIClient, type FetchResult } from "../api/client";
+import { listDhcpLeases, type DhcpLeases } from "../api";
 import { type Messages } from "../i18n/messages";
 import { type PageMeta } from "../pages/registry";
 import { PageFrame } from "../components/PageFrame";
@@ -181,10 +182,18 @@ export function DhcpLeasesPage({
       </PageFrame>
     );
 
-  // We do not yet have a typed DHCP leases feed. Until /api/v1/dhcp/leases
-  // is exposed, we present a derived view: each interface with an IPv4
-  // address is reported as "1 observed lease". This is honest because we
-  // say so explicitly.
+  // beta.4: /api/v1/dhcp/leases is wired to the agent's
+  // dnsmasq lease reader. When the feed is available we show
+  // the real lease table; when it is not (older agent), we
+  // fall back to the derived per-interface view and say so.
+  const [leases, setLeases] = useState<DhcpLeases | null>(null);
+  useEffect(() => {
+    const ctl = new AbortController();
+    listDhcpLeases(client.token(), ctl.signal)
+      .then(setLeases)
+      .catch(() => setLeases(null));
+    return () => ctl.abort();
+  }, [client]);
   const observed = result.data.interfaces
     .filter((i) => i.addresses.some((a) => a.family === "ipv4"))
     .map((i) => ({
@@ -204,10 +213,23 @@ export function DhcpLeasesPage({
   return (
     <PageFrame page={page} bundle={bundle}>
       <RuntimeEvidencePanel
-        rows={[
-          { key: "observed leases (derived)", value: observed.length },
-          { key: "leases source", value: "derived from /overview.interfaces" },
-        ]}
+        rows={
+          leases
+            ? [
+                { key: "observed leases", value: leases.leases.length },
+                { key: "leases source", value: leases.source },
+                ...(leases.error
+                  ? [{ key: "source error", value: leases.error }]
+                  : []),
+              ]
+            : [
+                { key: "observed leases (derived)", value: observed.length },
+                {
+                  key: "leases source",
+                  value: "derived from /overview.interfaces",
+                },
+              ]
+        }
         observedAt={result.data.observedAt}
       />
       <FilterBar
@@ -219,7 +241,25 @@ export function DhcpLeasesPage({
         }
       />
       <DataTable
-        rows={observed}
+        rows={
+          leases
+            ? leases.leases
+                .map((l) => ({
+                  iface: l.hostname || "—",
+                  mac: l.mac,
+                  address: l.ip,
+                  state: "active",
+                  expiry: l.expiry,
+                }))
+                .filter(
+                  (r) =>
+                    !query ||
+                    `${r.iface} ${r.mac} ${r.address}`
+                      .toLowerCase()
+                      .includes(query.toLowerCase()),
+                )
+            : observed
+        }
         rowKey={(r) => `${r.iface}-${r.mac}`}
         pageSize={25}
         selectedRowKey={selectedKey}
