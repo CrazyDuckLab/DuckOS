@@ -51,11 +51,11 @@ const FirewallRulesPath = "/agent/v1/fwrules"
 
 // FirewallRulesHost serves the typed rule surface.
 type FirewallRulesHost struct {
-	mu      sync.Mutex
-	mgr     *fwrules.Manager
-	store   *fwrules.StoreFile
-	nftBin  string
-	Access  UPnPAccess
+	mu     sync.Mutex
+	mgr    *fwrules.Manager
+	store  *fwrules.StoreFile
+	nftBin string
+	Access UPnPAccess
 	// stageDir holds the transient nft batch file.
 	stageDir string
 }
@@ -134,8 +134,8 @@ func (h *FirewallRulesHost) handleGetRules(w http.ResponseWriter, r *http.Reques
 	path := h.store.Path()
 	h.mu.Unlock()
 	writeFwrJSON(w, http.StatusOK, map[string]any{
-		"rules":     rules,
-		"store":     path,
+		"rules":      rules,
+		"store":      path,
 		"observedAt": time.Now().UTC().Format(time.RFC3339),
 	})
 }
@@ -325,7 +325,6 @@ func clientAddrOf(r *http.Request) string {
 	}
 	return r.RemoteAddr
 }
-
 
 func writeFwrJSON(w http.ResponseWriter, status int, body any) {
 	w.WriteHeader(status)
