@@ -92,7 +92,7 @@ func (s *udpSocket) dispatch(srv *Server, networkRef string, from *net.UDPAddr, 
 	var resp []byte
 	switch packet[0] {
 	case proto.NATPMPVersion:
-		res := srv.HandleNATPMP(packet, fromAddr, upnp.Network{NetworkRef: networkRef})
+		res := srv.HandleNATPMP(packet, fromAddr, uint16(from.Port), upnp.Network{NetworkRef: networkRef})
 		resp = res.Response
 	case proto.PCPVersion:
 		res := srv.HandlePCP(packet, fromAddr, upnp.Network{NetworkRef: networkRef})

@@ -4,6 +4,7 @@
 package frontend
 
 import (
+	"encoding/binary"
 	"net/netip"
 	"sync"
 	"testing"
@@ -45,7 +46,7 @@ var lanNet = upnp.Network{
 	TTLSec:     3600,
 }
 
-func natPMPReq(transport byte, intPort, extPort uint16, lifetime uint32) []byte {
+func natPMPReqAt(transport byte, intPort, extPort uint16, lifetime uint32, srcPort uint16) []byte {
 	b := make([]byte, 12)
 	b[0] = 0
 	b[1] = transport
@@ -58,6 +59,18 @@ func natPMPReq(transport byte, intPort, extPort uint16, lifetime uint32) []byte 
 	b[8] = byte(lifetime >> 8)
 	b[9] = byte(lifetime)
 	return b
+}
+
+// natPMPReq builds a request whose source port equals the
+// internal port (the RFC 6886 compliant shape).
+func natPMPReq(transport byte, intPort, extPort uint16, lifetime uint32) []byte {
+	return natPMPReqAt(transport, intPort, extPort, lifetime, intPort)
+}
+
+// natPMPReqBadSrc builds a request whose source port differs
+// from the claimed internal port.
+func natPMPReqBadSrc(transport byte, intPort, extPort uint16, lifetime uint32) []byte {
+	return natPMPReqAt(transport, intPort, extPort, lifetime, intPort+1)
 }
 
 func clientIP() netip.Addr { return netip.MustParseAddr("192.168.10.50") }
@@ -74,7 +87,7 @@ func newTestServer(t *testing.T, sink MappingSink) (*Server, *memSink) {
 
 func TestNATPMPMappingAccepted(t *testing.T) {
 	s, sink := newTestServer(t, nil)
-	res := s.HandleNATPMP(natPMPReq(1, 5000, 0, 1800), clientIP(), lanNet)
+	res := s.HandleNATPMP(natPMPReq(1, 5000, 0, 1800), clientIP(), 5000, lanNet)
 	if !res.Accepted || res.Response == nil {
 		t.Fatalf("not accepted: %+v", res)
 	}
@@ -97,10 +110,10 @@ func TestNATPMPMappingAccepted(t *testing.T) {
 
 func TestNATPMPRenewalReplacesID(t *testing.T) {
 	s, sink := newTestServer(t, nil)
-	if !s.HandleNATPMP(natPMPReq(1, 5000, 5000, 600), clientIP(), lanNet).Accepted {
+	if !s.HandleNATPMP(natPMPReq(1, 5000, 5000, 600), clientIP(), 5000, lanNet).Accepted {
 		t.Fatal("first not accepted")
 	}
-	res := s.HandleNATPMP(natPMPReq(1, 5000, 5000, 600), clientIP(), lanNet)
+	res := s.HandleNATPMP(natPMPReq(1, 5000, 5000, 600), clientIP(), 5000, lanNet)
 	if !res.Accepted {
 		t.Fatalf("renewal refused: %+v", res)
 	}
@@ -111,11 +124,11 @@ func TestNATPMPRenewalReplacesID(t *testing.T) {
 
 func TestNATPMPConflictRefused(t *testing.T) {
 	s, _ := newTestServer(t, nil)
-	if !s.HandleNATPMP(natPMPReq(1, 5000, 5000, 600), clientIP(), lanNet).Accepted {
+	if !s.HandleNATPMP(natPMPReq(1, 5000, 5000, 600), clientIP(), 5000, lanNet).Accepted {
 		t.Fatal("first not accepted")
 	}
 	other := netip.MustParseAddr("192.168.10.51")
-	res := s.HandleNATPMP(natPMPReq(1, 8080, 5000, 600), other, lanNet)
+	res := s.HandleNATPMP(natPMPReq(1, 8080, 5000, 600), other, 8080, lanNet)
 	if res.Accepted {
 		t.Fatal("conflicting mapping accepted")
 	}
@@ -134,7 +147,7 @@ func TestNATPMPAllowList(t *testing.T) {
 	s, _ := newTestServer(t, nil)
 	restricted := lanNet
 	restricted.AllowedClients = []string{"192.168.10.99"}
-	res := s.HandleNATPMP(natPMPReq(1, 5000, 0, 600), clientIP(), restricted)
+	res := s.HandleNATPMP(natPMPReq(1, 5000, 0, 600), clientIP(), 5000, restricted)
 	if res.Accepted {
 		t.Fatal("unauthorized client accepted")
 	}
@@ -147,7 +160,7 @@ func TestNATPMPQuotaAndRateLimit(t *testing.T) {
 	var accepted int
 	for i := 1; i <= limits.MaxMappingsPerClient+1; i++ {
 		port := uint16(20000 + i)
-		if s.HandleNATPMP(natPMPReq(1, port, 0, 600), other, lanNet).Accepted {
+		if s.HandleNATPMP(natPMPReq(1, port, 0, 600), other, port, lanNet).Accepted {
 			accepted++
 		}
 	}
@@ -161,7 +174,7 @@ func TestNATPMPQuotaAndRateLimit(t *testing.T) {
 	fresh := netip.MustParseAddr("192.168.10.78")
 	denied := 0
 	for i := 0; i < limits.RequestsPerMinute+10; i++ {
-		if !s.HandleNATPMP(natPMPReq(1, 30000, 0, 0), fresh, lanNet).Accepted {
+		if !s.HandleNATPMP(natPMPReq(1, 30000, 0, 0), fresh, 30000, lanNet).Accepted {
 			denied++
 		}
 	}
@@ -174,20 +187,20 @@ func TestNATPMPGlobalLimitAndSinkFailure(t *testing.T) {
 	sink := newMemSink(t)
 	s := NewServer(Limits{MaxMappingsTotal: 2}, nil, sink)
 	s.SetExternal("203.0.113.7")
-	if !s.HandleNATPMP(natPMPReq(1, 1001, 0, 60), clientIP(), lanNet).Accepted {
+	if !s.HandleNATPMP(natPMPReq(1, 1001, 0, 60), clientIP(), 1001, lanNet).Accepted {
 		t.Fatal("first refused")
 	}
 	second := netip.MustParseAddr("192.168.10.60")
-	if !s.HandleNATPMP(natPMPReq(1, 1002, 0, 60), second, lanNet).Accepted {
+	if !s.HandleNATPMP(natPMPReq(1, 1002, 0, 60), second, 1002, lanNet).Accepted {
 		t.Fatal("second refused")
 	}
 	third := netip.MustParseAddr("192.168.10.61")
-	if s.HandleNATPMP(natPMPReq(1, 1003, 0, 60), third, lanNet).Accepted {
+	if s.HandleNATPMP(natPMPReq(1, 1003, 0, 60), third, 0, lanNet).Accepted {
 		t.Fatal("global limit not enforced")
 	}
 	// Sink failure must be refused, never silently dropped.
 	sink.fail = true
-	if s.HandleNATPMP(natPMPReq(1, 1010, 0, 60), clientIP(), lanNet).Accepted {
+	if s.HandleNATPMP(natPMPReq(1, 1010, 0, 60), clientIP(), 1010, lanNet).Accepted {
 		t.Fatal("sink failure accepted")
 	}
 }
@@ -195,12 +208,12 @@ func TestNATPMPGlobalLimitAndSinkFailure(t *testing.T) {
 func TestNATPMPMalformedAndPublicAddress(t *testing.T) {
 	s, _ := newTestServer(t, nil)
 	// Malformed junk still gets a best-effort refusal, not a panic.
-	res := s.HandleNATPMP([]byte{0, 1, 9}, clientIP(), lanNet)
+	res := s.HandleNATPMP([]byte{0, 1, 9}, clientIP(), 0, lanNet)
 	if res.Accepted || res.Response == nil {
 		t.Fatalf("malformed handling: %+v", res)
 	}
 	// Public address returns the observed external address.
-	res = s.HandleNATPMP([]byte{0, 128}, clientIP(), lanNet)
+	res = s.HandleNATPMP([]byte{0, 128}, clientIP(), 0, lanNet)
 	if res.Accepted || len(res.Response) != 12 {
 		t.Fatalf("public address: %+v", res)
 	}
@@ -209,7 +222,7 @@ func TestNATPMPMalformedAndPublicAddress(t *testing.T) {
 	}
 	// Unobserved external address = honest network failure.
 	s2 := NewServer(Limits{}, nil, newMemSink(t))
-	res = s2.HandleNATPMP([]byte{0, 128}, clientIP(), lanNet)
+	res = s2.HandleNATPMP([]byte{0, 128}, clientIP(), 0, lanNet)
 	if res.Response[2] != 0 || res.Response[3] != 3 {
 		t.Fatalf("expected network-failure code, got %v", res.Response[2:4])
 	}
@@ -321,14 +334,14 @@ func TestRateBudgetWindowResets(t *testing.T) {
 	s.core.nowFn = func() time.Time { return now }
 	ip := clientIP()
 	// 2 allowed, 3rd denied in the same window.
-	s.HandleNATPMP(natPMPReq(1, 1000, 0, 60), ip, lanNet)
-	s.HandleNATPMP(natPMPReq(1, 1001, 0, 60), ip, lanNet)
-	if r := s.HandleNATPMP(natPMPReq(1, 1002, 0, 60), ip, lanNet); r.Accepted {
+	s.HandleNATPMP(natPMPReq(1, 1000, 0, 60), ip, 1000, lanNet)
+	s.HandleNATPMP(natPMPReq(1, 1001, 0, 60), ip, 1001, lanNet)
+	if r := s.HandleNATPMP(natPMPReq(1, 1002, 0, 60), ip, 1002, lanNet); r.Accepted {
 		t.Fatal("budget not enforced")
 	}
 	// Advance past the window: budget resets.
 	now = now.Add(time.Minute + time.Second)
-	if r := s.HandleNATPMP(natPMPReq(1, 1003, 0, 60), ip, lanNet); !r.Accepted {
+	if r := s.HandleNATPMP(natPMPReq(1, 1003, 0, 60), ip, 1003, lanNet); !r.Accepted {
 		t.Fatal("window did not reset")
 	}
 }
@@ -347,5 +360,26 @@ func TestBindCrossSubnetGuard(t *testing.T) {
 	empty := Bind{}
 	if !empty.InPrefixes(netip.MustParseAddr("10.20.30.40")) {
 		t.Fatal("empty prefixes must not reject")
+	}
+}
+
+func TestNATPMPSourcePortMismatchRefused(t *testing.T) {
+	s, sink := newTestServer(t, nil)
+	// Epoch is measured from server start (real clock), so the
+	// fake clock must stay ahead of it.
+	base := time.Now().Add(10 * time.Second)
+	s.core.nowFn = func() time.Time { return base }
+	// natPMPReqBadSrc claims internal port 5000 but "arrives"
+	// from a different source port.
+	res := s.HandleNATPMP(natPMPReqBadSrc(1, 5000, 0, 600), clientIP(), 0, lanNet)
+	if res.Accepted {
+		t.Fatal("mismatched source port accepted")
+	}
+	if n := len(sink.Mappings()); n != 0 {
+		t.Fatalf("mapping created: %d", n)
+	}
+	// The refusal must still carry the epoch (RFC 6886).
+	if got := binary.BigEndian.Uint32(res.Response[4:8]); got == 0 {
+		t.Fatal("refusal missing epoch")
 	}
 }

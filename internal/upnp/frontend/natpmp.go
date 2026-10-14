@@ -28,25 +28,30 @@ type NATPMPResult struct {
 }
 
 // HandleNATPMP processes one NAT-PMP datagram that arrived
-// on the trusted network n from clientAddr.
-func (s *Server) HandleNATPMP(datagram []byte, clientAddr netip.Addr, n upnp.Network) NATPMPResult {
+// on the trusted network n from clientAddr. srcPort is the
+// UDP source port of the datagram: RFC 6886 §3.2 requires
+// the client to send mapping requests from the internal port
+// it asks to map, so a mismatch is refused before any state
+// changes (an attacker must not be able to nominate an
+// internal port it does not own the source socket for).
+func (s *Server) HandleNATPMP(datagram []byte, clientAddr netip.Addr, srcPort uint16, n upnp.Network) NATPMPResult {
 	res := NATPMPResult{}
 	if !s.core.admit(clientAddr.String()) {
 		res.Counted = true
 		// Still answer so the client learns it is refused; a
 		// silent drop would trigger client retries.
-		res.Response = refuseNATPMP(datagram, proto.NATPMPResultRefused)
+		res.Response = refuseNATPMP(datagram, proto.NATPMPResultRefused, s.epoch(s.core.nowFn()))
 		s.core.reject(true, "nat-pmp", clientAddr.String(), n.NetworkRef, "rate limit exceeded")
 		return res
 	}
 	req, err := proto.ParseNATPMPRequest(datagram)
 	if err != nil {
-		res.Response = refuseNATPMP(datagram, proto.NATPMPResultRefused)
+		res.Response = refuseNATPMP(datagram, proto.NATPMPResultRefused, s.epoch(s.core.nowFn()))
 		s.core.reject(false, "nat-pmp", clientAddr.String(), n.NetworkRef, "malformed request: "+err.Error())
 		return res
 	}
 	if !clientAllowed(n, clientAddr.String()) {
-		res.Response = refuseNATPMP(datagram, proto.NATPMPResultNotAuthorized)
+		res.Response = refuseNATPMP(datagram, proto.NATPMPResultNotAuthorized, s.epoch(s.core.nowFn()))
 		s.core.reject(false, "nat-pmp", clientAddr.String(), n.NetworkRef, "client not in allow-list")
 		return res
 	}
@@ -54,22 +59,27 @@ func (s *Server) HandleNATPMP(datagram []byte, clientAddr netip.Addr, n upnp.Net
 		res.Response = s.publicAddressResponse()
 		return res
 	}
+	if req.InternalPort != srcPort {
+		res.Response = refuseNATPMP(datagram, proto.NATPMPResultRefused, s.epoch(s.core.nowFn()))
+		s.core.reject(false, "nat-pmp", clientAddr.String(), n.NetworkRef, "internal port differs from UDP source port")
+		return res
+	}
 	transport := upnp.Transport(req.TransportProtocol())
 	sink := s.core.sink
 	if sink == nil {
-		res.Response = refuseNATPMP(datagram, proto.NATPMPResultNetworkFailure)
+		res.Response = refuseNATPMP(datagram, proto.NATPMPResultNetworkFailure, s.epoch(s.core.nowFn()))
 		s.core.reject(false, "nat-pmp", clientAddr.String(), n.NetworkRef, "mapping sink unavailable")
 		return res
 	}
 	// Global and per-client capacity.
 	mappings := sink.Mappings()
 	if len(mappings) >= s.core.limits.MaxMappingsTotal {
-		res.Response = refuseNATPMP(datagram, proto.NATPMPResultOutOfResources)
+		res.Response = refuseNATPMP(datagram, proto.NATPMPResultOutOfResources, s.epoch(s.core.nowFn()))
 		s.core.reject(false, "nat-pmp", clientAddr.String(), n.NetworkRef, "global mapping limit reached")
 		return res
 	}
 	if sinkClientCount(mappings, clientAddr.String()) >= s.core.limits.MaxMappingsPerClient {
-		res.Response = refuseNATPMP(datagram, proto.NATPMPResultOutOfResources)
+		res.Response = refuseNATPMP(datagram, proto.NATPMPResultOutOfResources, s.epoch(s.core.nowFn()))
 		s.core.reject(false, "nat-pmp", clientAddr.String(), n.NetworkRef, "per-client mapping quota reached")
 		return res
 	}
@@ -79,7 +89,7 @@ func (s *Server) HandleNATPMP(datagram []byte, clientAddr netip.Addr, n upnp.Net
 		extPort = int(req.InternalPort)
 	}
 	if !portFree(mappings, transport, extPort, clientAddr.String(), int(req.InternalPort)) {
-		res.Response = refuseNATPMP(datagram, proto.NATPMPResultNotAuthorized)
+		res.Response = refuseNATPMP(datagram, proto.NATPMPResultNotAuthorized, s.epoch(s.core.nowFn()))
 		s.core.reject(false, "nat-pmp", clientAddr.String(), n.NetworkRef, "external port already mapped")
 		return res
 	}
@@ -87,7 +97,7 @@ func (s *Server) HandleNATPMP(datagram []byte, clientAddr netip.Addr, n upnp.Net
 	m := buildMapping(upnp.ProtoNATPMP, transport, n, clientAddr.String(), int(req.InternalPort), extPort, lifetime, now)
 	m.ID = renewalID(mappings, m.ID, m)
 	if err := sink.AddMapping(m, "nat-pmp:"+clientAddr.String()); err != nil {
-		res.Response = refuseNATPMP(datagram, proto.NATPMPResultRefused)
+		res.Response = refuseNATPMP(datagram, proto.NATPMPResultRefused, s.epoch(s.core.nowFn()))
 		s.core.reject(false, "nat-pmp", clientAddr.String(), n.NetworkRef, "rejected by runtime: "+err.Error())
 		return res
 	}
@@ -195,8 +205,11 @@ func sinkClientCount(mappings []upnp.Mapping, clientIP string) int {
 }
 
 // refuseNATPMP builds a best-effort refusal echoing the
-// opcode when the header is parseable.
-func refuseNATPMP(datagram []byte, code uint16) []byte {
+// opcode when the header is parseable. RFC 6886 requires
+// the epoch in every response — clients use it to detect
+// server restarts and invalidate local mapping state, so
+// refusals must carry it too.
+func refuseNATPMP(datagram []byte, code uint16, epochSec uint32) []byte {
 	out := make([]byte, 8)
 	out[0] = proto.NATPMPVersion
 	if len(datagram) >= 2 {
@@ -207,5 +220,6 @@ func refuseNATPMP(datagram []byte, code uint16) []byte {
 		}
 	}
 	binary.BigEndian.PutUint16(out[2:4], code)
+	binary.BigEndian.PutUint32(out[4:8], epochSec)
 	return out
 }
