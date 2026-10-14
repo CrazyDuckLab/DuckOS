@@ -69,6 +69,28 @@ func (n Network) Valid() error {
 	return nil
 }
 
+// Transport is the IP transport protocol a mapping applies
+// to. NAT-PMP and PCP requests carry an explicit transport;
+// UPnP IGD SOAP carries NewProtocol. The empty value keeps
+// the beta.2 model shape and is rendered as TCP by the
+// nftables backend for backward compatibility.
+type Transport string
+
+const (
+	TransportTCP Transport = "tcp"
+	TransportUDP Transport = "udp"
+)
+
+// Valid reports whether t is a known transport (the empty
+// value is accepted for beta.2 model compatibility).
+func (t Transport) Valid() bool {
+	switch t {
+	case "", TransportTCP, TransportUDP:
+		return true
+	}
+	return false
+}
+
 // Mapping is one dynamic port mapping. The
 // runtime is the source of truth; the model
 // owns the surface and the audit.
@@ -76,6 +98,7 @@ type Mapping struct {
 	ID           string    `json:"id"`
 	NetworkRef   string    `json:"networkRef"`
 	Protocol     Protocol  `json:"protocol"`
+	Transport    Transport `json:"transport,omitempty"`
 	ClientIP     string    `json:"clientIp"`
 	ExternalPort int       `json:"externalPort"`
 	InternalPort int       `json:"internalPort"`
@@ -102,7 +125,41 @@ func (m Mapping) Valid() error {
 	if m.ClientIP == "" {
 		return errors.New("upnp: clientIp is required")
 	}
+	if !m.Transport.Valid() {
+		return errors.New("upnp: transport is unknown")
+	}
 	return nil
+}
+
+// ExternalPortFree reports whether no active mapping already
+// occupies extPort on transport t ("any" semantics: a tcp and
+// a udp mapping may share the same port number).
+func (m *Manager) ExternalPortFree(transport Transport, extPort int) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, existing := range m.mappings {
+		if existing.ExternalPort != extPort {
+			continue
+		}
+		if existing.Transport == transport || existing.Transport == "" || transport == "" {
+			return false
+		}
+	}
+	return true
+}
+
+// ClientMappingCount returns how many active mappings the
+// client address owns.
+func (m *Manager) ClientMappingCount(clientIP string) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	for _, existing := range m.mappings {
+		if existing.ClientIP == clientIP {
+			n++
+		}
+	}
+	return n
 }
 
 // Manager is the V1 UPnP/PCP store. Manager is

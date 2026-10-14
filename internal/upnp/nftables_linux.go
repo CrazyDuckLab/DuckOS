@@ -236,13 +236,21 @@ func renderMapping(m Mapping) ([]byte, error) {
 	if m.InternalHost == "" {
 		return nil, errors.New("upnp: internalHost is required")
 	}
+	// The empty transport keeps beta.2 renderings (tcp) stable.
+	transport := string(m.Transport)
+	if transport == "" {
+		transport = string(TransportTCP)
+	}
+	if transport != string(TransportTCP) && transport != string(TransportUDP) {
+		return nil, fmt.Errorf("upnp: unsupported transport %q", transport)
+	}
 	var b strings.Builder
 	b.WriteString("# duckos.upnp mapping\n")
 	b.WriteString("add table inet duckos_upnp\n")
 	b.WriteString("add chain inet duckos_upnp prerouting { type nat hook prerouting priority -100 ; }\n")
 	b.WriteString(fmt.Sprintf(
-		"add rule inet duckos_upnp prerouting tcp dport %d dnat to %s:%d\n",
-		m.ExternalPort, m.InternalHost, m.InternalPort,
+		"add rule inet duckos_upnp prerouting %s dport %d dnat to %s:%d\n",
+		transport, m.ExternalPort, m.InternalHost, m.InternalPort,
 	))
 	return []byte(b.String()), nil
 }
