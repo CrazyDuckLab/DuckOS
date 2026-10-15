@@ -54,6 +54,16 @@ const FirewallConfirmWindow = 300 * time.Second
 type fwrulesAdapter struct {
 	nftBin   string
 	stageDir string
+	// readbackFn is injectable for tests; nil means the real
+	// nft readback.
+	readbackFn func(nftBin string) ([]json.RawMessage, bool, error)
+}
+
+func (a *fwrulesAdapter) readback() ([]json.RawMessage, bool, error) {
+	if a.readbackFn != nil {
+		return a.readbackFn(a.nftBin)
+	}
+	return readbackFwrTable(a.nftBin)
 }
 
 func (a *fwrulesAdapter) decode(doc json.RawMessage) ([]fwrules.Rule, error) {
@@ -156,16 +166,12 @@ func (a *fwrulesAdapter) runNFT(batch []byte) error {
 	return nil
 }
 
-// readback lists the owned table, distinguishing the three
-// observation outcomes fail-closed: (objects, table absent,
-// error). A nonzero nft exit is only "absent" when nft itself
-// reports the table does not exist; every other failure and
-// every decode error surface as errors, never as an empty
+// readbackFwrTable lists the owned table, distinguishing the
+// three observation outcomes fail-closed: (objects, table
+// absent, error). A nonzero nft exit is only "absent" when nft
+// itself reports the table does not exist; every other failure
+// and every decode error surface as errors, never as an empty
 // successful state.
-func (a *fwrulesAdapter) readback() ([]json.RawMessage, bool, error) {
-	return readbackFwrTable(a.nftBin)
-}
-
 func readbackFwrTable(nftBin string) ([]json.RawMessage, bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
