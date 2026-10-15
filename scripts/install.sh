@@ -304,7 +304,11 @@ verify_artifact() {
     else fail 'Special files are not allowed in artifacts.'; fi
   done < <(find "$root" -mindepth 1 -print0)
   [[ $count -eq $((${#manifest_paths[@]} + 1)) ]] || fail 'Artifact inventory mismatch.'
-  for relative in VERSION BUILD-INFO.json LICENSE COPYRIGHT.md install.sh bin/duck-api bin/duck-agent bin/duck-updater bin/duck-restore systemd/duck-restore.service systemd/duck-updater.service systemd/duck-api.service systemd/duck-agent.service systemd/duck-dnsmasq.service systemd/duck-network-recover.service web/index.html xray-core/XRAY_CORE_VERSION xray-core/XRAY_CORE_LICENSE xray-core/XRAY_CORE_SHA256SUMS; do
+  # F3: the privileged nftables launcher is MANDATORY inventory. An
+  # artifact without it would install a zero-capability agent with no
+  # privilege holder for every firewall/UPnP operation, so the
+  # preflight rejects the payload before any host mutation.
+  for relative in VERSION BUILD-INFO.json LICENSE COPYRIGHT.md install.sh bin/duck-api bin/duck-agent bin/duck-updater bin/duck-restore bin/duck-nft-launcher systemd/duck-restore.service systemd/duck-updater.service systemd/duck-api.service systemd/duck-agent.service systemd/duck-dnsmasq.service systemd/duck-network-recover.service systemd/duck-nft-launcher.service web/index.html xray-core/XRAY_CORE_VERSION xray-core/XRAY_CORE_LICENSE xray-core/XRAY_CORE_SHA256SUMS; do
     has_path "$relative" || fail "Required artifact file is missing: $relative"
   done
   [[ $(wc -c < "$root/VERSION") -le 80 ]] || fail 'VERSION is too long.'
@@ -347,11 +351,27 @@ verify_artifact() {
     linux/armv7) expected_elf_class='01'; expected_elf_machine='2800'; arch_label='armv7 (ELF32 EM_ARM)' ;;
     *) fail "BUILD-INFO.json declares unsupported build target: $metadata_target" ;;
   esac
-  for binary in duck-api duck-agent duck-updater duck-restore; do
+  for binary in duck-api duck-agent duck-updater duck-restore duck-nft-launcher; do
+    [[ -x "$root/bin/$binary" ]] || fail "$binary must have the executable bit set in the artifact."
     magic=$(od -An -tx1 -N5 "$root/bin/$binary" | tr -d ' \n')
     machine=$(od -An -tx1 -j18 -N2 "$root/bin/$binary" | tr -d ' \n')
     [[ "$magic" == "7f454c46$expected_elf_class" && "$machine" == "$expected_elf_machine" ]] || fail "$binary must be a Linux $arch_label binary; got ELF magic ${magic:0:14} e_machine ${machine:-??}."
+    # F3: truncation detection. A header-preserved truncated binary
+    # checksums consistently, so the section header table must fit
+    # inside the actual file (target machines are little-endian).
+    binary_size=$(wc -c < "$root/bin/$binary")
+    shoff=$(od -An -tu8 -j40 -N8 "$root/bin/$binary" | tr -d ' ')
+    shentsize=$(od -An -tu2 -j58 -N2 "$root/bin/$binary" | tr -d ' ')
+    shnum=$(od -An -tu2 -j60 -N2 "$root/bin/$binary" | tr -d ' ')
+    [[ "$shoff" =~ ^[0-9]+$ && "$shentsize" =~ ^[0-9]+$ && "$shnum" =~ ^[0-9]+$ ]] || fail "$binary: ELF section header fields are unreadable."
+    [[ "$shoff" -gt 0 && "$shentsize" -gt 0 && "$shnum" -gt 0 ]] || fail "$binary: ELF section header table is missing (truncated binary?)."
+    sh_end=$((shoff + shnum * shentsize))
+    [[ "$sh_end" -le "$binary_size" ]] || fail "$binary: ELF section header table exceeds file size (truncated binary?)."
   done
+  # F3: binary/service compatibility — the packaged launcher unit must
+  # execute the packaged launcher binary from the release tree.
+  grep -q '/opt/duckos/current/bin/duck-nft-launcher' "$root/systemd/duck-nft-launcher.service" \
+    || fail 'duck-nft-launcher.service does not execute the packaged launcher binary path.'
   # The vendored xray-core binary must match the pin embedded in the
   # artifact's own install.sh for the artifact's target architecture.
   # This catches the zip-digest-vs-ELF-digest pin class of defect at
@@ -455,11 +475,48 @@ printf '%s\n' '<(o)__/' ' (___/' 'DuckOS installer'
 agent_attempted=false
 api_attempted=false
 enable_attempted=false
+nft_started=false
+nft_enabled=false
+nft_unit_installed=false
+# F6: a pre-existing launcher unit is preserved for rollback. A
+# conflicting non-DuckOS unit is rejected instead of overwritten so a
+# failed install can always restore the pre-install state. The unit
+# and rollback paths are variables so the failure-injection test can
+# exercise the bookkeeping against a temp root.
+nft_unit_path=${NFT_UNIT_PATH:-/etc/systemd/system/duck-nft-launcher.service}
+nft_rollback_dir=${NFT_ROLLBACK_DIR:-/root/duckos-install-rollback}
+nft_unit_preexisting=false
+if [[ -e $nft_unit_path ]]; then
+  nft_unit_preexisting=true
+  install -d -o root -g root -m 0700 "$nft_rollback_dir"
+  cp -a "$nft_unit_path" "$nft_rollback_dir/duck-nft-launcher.service.preinstall"
+fi
+# rollback_launcher_unit restores the pre-install launcher unit state:
+# a pre-existing unit is restored from the rollback copy; a unit this
+# install created is removed. Only resources created by THIS install
+# are touched. Extracted as a function so the failure-injection test
+# can exercise it against a stubbed systemctl.
+rollback_launcher_unit() {
+  if $nft_started; then systemctl stop duck-nft-launcher.service >/dev/null 2>&1 || printf 'Could not stop duck-nft-launcher; inspect service state.\n' >&2; fi
+  if $nft_enabled; then systemctl disable duck-nft-launcher.service >/dev/null 2>&1 || printf 'Could not disable duck-nft-launcher; inspect service state.\n' >&2; fi
+  if $nft_unit_installed; then
+    if $nft_unit_preexisting; then
+      cp -a "$nft_rollback_dir/duck-nft-launcher.service.preinstall" "$nft_unit_path" \
+        || printf 'Could not restore the pre-existing duck-nft-launcher unit; restore it manually from %s.\n' "$nft_rollback_dir" >&2
+    else
+      rm -f "$nft_unit_path" \
+        || printf 'Could not remove the unit installed by this failed installation.\n' >&2
+    fi
+    systemctl daemon-reload >/dev/null 2>&1 || true
+  fi
+}
+
 finish_failed() {
   local result=$?
   [[ $result -ne 0 ]] || return 0
   trap - EXIT
   unset token
+  rollback_launcher_unit
   if $api_attempted; then systemctl stop duck-api.service >/dev/null 2>&1 || printf 'Could not stop duck-api; inspect service state.\n' >&2; fi
   if $agent_attempted; then systemctl stop duck-agent.service duck-restore.service >/dev/null 2>&1 || printf 'Could not stop duck-agent; inspect service state.\n' >&2; fi
   if $enable_attempted; then systemctl disable duck-agent.service duck-api.service duck-restore.service >/dev/null 2>&1 || printf 'Could not disable DuckOS units; inspect boot enablement.\n' >&2; fi
@@ -888,7 +945,9 @@ install -o root -g root -m 0644 "$release/systemd/duck-wg-launcher.service" /etc
 # Like the WG launcher, the binary lives only in the release tree
 # (/opt/duckos/current/bin/duck-nft-launcher, manifest-verified) so the
 # executed path stays inside the integrity-checked payload.
-install -o root -g root -m 0644 "$release/systemd/duck-nft-launcher.service" /etc/systemd/system/duck-nft-launcher.service
+nft_unit_installed=true
+install -o root -g root -m 0644 "$release/systemd/duck-nft-launcher.service" "$nft_unit_path"
+systemctl daemon-reload
 install -d -o root -g root -m 0700 /var/lib/duckos-restore /var/lib/duckos/restore-source /var/lib/duckos/restore-live
 install -o root -g root -m 0644 "$release/systemd/duck-restore.service" /etc/systemd/system/duck-restore.service
 install -d -o root -g root -m 0700 /var/lib/duckos-updater
@@ -948,6 +1007,7 @@ else
   systemctl start systemd-networkd.service >/dev/null 2>&1 || printf 'Could not start systemd-networkd; networkd inventory will be unavailable until next boot.\n' >&2
 fi
 agent_attempted=true
+nft_started=true
 systemctl start duck-restore.service duck-frr-launcher.service duck-wg-launcher.service duck-nft-launcher.service duck-agent.service
 api_attempted=true
 systemctl start duck-api.service
@@ -966,6 +1026,7 @@ done
 unset token
 $ready || fail 'Authenticated Agent-backed readiness/overview did not pass before the deadline.'
 enable_attempted=true
+nft_enabled=true
 systemctl enable duck-agent.service duck-api.service duck-restore.service duck-frr-launcher.service duck-wg-launcher.service duck-nft-launcher.service
 printf 'ready %s\n' "$version" > /var/lib/duckos/install-status
 trap - EXIT

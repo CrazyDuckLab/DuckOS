@@ -17,9 +17,15 @@ async function fixture(t) {
   const artifact = path.join(directory, 'artifact');
   // Synthetic ELF header only: these files are never executed. This tests the
   // packaging guard, not Linux execution, host installation, or ELF validity.
-  const elf = Buffer.alloc(64);
+  // Minimal but structurally complete ELF64: the installer's F3
+  // truncation check requires a section header table that fits inside
+  // the file, so the fixture carries a real (empty) table.
+  const elf = Buffer.alloc(128);
   elf.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1]);
-  elf[18] = 0x3e;
+  elf[18] = 0x3e; // e_machine = EM_X86_64
+  elf.writeBigUInt64LE(64n, 40); // e_shoff: table right after the header
+  elf.writeUInt16LE(64, 58); // e_shentsize
+  elf.writeUInt16LE(1, 60); // e_shnum
   // Synthetic xray-core payload. The vendored ELF cannot hash to the real
   // upstream pin (no preimage), so the fixture rewrites the pin inside the
   // artifact's own install.sh to the synthetic digest; the verifier is run
@@ -41,6 +47,7 @@ async function fixture(t) {
     ['bin/duck-api', elf],
     ['bin/duck-updater', elf],
     ['bin/duck-restore', elf],
+    ['bin/duck-nft-launcher', elf],
     ['xray-core/Xray-linux-64', xrayBinary],
     ['xray-core/XRAY_CORE_VERSION', '26.3.27\n'],
     ['xray-core/XRAY_CORE_LICENSE', 'MPL-2.0 synthetic license fixture\n'],
@@ -53,10 +60,16 @@ async function fixture(t) {
     ['systemd/duck-restore.service', await fs.readFile(path.join(root, 'packaging/systemd/duck-restore.service'))],
     ['systemd/duck-dnsmasq.service', await fs.readFile(path.join(root, 'packaging/systemd/duck-dnsmasq.service'))],
     ['systemd/duck-network-recover.service', await fs.readFile(path.join(root, 'packaging/systemd/duck-network-recover.service'))],
+    ['systemd/duck-nft-launcher.service', await fs.readFile(path.join(root, 'packaging/systemd/duck-nft-launcher.service'))],
   ]);
   for (const [name, content] of files) {
     await fs.mkdir(path.dirname(path.join(artifact, name)), { recursive: true });
     await fs.writeFile(path.join(artifact, name), content);
+    // F3: real artifacts carry executable bin/* payloads and the
+    // installer preflight enforces the mode, so the fixture must too.
+    if (name.startsWith('bin/')) {
+      await fs.chmod(path.join(artifact, name), 0o755);
+    }
   }
   const manifest = async () => {
     const entries = [];
@@ -77,6 +90,20 @@ function verify(artifact, args = []) {
   assert.equal(result.error, undefined, result.error?.message);
   return { status: result.status, output: result.stdout + result.stderr };
 }
+// regenChecksums rebuilds the artifact manifest after direct fixture
+// mutations (the fixture's own manifest() closure only runs at build time).
+async function regenChecksums(artifact) {
+  const entries = [];
+  const names = (await fs.readdir(path.join(artifact, 'bin'))).map((n) => `bin/${n}`)
+    .concat((await fs.readdir(path.join(artifact, 'systemd'))).map((n) => `systemd/${n}`))
+    .concat(['VERSION', 'LICENSE', 'COPYRIGHT.md', 'BUILD-INFO.json', 'install.sh',
+      'xray-core/Xray-linux-64', 'xray-core/XRAY_CORE_VERSION', 'xray-core/XRAY_CORE_LICENSE',
+      'xray-core/XRAY_CORE_SHA256SUMS', 'web/index.html', 'web/assets/main.js']);
+  for (const name of names.sort()) entries.push(`${hash(await fs.readFile(path.join(artifact, name)))}  ${name}
+`);
+  await fs.writeFile(path.join(artifact, 'SHA256SUMS'), entries.join(''));
+}
+
 function rejected(result, reason) {
   assert.notEqual(result.status, 0, result.output);
   assert.match(result.output, reason);
@@ -396,8 +423,8 @@ test('launcher binary is in the artifact, runs as a daemon, and serves the FRR l
   assert.match(installer, /install -o root -g root -m 0644.*systemd\/duck-frr-launcher\.service/);
   // BETA.2 B-009: the WG launcher joins the boot ordering with the
   // FRR launcher and the Agent.
-  assert.match(installer, /systemctl start duck-restore\.service duck-frr-launcher\.service duck-wg-launcher\.service duck-agent\.service/);
-  assert.match(installer, /systemctl enable duck-agent\.service duck-api\.service duck-restore\.service duck-frr-launcher\.service duck-wg-launcher\.service/);
+  assert.match(installer, /systemctl start duck-restore\.service duck-frr-launcher\.service duck-wg-launcher\.service duck-nft-launcher\.service duck-agent\.service/);
+  assert.match(installer, /systemctl enable duck-agent\.service duck-api\.service duck-restore\.service duck-frr-launcher\.service duck-wg-launcher\.service duck-nft-launcher\.service/);
 });
 
 test('preflight tolerates any pre-existing duck-dnsmasq identity', async () => {
@@ -485,4 +512,40 @@ test('DuckOS license files are mandatory in the payload', async (t) => {
  const f=await fixture(t);
  await fs.rm(path.join(f.artifact,'LICENSE')); f.files.delete('LICENSE'); await f.manifest();
  rejected(verify(f.artifact), /Required artifact file is missing: LICENSE/);
+});
+
+// F3 regression class: the privileged nftables launcher is mandatory
+// inventory and every integrity dimension applies to it as well.
+test('missing privileged launcher binary or unit is rejected before any mutation', async (t) => {
+  const missingBinary = await fixture(t);
+  await fs.rm(path.join(missingBinary.artifact, 'bin/duck-nft-launcher'));
+  await regenChecksums(missingBinary.artifact);
+  rejected(verify(missingBinary.artifact), /Required artifact file is missing: bin\/duck-nft-launcher/);
+
+  const missingUnit = await fixture(t);
+  await fs.rm(path.join(missingUnit.artifact, 'systemd/duck-nft-launcher.service'));
+  await regenChecksums(missingUnit.artifact);
+  rejected(verify(missingUnit.artifact), /Required artifact file is missing: systemd\/duck-nft-launcher\.service/);
+});
+
+test('truncated or non-executable launcher binary is rejected', async (t) => {
+  const truncated = await fixture(t);
+  // 100 bytes keeps the ELF header intact but cuts the section header
+  // table off the end of the file — the canonical truncated-binary shape.
+  await fs.truncate(path.join(truncated.artifact, 'bin/duck-nft-launcher'), 100);
+  await regenChecksums(truncated.artifact);
+  rejected(verify(truncated.artifact), /truncated binary/);
+
+  const mode = await fixture(t);
+  await fs.chmod(path.join(mode.artifact, 'bin/duck-nft-launcher'), 0o644);
+  await regenChecksums(mode.artifact);
+  rejected(verify(mode.artifact), /duck-nft-launcher must have the executable bit set/);
+});
+
+test('launcher unit must execute the packaged release-tree binary', async (t) => {
+  const f = await fixture(t);
+  const unit = path.join(f.artifact, 'systemd/duck-nft-launcher.service');
+  await fs.writeFile(unit, Buffer.from((await fs.readFile(unit, 'utf8')).replaceAll('/opt/duckos/current/bin/duck-nft-launcher', '/usr/local/bin/duck-nft-launcher')));
+  await regenChecksums(f.artifact);
+  rejected(verify(f.artifact), /does not execute the packaged launcher binary path/);
 });
