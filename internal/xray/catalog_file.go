@@ -127,6 +127,30 @@ func (c *FileCatalog) commit(state fileState) error {
 
 func nowUTC() time.Time { return time.Now().UTC() }
 
+// GetSubscription returns one durable subscription record.
+func (c *FileCatalog) GetSubscription(_ context.Context, id string) (Subscription, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, s := range c.state.Subscriptions {
+		if s.ID == id {
+			return s, nil
+		}
+	}
+	return Subscription{}, fmt.Errorf("xray: subscription %s not found", id)
+}
+
+// GetProfile returns one durable profile record.
+func (c *FileCatalog) GetProfile(_ context.Context, id string) (Profile, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, p := range c.state.Profiles {
+		if p.ID == id {
+			return p, nil
+		}
+	}
+	return Profile{}, fmt.Errorf("xray: profile %s not found", id)
+}
+
 func (c *FileCatalog) UpsertServer(_ context.Context, server Server) error {
 	if server.ID == "" {
 		return errors.New("server id required")

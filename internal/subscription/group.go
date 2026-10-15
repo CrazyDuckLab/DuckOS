@@ -113,11 +113,13 @@ func (g Group) ActiveMembers() []GroupMember {
 	return out
 }
 
-// GroupStore is a bounded in-memory group table.
+// GroupStore is a bounded group table with an optional
+// persistence hook (state survives restart).
 type GroupStore struct {
-	mu     sync.RWMutex
-	groups map[string]Group
-	clock  func() time.Time
+	mu      sync.RWMutex
+	groups  map[string]Group
+	clock   func() time.Time
+	persist func([]Group) error
 }
 
 const MaxGroups = 256
@@ -140,7 +142,31 @@ func (s *GroupStore) Upsert(g Group) (Group, error) {
 	}
 	g.UpdatedAt = now
 	s.groups[g.ID] = g
+	s.persistLocked()
 	return g, nil
+}
+
+// SetPersist installs the durability hook.
+func (s *GroupStore) SetPersist(fn func([]Group) error) { s.persist = fn }
+
+// LoadGroups seeds the store from persisted state (startup).
+func (s *GroupStore) LoadGroups(groups []Group) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, g := range groups {
+		s.groups[g.ID] = g
+	}
+}
+
+func (s *GroupStore) persistLocked() {
+	if s.persist == nil {
+		return
+	}
+	out := make([]Group, 0, len(s.groups))
+	for _, g := range s.groups {
+		out = append(out, g)
+	}
+	_ = s.persist(out)
 }
 
 func (s *GroupStore) Get(id string) (Group, bool) {
@@ -157,6 +183,7 @@ func (s *GroupStore) Delete(id string) error {
 		return errors.New("subscription: group not found")
 	}
 	delete(s.groups, id)
+	s.persistLocked()
 	return nil
 }
 

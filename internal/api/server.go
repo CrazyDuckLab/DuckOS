@@ -135,16 +135,21 @@ type Engine interface {
 type Handler struct {
 	updaterHealthKey []byte
 	engine           Engine
-	tokenHash        [32]byte
-	assertionKey     string
-	port             string
-	web              http.Handler
-	webRoot          *os.Root
-	slots            chan struct{}
-	identity         *identity.Service
-	policy           *identity.Policy
-	identitySlots    chan struct{}
-	tlsOnly          bool
+	// subscriptionDelivery serves the public /sub/ surface with
+	// its own token trust model — mounted before authentication
+	// (delivery must work without a management session) but after
+	// the TLS / host / origin guards.
+	subscriptionDelivery http.Handler
+	tokenHash            [32]byte
+	assertionKey         string
+	port                 string
+	web                  http.Handler
+	webRoot              *os.Root
+	slots                chan struct{}
+	identity             *identity.Service
+	policy               *identity.Policy
+	identitySlots        chan struct{}
+	tlsOnly              bool
 }
 
 // ValidateListen requires a literal loopback address; hostname resolution cannot
@@ -193,6 +198,12 @@ func LoadToken(filename string) (string, error) {
 		}
 	}
 	return token, nil
+}
+
+// SetSubscriptionDelivery mounts the public subscription delivery
+// handler. It must be called before the server starts serving.
+func (h *Handler) SetSubscriptionDelivery(d http.Handler) {
+	h.subscriptionDelivery = d
 }
 
 func New(engine Engine, token, listen, webDir string) (*Handler, error) {
@@ -259,6 +270,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if site := r.Header.Get("Sec-Fetch-Site"); site == "cross-site" {
 		problem(w, r, 403, errorCategoryFromCode("untrusted_origin"), "untrusted_origin", "Cross-site requests are not allowed.")
+		return
+	}
+	if h.subscriptionDelivery != nil && (strings.HasPrefix(r.URL.Path, "/sub/") || r.URL.Path == "/sub") {
+		h.subscriptionDelivery.ServeHTTP(w, r)
 		return
 	}
 	if h.identity != nil && strings.HasPrefix(r.URL.Path, "/api/v1/auth/") {

@@ -67,6 +67,12 @@ type API struct {
 	// CRUD.
 	Apply  func(ctx context.Context, servers []Server, users []User) error
 	Prefix string
+	// Center, when wired, serves the Xray Center surface under
+	// <Prefix>center/* (nodes, groups, tokens, policies, stats,
+	// backup, diagnostics) with its own authorisation gate. The
+	// hook keeps this package free of the center's dependencies
+	// while the public proxy exposes the surface transparently.
+	Center http.Handler
 }
 
 // ServeHTTP dispatches /xray/v1/{servers,users,profiles,subscriptions}
@@ -86,6 +92,8 @@ func (a *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		a.serveProfiles(w, r)
 	case strings.HasPrefix(path, a.Prefix+"subscriptions"):
 		a.serveSubscriptions(w, r)
+	case a.Center != nil && strings.HasPrefix(path, a.Prefix+"center/"):
+		a.Center.ServeHTTP(w, r)
 	default:
 		problem(w, 404, "not_found", "Unknown xray operation.")
 	}

@@ -397,6 +397,17 @@ func (m *Manager) markSeen(nodeID, version string, capabilities []string) {
 	}
 }
 
+// LoadNodes seeds the registry from persisted state (startup).
+// Revoked records are loaded as-is so revocation survives restart.
+func (m *Manager) LoadNodes(nodes []Node) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := range nodes {
+		n := nodes[i]
+		m.nodes[n.ID] = &n
+	}
+}
+
 // Get returns a node by id.
 func (m *Manager) Get(nodeID string) (Node, bool) {
 	m.mu.RLock()

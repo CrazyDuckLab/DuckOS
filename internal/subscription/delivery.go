@@ -59,10 +59,45 @@ type TokenStore struct {
 	mu     sync.RWMutex
 	byHash map[string]*TokenRecord
 	clock  func() time.Time
+	// persist, when set, receives the full record set after every
+	// mutation (state survives restart).
+	persist func([]TokenRecord) error
 }
 
 func NewTokenStore() *TokenStore {
 	return &TokenStore{byHash: map[string]*TokenRecord{}, clock: time.Now}
+}
+
+// SetPersist installs the durability hook.
+func (s *TokenStore) SetPersist(fn func([]TokenRecord) error) { s.persist = fn }
+
+func (s *TokenStore) persistLocked() {
+	if s.persist == nil {
+		return
+	}
+	out := make([]TokenRecord, 0, len(s.byHash))
+	for _, rec := range s.byHash {
+		out = append(out, *rec)
+	}
+	_ = s.persist(out)
+}
+
+// LoadRecords seeds the store from persisted state (startup).
+func (s *TokenStore) LoadRecords(records []TokenRecord) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range records {
+		rec := records[i]
+		s.byHash[rec.TokenHash] = &rec
+	}
+}
+
+func (s *TokenStore) snapshot() []TokenRecord {
+	out := make([]TokenRecord, 0, len(s.byHash))
+	for _, rec := range s.byHash {
+		out = append(out, *rec)
+	}
+	return out
 }
 
 // hashToken derives the at-rest digest of a presentation token.
@@ -105,6 +140,7 @@ func (s *TokenStore) Issue(subID string, ttl time.Duration) (string, TokenRecord
 		}
 	}
 	s.byHash[rec.TokenHash] = &rec
+	s.persistLocked()
 	s.mu.Unlock()
 	return token, rec, nil
 }
@@ -169,6 +205,7 @@ func (s *TokenStore) RevokeSubscription(subID string) int {
 			n++
 		}
 	}
+	s.persistLocked()
 	s.mu.Unlock()
 	return n
 }

@@ -77,6 +77,7 @@ type EventLog struct {
 	maxCount int
 	maxAge   time.Duration
 	clock    func() time.Time
+	persist  func([]Event) error
 }
 
 const (
@@ -86,6 +87,21 @@ const (
 
 func NewEventLog() *EventLog {
 	return &EventLog{maxCount: MaxEvents, maxAge: DefaultEventMaxAge, clock: time.Now}
+}
+
+// SetPersist installs the durability hook: after every successful
+// Record the retained ring is handed to persistence (bounded, so
+// the write stays small).
+func (l *EventLog) SetPersist(fn func([]Event) error) { l.persist = fn }
+
+// LoadEvents seeds the log from persisted state (startup).
+func (l *EventLog) LoadEvents(events []Event) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.events = append(l.events, events...)
+	if len(l.events) > l.maxCount {
+		l.events = l.events[len(l.events)-l.maxCount:]
+	}
 }
 
 // Record appends an event and prunes. Recording never fails on
@@ -109,6 +125,9 @@ func (l *EventLog) Record(e Event) error {
 		}
 	}
 	l.events = kept
+	if l.persist != nil {
+		_ = l.persist(append([]Event(nil), l.events...))
+	}
 	return nil
 }
 

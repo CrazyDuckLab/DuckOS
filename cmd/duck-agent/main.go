@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"net/http"
 	"net/netip"
 	"os"
 	"os/exec"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/CrazyDuckLab/DuckOS/internal/agent"
 	"github.com/CrazyDuckLab/DuckOS/internal/backup"
+	"github.com/CrazyDuckLab/DuckOS/internal/center"
 	"github.com/CrazyDuckLab/DuckOS/internal/chaos"
 	"github.com/CrazyDuckLab/DuckOS/internal/firstrun"
 	"github.com/CrazyDuckLab/DuckOS/internal/frr"
@@ -29,9 +31,11 @@ import (
 	"github.com/CrazyDuckLab/DuckOS/internal/multiwan"
 	"github.com/CrazyDuckLab/DuckOS/internal/network"
 	"github.com/CrazyDuckLab/DuckOS/internal/observe"
+	"github.com/CrazyDuckLab/DuckOS/internal/persist"
 	"github.com/CrazyDuckLab/DuckOS/internal/qos"
 	"github.com/CrazyDuckLab/DuckOS/internal/speedlab"
 	"github.com/CrazyDuckLab/DuckOS/internal/state"
+	"github.com/CrazyDuckLab/DuckOS/internal/subscription"
 	"github.com/CrazyDuckLab/DuckOS/internal/upgrade"
 	"github.com/CrazyDuckLab/DuckOS/internal/upnp"
 	"github.com/CrazyDuckLab/DuckOS/internal/upnp/frontend"
@@ -39,6 +43,7 @@ import (
 	"github.com/CrazyDuckLab/DuckOS/internal/vault"
 	"github.com/CrazyDuckLab/DuckOS/internal/wake"
 	"github.com/CrazyDuckLab/DuckOS/internal/wireguard"
+	"github.com/CrazyDuckLab/DuckOS/internal/xnode"
 	"github.com/CrazyDuckLab/DuckOS/internal/xray"
 	"github.com/CrazyDuckLab/DuckOS/internal/ztp"
 	"github.com/CrazyDuckLab/DuckOS/pkg/brand"
@@ -944,6 +949,153 @@ type identityAccess interface {
 // The host now exposes the runtime + the durable
 // catalog so a real Xray daemon can be brought up
 // through public API -> IPC -> kernel.
+// enableXrayCenter builds the Xray Center loopback surface with
+// durable stores under <catalogDir>/center. Failure returns an
+// error and the xray API runs WITHOUT the center (the loopback
+// reports center_unavailable) — degradation is honest, never fatal.
+func enableXrayCenter(catalogDir string, access identityAccess, cat *xray.FileCatalog, secrets *agent.VaultLifecycle) (http.Handler, error) {
+	storeDir := filepath.Join(catalogDir, "center")
+	nodeFile, err := persist.Open[[]xnode.Node](storeDir, "nodes.json")
+	if err != nil {
+		return nil, err
+	}
+	groupFile, err := persist.Open[[]subscription.Group](storeDir, "groups.json")
+	if err != nil {
+		return nil, err
+	}
+	tokenFile, err := persist.Open[[]subscription.TokenRecord](storeDir, "tokens.json")
+	if err != nil {
+		return nil, err
+	}
+	policyFile, err := persist.Open[[]xray.Policy](storeDir, "policies.json")
+	if err != nil {
+		return nil, err
+	}
+	eventFile, err := persist.Open[[]xray.Event](storeDir, "events.json")
+	if err != nil {
+		return nil, err
+	}
+
+	nodeMgr := xnode.NewManager(xnode.NewNodeHTTPAdapter())
+	nodeMgr.SetPersist(func(nodes []*xnode.Node) error {
+		out := make([]xnode.Node, 0, len(nodes))
+		for _, n := range nodes {
+			out = append(out, *n)
+		}
+		return nodeFile.Update(func(cur *[]xnode.Node) { *cur = out })
+	})
+	nodeMgr.LoadNodes(nodeFile.Get())
+
+	groups := subscription.NewGroupStore()
+	groups.SetPersist(func(gs []subscription.Group) error {
+		return groupFile.Update(func(cur *[]subscription.Group) { *cur = gs })
+	})
+	groups.LoadGroups(groupFile.Get())
+
+	tokens := subscription.NewTokenStore()
+	tokens.SetPersist(func(recs []subscription.TokenRecord) error {
+		return tokenFile.Update(func(cur *[]subscription.TokenRecord) { *cur = recs })
+	})
+	tokens.LoadRecords(tokenFile.Get())
+
+	events := xray.NewEventLog()
+	events.SetPersist(func(evts []xray.Event) error {
+		return eventFile.Update(func(cur *[]xray.Event) { *cur = evts })
+	})
+	for _, e := range eventFile.Get() {
+		_ = events.Record(e)
+	}
+
+	var resolver xray.Resolver
+	if secrets != nil {
+		resolver = secrets.XrayResolver()
+	}
+	render := center.BuildRenderer(center.RendererOptions{
+		Catalog:    cat,
+		Groups:     groups,
+		Resolver:   resolver,
+		CtxTimeout: 5 * time.Second,
+	})
+	accountant := xray.NewAccountant(4096, nil)
+	quotaEngine := xray.NewEngine(xray.NewUsageHistory())
+	diag := &xray.Diagnostician{
+		Servers: func() []xray.Server { s, _ := cat.ListServers(context.Background()); return s },
+		Users: func() []xray.User {
+			servers, _ := cat.ListServers(context.Background())
+			var all []xray.User
+			for _, srv := range servers {
+				us, _ := cat.ListUsers(context.Background(), srv.ID)
+				all = append(all, us...)
+			}
+			return all
+		},
+		Events:     events,
+		StaleStats: accountant.LastCollection,
+	}
+	enforcer := &xray.Enforcer{
+		Accountant: accountant,
+		Engine:     quotaEngine,
+		Events:     events,
+		Collect:    xray.NewSubprocessStatsCollector(xray.StatsCollectorOptions{}),
+	}
+	// Bounded enforcement round each minute; a failed round marks
+	// stats stale and is logged, never fabricated.
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_, _ = enforcer.Round(ctx)
+		for range ticker.C {
+			rctx, rcancel := context.WithTimeout(context.Background(), 30*time.Second)
+			_, _ = enforcer.Round(rctx)
+			rcancel()
+		}
+	}()
+
+	return &center.Handler{
+		Access:   access,
+		Prefix:   "center/",
+		Nodes:    nodeMgr,
+		Groups:   groups,
+		Tokens:   tokens,
+		Policies: policyFile,
+		Stats: func() (map[string]uint64, time.Time, bool) {
+			at, stale := accountant.LastCollection()
+			return accountant.Ledger(), at, stale
+		},
+		Render:   render,
+		Events:   events,
+		Diagnose: diag.Diagnose,
+		Export: func(includeSecrets bool) (xray.Backup, error) {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			servers, err := cat.ListServers(ctx)
+			if err != nil {
+				return xray.Backup{}, err
+			}
+			var users []xray.User
+			for _, srv := range servers {
+				us, err := cat.ListUsers(ctx, srv.ID)
+				if err != nil {
+					return xray.Backup{}, err
+				}
+				users = append(users, us...)
+			}
+			profiles, err := cat.ListProfiles(ctx)
+			if err != nil {
+				return xray.Backup{}, err
+			}
+			subs, err := cat.ListSubscriptions(ctx)
+			if err != nil {
+				return xray.Backup{}, err
+			}
+			return xray.Export(servers, users, profiles, subs,
+				xray.ExportOptions{IncludeSecrets: includeSecrets, Producer: "duck-agent"})
+		},
+	}, nil
+}
+
 func enableXrayService(catalogDir string, access identityAccess, secrets *agent.VaultLifecycle) (*agent.XrayHost, error) {
 	if catalogDir == "" {
 		return nil, errors.New("xray: durable catalog directory is required")
@@ -972,6 +1124,14 @@ func enableXrayService(catalogDir string, access identityAccess, secrets *agent.
 		Catalog: cat,
 		Apply:   rt.ApplyWith,
 		Prefix:  "/xray/v1/",
+	}
+	// Xray Center: durable node registry, subscription groups,
+	// delivery tokens, routing policies, quota enforcement and
+	// diagnostics under /xray/v1/center/*.
+	if centerHandler, err := enableXrayCenter(catalogDir, access, cat, secrets); err == nil {
+		api.Center = centerHandler
+	} else {
+		log.Printf("xray center disabled: %v", err)
 	}
 	host := agent.NewXrayHost(api, access, rt)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
