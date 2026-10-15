@@ -83,32 +83,33 @@ BATCH=$(mktemp)
 trap 'rm -f "$BATCH"; ip netns del "$QUAL" >/dev/null 2>&1' EXIT
 
 say "== baseline (no owned table, kernel forward enabled) =="
-check 'ping cli->srv passes without firewall' pass ip netns exec "$CLI" ping -c2 -W2 10.250.0.6
+check 'ping cli->srv passes without firewall' pass ip netns exec "$CLI" ping -c3 -W3 10.250.0.6
 
 say "== firewall: accept rule for 10.250.0.0/24 tcp/443 (ICMP unaffected, policy accept) =="
 render "$BATCH" 'ip saddr 10.250.0.0/24 tcp dport 443 accept'
 q "$NFT" -f "$BATCH" && say 'PASS apply accept-ruleset' || { say 'FAIL apply accept-ruleset'; fail=$((fail+1)); }
-check 'ping still passes (policy accept)' pass ip netns exec "$CLI" ping -c2 -W2 10.250.0.6
+check 'ping still passes (policy accept)' pass ip netns exec "$CLI" ping -c3 -W3 10.250.0.6
 
 say "== firewall: explicit drop of the client source =="
 render "$BATCH" 'ip saddr 10.250.0.2 drop'
 q "$NFT" -f "$BATCH" && say 'PASS apply drop-ruleset' || { say 'FAIL apply drop-ruleset'; fail=$((fail+1)); }
-check 'ping blocked by drop rule' fail ip netns exec "$CLI" ping -c2 -W2 10.250.0.6
+check 'ping blocked by drop rule' fail ip netns exec "$CLI" ping -c3 -W3 10.250.0.6
 
 say "== coexistence: duckos_upnp mapping survives firewall rollback =="
 q "$NFT" add table inet duckos_upnp
-q "$NFT" add chain inet duckos_upnp prerouting ' { type nat hook prerouting priority dstnat ; }'
-q "$NFT" add rule inet duckos_upnp prerouting 'tcp dport 8080 dnat to 10.250.0.6:80'
+q "$NFT" add chain inet duckos_upnp prerouting '{ type nat hook prerouting priority dstnat ; }'
+q "$NFT" add rule inet duckos_upnp prerouting 'tcp dport 8080 dnat ip to 10.250.0.6:80'
 render "$BATCH" 'ip saddr 10.250.0.2 drop'   # re-apply same firewall state
 q "$NFT" -f "$BATCH"
-q "$NFT" list table inet duckos_upnp | grep -q 'dnat to 10.250.0.6:80' \
+q "$NFT" list table inet duckos_upnp | grep -q 'dnat ip to 10.250.0.6:80' \
 	&& say 'PASS upnp mapping survives fw rollback' || { say 'FAIL upnp mapping lost'; fail=$((fail+1)); }
 q "$NFT" list table inet duckos_fw | grep -q 'drop' \
 	&& say 'PASS fw rules survive upnp presence' || { say 'FAIL fw rules lost'; fail=$((fail+1)); }
 
 say "== deleting the upnp mapping preserves firewall rules =="
-q "$NFT" delete rule inet duckos_upnp prerouting handle \
-	"$(q "$NFT" -a list chain inet duckos_upnp prerouting | awk '/dnat/{gsub("handle ","");print $NF}')"
+HANDLE=$(q "$NFT" -a list chain inet duckos_upnp prerouting | awk '/dnat/{for(i=1;i<=NF;i++) if($i=="handle") print $(i+1)}')
+[[ -n "$HANDLE" ]] || { say 'FAIL upnp mapping handle not found'; fail=$((fail+1)); HANDLE=0; }
+q "$NFT" delete rule inet duckos_upnp prerouting handle "$HANDLE"
 q "$NFT" list chain inet duckos_fw forward | grep -q 'drop' \
 	&& say 'PASS fw rules survive upnp mapping deletion' || { say 'FAIL fw rules lost on upnp delete'; fail=$((fail+1)); }
 
@@ -116,12 +117,12 @@ say "== last rule removal / empty ruleset removes the table =="
 render "$BATCH"
 q "$NFT" -f "$BATCH"
 q "$NFT" list table inet duckos_fw 2>/dev/null && { say 'FAIL table still present after empty apply'; fail=$((fail+1)); } || say 'PASS owned table absent after empty apply'
-check 'ping passes again (canonical empty state)' pass ip netns exec "$CLI" ping -c2 -W2 10.250.0.6
+check 'ping passes again (canonical empty state)' pass ip netns exec "$CLI" ping -c3 -W3 10.250.0.6
 
 say "== first rule insertion on a clean table =="
 render "$BATCH" 'ip saddr 10.250.0.2 drop'
 q "$NFT" -f "$BATCH" && say 'PASS first-rule batch applies to clean table' || { say 'FAIL first-rule batch'; fail=$((fail+1)); }
-check 'drop active again' fail ip netns exec "$CLI" ping -c2 -W2 10.250.0.6
+check 'drop active again' fail ip netns exec "$CLI" ping -c3 -W3 10.250.0.6
 
 q "$NFT" delete table inet duckos_fw 2>/dev/null
 q "$NFT" delete table inet duckos_upnp 2>/dev/null
