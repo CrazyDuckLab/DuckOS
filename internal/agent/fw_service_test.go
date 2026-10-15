@@ -25,45 +25,38 @@ import (
 	"github.com/CrazyDuckLab/DuckOS/internal/wan"
 )
 
-// fakeNFT emulates: `nft -c -f <file>` (validate, ok) and
-// `nft -f <file>` (apply, ok) plus `nft -j list table ...`
-// (readback of the "kernel" table state kept in stateFile).
-// mode file: "ok" | "fail-apply".
-func writeFakeNFT(t *testing.T, dir, stateFile string) string {
-	t.Helper()
-	script := filepath.Join(dir, "nft")
-	content := `#!/bin/sh
-STATE="` + stateFile + `"
-case "$1" in
-  -c) exit 0 ;;
-  -f)
-    if [ -f "$STATE.fail" ]; then exit 1; fi
-    cp "$2" "$STATE.batch"
-    exit 0 ;;
-  -j)
-    if [ ! -f "$STATE.batch" ]; then exit 1; fi
-    # reply with a minimal nftables JSON containing one object
-    printf '{"nftables":[{"metainfo":{}},{"rule":{}}]}'
-    exit 0 ;;
-esac
-exit 2
-`
-	if err := os.WriteFile(script, []byte(content), 0o755); err != nil {
-		t.Fatalf("write nft fixture: %v", err)
-	}
-	return script
-}
-
 type acceptAccess struct{}
 
 func (acceptAccess) Authorize(string, identity.Permission) (identity.User, error) {
 	return identity.User{}, nil
 }
 
+// fakeFwLauncher emulates the privileged nft launcher: validation
+// always passes, apply records the batch into the stage file the
+// readback seam reads back, and reads return a minimal owned-table
+// JSON. Kernel behaviour itself is NOT claimed verified here —
+// live qualification runs against the real launcher and kernel
+// (fw_live_test.go).
+type fakeFwLauncher struct{ stageDir string }
+
+func (f fakeFwLauncher) Check([]byte) error     { return nil }
+func (f fakeFwLauncher) CheckJSON([]byte) error { return nil }
+
+func (f fakeFwLauncher) Apply(batch []byte) error {
+	return os.WriteFile(filepath.Join(f.stageDir, "duckos-fw.batch.nft"), batch, 0o600)
+}
+func (f fakeFwLauncher) ApplyJSON(batch []byte) error { return f.Apply(batch) }
+
+func (f fakeFwLauncher) ListTableJSON(_, _ string) ([]byte, error) {
+	return []byte(`{"nftables":[{"metainfo":{}},{"rule":{}}]}`), nil
+}
+func (f fakeFwLauncher) ListRulesetJSON() ([]byte, error) {
+	return []byte(`{"nftables":[]}`), nil
+}
+
 func newTestFwService(t *testing.T) (*FirewallRulesService, string) {
 	t.Helper()
 	dir := t.TempDir()
-	stateFile := filepath.Join(dir, "kernel-state")
 	// The journal path is a private, pre-existing directory.
 	store := filepath.Join(dir, "store")
 	if err := os.MkdirAll(store, 0o700); err != nil {
@@ -73,7 +66,7 @@ func newTestFwService(t *testing.T) (*FirewallRulesService, string) {
 	svc, err := NewFirewallRulesService(
 		store,
 		stage,
-		writeFakeNFT(t, dir, stateFile),
+		"",
 		acceptAccess{},
 	)
 	if err != nil {
@@ -85,7 +78,9 @@ func newTestFwService(t *testing.T) (*FirewallRulesService, string) {
 	svc.adapter.readbackFn = func(string) ([]json.RawMessage, bool, error) {
 		return fwrSnapshotFromStage(stage)
 	}
-	t.Cleanup(svc.Close)
+	prevLauncher := nftClient
+	nftClient = func() fwLauncherTransport { return fakeFwLauncher{stageDir: stage} }
+	t.Cleanup(func() { nftClient = prevLauncher; svc.Close() })
 	return svc, dir
 }
 

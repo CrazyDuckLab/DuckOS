@@ -1056,7 +1056,7 @@ func enableUPnPService(access identityAccess) (*agent.UPnPHost, error) {
 	var backend upnp.NetworkBackend
 	if b, err := upnp.NewNftablesBackend(""); err == nil {
 		backend = b
-		log.Print("upnp: nftables backend wired (real nft binary)")
+		log.Print("upnp: nftables backend wired through the privileged nft launcher")
 	} else {
 		backend = upnp.NewUnavailableBackend(
 			"nft-binary-missing",

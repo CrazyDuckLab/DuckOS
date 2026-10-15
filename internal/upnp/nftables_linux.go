@@ -27,16 +27,16 @@
 package upnp
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/CrazyDuckLab/DuckOS/internal/nftlaunch"
 )
 
 // NftablesBackend is the production NetworkBackend. It owns
@@ -68,10 +68,14 @@ type NftablesBackend struct {
 // so the production wiring can surface a clean
 // "backend missing" state instead of pretending success.
 func NewNftablesBackend(stagingDir string) (*NftablesBackend, error) {
-	bin, err := exec.LookPath("nft")
-	if err != nil {
-		return nil, fmt.Errorf("upnp: nft binary is not on PATH: %w", err)
+	// BETA.3 remediation: availability is the privileged launcher,
+	// not a local nft binary. The zero-capability agent cannot exec
+	// nft; dialing the launcher socket (which never mutates) proves
+	// the UPnP data-plane can actually be applied.
+	if !(nftlaunch.NewClient()).Available() {
+		return nil, errors.New("upnp: privileged nft launcher is not reachable")
 	}
+	bin := "nft-launcher"
 	if stagingDir == "" {
 		stagingDir = filepath.Join(os.TempDir(), "duckos-upnp")
 	}
@@ -239,12 +243,12 @@ func (n *NftablesBackend) apply(rendered []byte) error {
 	if n.validateOnly {
 		return nil
 	}
-	cmd := exec.Command(n.binPath, "-f", stage)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
+	// The launcher validates the batch against the DuckOS ownership
+	// allowlist (inet duckos_upnp only), stages it and runs
+	// `nft --check` + `nft -f` as one atomic transaction.
+	if err := (nftlaunch.NewClient()).Apply(rendered); err != nil {
 		_ = os.Remove(stage)
-		return fmt.Errorf("upnp: nft -f failed: %w: %s", err, strings.TrimSpace(stderr.String()))
+		return fmt.Errorf("upnp: nft -f failed: %w", err)
 	}
 	return nil
 }

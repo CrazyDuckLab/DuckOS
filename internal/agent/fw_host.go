@@ -29,7 +29,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -37,6 +36,7 @@ import (
 
 	"github.com/CrazyDuckLab/DuckOS/internal/fwrules"
 	"github.com/CrazyDuckLab/DuckOS/internal/identity"
+	"github.com/CrazyDuckLab/DuckOS/internal/nftlaunch"
 	"github.com/CrazyDuckLab/DuckOS/internal/safeapply"
 	"github.com/CrazyDuckLab/DuckOS/internal/state"
 )
@@ -145,40 +145,49 @@ func (a *fwrulesAdapter) Restore(_ context.Context, before, _ /*candidate*/ json
 	return a.runNFT(batch)
 }
 
+// runNFT stages nothing locally and execs nothing: the batch goes to
+// the privileged duck-nft-launcher, which enforces the DuckOS table
+// ownership allowlist (inet duckos_fw here) and performs the
+// CAP_NET_ADMIN netlink work the zero-capability agent cannot.
+// BETA.3 remediation: direct nft exec inside the agent failed with
+// "Operation not permitted" because CapabilityBoundingSet= is empty
+// by design. The check-then-load sequence and its error strings are
+// preserved so the safeapply pipeline semantics are unchanged.
 func (a *fwrulesAdapter) runNFT(batch []byte) error {
-	stage := filepath.Join(a.stageDir, "duckos-fw.batch.nft")
-	if err := os.WriteFile(stage, batch, 0o600); err != nil {
-		return fmt.Errorf("fwrules: stage write failed: %w", err)
+	client := nftClient()
+	if err := client.Check(batch); err != nil {
+		return fmt.Errorf("fwrules: nft check failed: %w", err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	check := exec.CommandContext(ctx, a.nftBin, "-c", "-f", stage)
-	var errOut strings.Builder
-	check.Stderr = &errOut
-	if err := check.Run(); err != nil {
-		return fmt.Errorf("fwrules: nft check failed: %w: %s", err, strings.TrimSpace(errOut.String()))
-	}
-	load := exec.CommandContext(ctx, a.nftBin, "-f", stage)
-	load.Stderr = &errOut
-	if err := load.Run(); err != nil {
-		return fmt.Errorf("fwrules: nft load failed: %w: %s", err, strings.TrimSpace(errOut.String()))
+	if err := client.Apply(batch); err != nil {
+		return fmt.Errorf("fwrules: nft load failed: %w", err)
 	}
 	return nil
 }
 
-// readbackFwrTable lists the owned table, distinguishing the
-// three observation outcomes fail-closed: (objects, table
-// absent, error). A nonzero nft exit is only "absent" when nft
-// itself reports the table does not exist; every other failure
-// and every decode error surface as errors, never as an empty
-// successful state.
+// nftClient returns the launcher transport. Package-level var so
+// tests can point it at a socket-backed fake launcher.
+var nftClient = func() fwLauncherTransport { return nftlaunch.NewClient() }
+
+// fwLauncherTransport is the launcher seam for the agent's nftables
+// surfaces (firewall adapter + read-only observation hosts).
+type fwLauncherTransport interface {
+	Check(batch []byte) error
+	Apply(batch []byte) error
+	ListTableJSON(family, table string) ([]byte, error)
+	ListRulesetJSON() ([]byte, error)
+}
+
+// readbackFwrTable lists the owned table through the privileged
+// launcher, distinguishing the three observation outcomes fail-closed:
+// (objects, table absent, error). A launcher-reported nft failure is
+// only "absent" when nft itself reports the table does not exist;
+// every other failure and every decode error surface as errors, never
+// as an empty successful state.
 func readbackFwrTable(nftBin string) ([]json.RawMessage, bool, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, nftBin, "-j", "list", "table", "inet", fwrules.TableName)
-	out, err := cmd.Output()
+	_ = nftBin // kept for seam compatibility; the launcher owns the nft path
+	out, err := nftClient().ListTableJSON("inet", fwrules.TableName)
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok && strings.Contains(string(exitErr.Stderr), "No such file") {
+		if strings.Contains(err.Error(), "No such file") {
 			return nil, true, nil
 		}
 		return nil, false, fmt.Errorf("fwrules: nft list failed: %w", err)

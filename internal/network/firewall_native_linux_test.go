@@ -5,10 +5,14 @@ package network
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"os"
+	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/CrazyDuckLab/DuckOS/internal/nftlaunch"
 	"github.com/CrazyDuckLab/DuckOS/internal/safeapply"
 )
 
@@ -26,6 +30,51 @@ func requireIsolatedNetworkNamespace(t *testing.T) {
 	init, err := os.Readlink("/proc/1/ns/net")
 	if err != nil || self == init {
 		t.Fatal("refusing firewall test in PID 1 network namespace")
+	}
+	startNativeLauncher(t)
+}
+
+// startNativeLauncher runs the privileged nftables launcher
+// in-process (production code path: framed IPC → ownership allowlist
+// → nft exec) and points the FirewallHost transport at it. The
+// beta.3 remediation routes every nft operation through the
+// launcher, so the native qualification must exercise the same path.
+var (
+	nativeLauncherOnce sync.Once
+	nativeLauncherSock string
+)
+
+func startNativeLauncher(t *testing.T) {
+	t.Helper()
+	nativeLauncherOnce.Do(func() {
+		globalDir, mkErr := os.MkdirTemp("", "duckos-native-launcher")
+		if mkErr != nil {
+			t.Fatalf("native launcher dir: %v", mkErr)
+		}
+		sock := filepath.Join(globalDir, "nft-launcher.sock")
+		ln, err := net.Listen("unix", sock)
+		if err != nil {
+			t.Fatalf("native launcher listen: %v", err)
+		}
+		if err := os.Chmod(sock, 0o660); err != nil {
+			t.Fatalf("native launcher chmod: %v", err)
+		}
+		go func() { _ = nftlaunch.ServeListener(ln, "/usr/sbin/nft", uint32(os.Getuid())) }()
+		nativeLauncherSock = sock
+		newLauncherClient = func() launcherTransport {
+			c := nftlaunch.NewClient()
+			c.SetSocketFn(func() string { return nativeLauncherSock })
+			return c
+		}
+	})
+	deadline := time.Now().Add(5 * time.Second)
+	c := nftlaunch.NewClient()
+	c.SetSocketFn(func() string { return nativeLauncherSock })
+	for !c.Available() {
+		if time.Now().After(deadline) {
+			t.Fatal("in-process nft launcher never became available")
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
 

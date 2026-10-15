@@ -12,14 +12,17 @@ package agent
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/CrazyDuckLab/DuckOS/internal/fwrules"
+	"github.com/CrazyDuckLab/DuckOS/internal/nftlaunch"
 	"github.com/CrazyDuckLab/DuckOS/internal/safeapply"
 	"github.com/CrazyDuckLab/DuckOS/internal/state"
 )
@@ -41,6 +44,54 @@ func skipUnlessLive(t *testing.T) {
 	}
 	if _, err := os.Stat(liveNFT); err != nil {
 		t.Skip("nft binary not available")
+	}
+	startLiveLauncher(t)
+}
+
+// startLiveLauncher runs the privileged nftables launcher in-process
+// on a temp socket and points the agent's nftClient at it. This is
+// the beta.3 privilege-boundary remediation made testable end to end:
+// the adapter code under test is the production code path (client →
+// framed IPC → ownership allowlist → nft exec), not a direct-exec
+// shortcut.
+var (
+	liveLauncherOnce sync.Once
+	liveLauncherSock string
+)
+
+func startLiveLauncher(t *testing.T) {
+	t.Helper()
+	liveLauncherOnce.Do(func() {
+		globalDir, mkErr := os.MkdirTemp("", "duckos-live-launcher")
+		if mkErr != nil {
+			t.Fatalf("live launcher dir: %v", mkErr)
+		}
+		sock := filepath.Join(globalDir, "nft-launcher.sock")
+		ln, err := net.Listen("unix", sock)
+		if err != nil {
+			t.Fatalf("live launcher listen: %v", err)
+		}
+		if err := os.Chmod(sock, 0o660); err != nil {
+			t.Fatalf("live launcher chmod: %v", err)
+		}
+		go func() { _ = nftlaunch.ServeListener(ln, liveNFT, uint32(os.Getuid())) }()
+		liveLauncherSock = sock
+		prev := nftClient
+		nftClient = func() fwLauncherTransport {
+			c := nftlaunch.NewClient()
+			c.SetSocketFn(func() string { return liveLauncherSock })
+			return c
+		}
+		_ = prev
+	})
+	deadline := time.Now().Add(5 * time.Second)
+	c := nftlaunch.NewClient()
+	c.SetSocketFn(func() string { return liveLauncherSock })
+	for !c.Available() {
+		if time.Now().After(deadline) {
+			t.Fatal("in-process nft launcher never became available")
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
 
@@ -398,6 +449,7 @@ func TestLiveCrashHelperChild(t *testing.T) {
 	if store == "" {
 		t.Skip("crash helper child")
 	}
+	skipUnlessLive(t)
 	svc, err := NewFirewallRulesService(store, stage, liveNFT, acceptAccess{})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "child service: %v\n", err)

@@ -47,13 +47,30 @@ func (osLinuxObjectRunner) Run(ctx context.Context, name string, args ...string)
 func (osLinuxObjectRunner) ReadFile(path string) ([]byte, error)  { return os.ReadFile(path) }
 func (osLinuxObjectRunner) Glob(pattern string) ([]string, error) { return filepath.Glob(pattern) }
 
+// launcherObjectsRunner is the production runner: identical to the
+// os runner except that the nftables ruleset listing is served by
+// the privileged duck-nft-launcher over IPC instead of a direct nft
+// exec, which the zero-capability agent cannot perform.
+type launcherObjectsRunner struct{ osLinuxObjectRunner }
+
+func (launcherObjectsRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
+	if name == "nft" && len(args) == 4 && args[0] == "-j" && args[1] == "list" && args[2] == "ruleset" {
+		return nftClient().ListRulesetJSON()
+	}
+	return osLinuxObjectRunner{}.Run(ctx, name, args...)
+}
+
+func NewProductionLinuxObjectsHost() *LinuxObjectsHost {
+	return &LinuxObjectsHost{runner: launcherObjectsRunner{}}
+}
+
 type LinuxObjectsHost struct {
 	runner linuxObjectRunner
 }
 
 func NewLinuxObjectsHost(r linuxObjectRunner) *LinuxObjectsHost {
 	if r == nil {
-		r = osLinuxObjectRunner{}
+		r = launcherObjectsRunner{}
 	}
 	return &LinuxObjectsHost{runner: r}
 }
@@ -114,6 +131,10 @@ func (h *LinuxObjectsHost) list(ctx context.Context, kind string) ([]object.View
 }
 
 func (h *LinuxObjectsHost) nftObjects(ctx context.Context, kind, needle string) ([]object.ViewObject, error) {
+	// The production runner (launcherObjectsRunner) serves this read
+	// through the privileged duck-nft-launcher: the zero-capability
+	// agent cannot exec nft directly (BETA.3 remediation). Tests
+	// inject fake runners at the same seam.
 	data, err := h.runner.Run(ctx, "nft", "-j", "list", "ruleset")
 	if err != nil {
 		return nil, errors.New("nftables runtime is unavailable")

@@ -1,15 +1,14 @@
 package network
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"os"
-	"os/exec"
 	"runtime"
-	"time"
+	"slices"
+
+	"github.com/CrazyDuckLab/DuckOS/internal/nftlaunch"
 )
 
 // FirewallHost performs real, bounded nftables operations. It is Agent-only:
@@ -187,31 +186,67 @@ func (h *FirewallHost) Release(ctx context.Context, target NFTSnapshot) error {
 	return nil
 }
 
-type boundedNFTOutput struct{ bytes.Buffer }
-
-func (b *boundedNFTOutput) Write(p []byte) (int, error) {
-	if len(p) > maxNFTSnapshotBytes-b.Len() {
-		return 0, errors.New("nft output exceeds bound")
-	}
-	return b.Buffer.Write(p)
-}
-
+// runNFT routes one bounded nftables operation through the privileged
+// duck-nft-launcher over its Unix socket. BETA.3 remediation: the
+// agent holds zero capabilities, so direct nft exec fails with
+// "Operation not permitted"; the launcher (own systemd unit,
+// CAP_NET_ADMIN only) performs the netlink work after enforcing the
+// DuckOS table-ownership allowlist. The args/input split of the old
+// direct-exec seam is preserved so every caller (Capture / Check /
+// Apply / Restore / Release / forward guard) keeps its exact
+// semantics; only the transport changed. Non-Linux builds keep the
+// historical "unavailable" behaviour.
 func runNFT(parent context.Context, args []string, input []byte) ([]byte, error) {
-	if runtime.GOOS != "linux" || os.Geteuid() != 0 || len(input) > 1<<20 {
+	if runtime.GOOS != "linux" || len(input) > 1<<20 {
 		return nil, errors.New("nft operation unavailable")
 	}
-	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "/usr/sbin/nft", args...)
-	cmd.Env = []string{"PATH=/usr/sbin:/usr/bin", "LANG=C", "LC_ALL=C"}
-	cmd.Dir = "/"
-	cmd.Stdin = bytes.NewReader(input)
-	cmd.Stderr = io.Discard
-	cmd.WaitDelay = time.Second
-	var output boundedNFTOutput
-	cmd.Stdout = &output
-	if err := cmd.Run(); err != nil {
-		return nil, errors.New("nft command failed or exceeded limits")
+	if err := parent.Err(); err != nil {
+		return nil, err
 	}
-	return append([]byte(nil), output.Bytes()...), nil
+	client := newLauncherClient()
+	switch {
+	case len(args) >= 3 && args[1] == "list" && args[2] == "tables":
+		return client.ListTablesJSON()
+	case len(args) >= 5 && args[1] == "list" && args[2] == "table":
+		return client.ListTableJSON(args[3], args[4])
+	case slices.Contains(args, "--check"):
+		var err error
+		if slices.Contains(args, "--json") {
+			err = client.CheckJSON(input)
+		} else {
+			err = client.Check(input)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, nil
+	case slices.Contains(args, "--file"):
+		var err error
+		if slices.Contains(args, "--json") {
+			err = client.ApplyJSON(input)
+		} else {
+			err = client.Apply(input)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, nil
+	default:
+		return nil, errors.New("nft operation unavailable")
+	}
+}
+
+// newLauncherClient returns the launcher transport. Package-level var
+// so tests can inject a socket-backed fake.
+var newLauncherClient = func() launcherTransport { return nftlaunch.NewClient() }
+
+// launcherTransport is the seam the firewall host drives; it mirrors
+// the nftlaunch.Client surface the runNFT dispatch uses.
+type launcherTransport interface {
+	ListTablesJSON() ([]byte, error)
+	ListTableJSON(family, table string) ([]byte, error)
+	Check(batch []byte) error
+	CheckJSON(batch []byte) error
+	Apply(batch []byte) error
+	ApplyJSON(batch []byte) error
 }
