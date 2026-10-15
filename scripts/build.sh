@@ -28,6 +28,7 @@ for ARCH in "${TARGETS[@]}"; do
   find "$TASK_BUILD/web" -name '.DS_Store' -delete -o -name '._*' -delete
   cp packaging/systemd/*.service "$TASK_BUILD/systemd/"
   cp scripts/install.sh "$TASK_BUILD/install.sh"
+  cp LICENSE COPYRIGHT.md "$TASK_BUILD/"
   # Strip macOS Finder / AppleDouble metadata from the systemd unit files
   # so a later tar on Darwin does not carry ._* sidecar files that the
   # installer's manifest check would treat as unlisted artifact entries.
