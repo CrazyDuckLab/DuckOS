@@ -87,6 +87,34 @@ stale — устаревшие цифры никогда не подаются �
 плюс offline-операции `reality keygen`, `import-3xui`, `parse-uri`,
 `import-uri`. CLI не обходит семантику публичного API.
 
+## Фаза 3 (develop/xray-center, c 01c880a) — интеграция
+
+- **Персистентность** (`internal/persist`): атомарные 0600-JSON-документы
+  с fsync и откатом in-memory при сбое; узлы, группы, токены доставки,
+  политики и события переживают рестарт (отзыв — тоже).
+- **Реальный транспорт узлов** (`internal/xnode/transport.go`):
+  NodeHTTPAdapter (HTTPS, bearer, опциональный pin sha256 отпечатка,
+  заменяющий CA-цепочку) и NodeServer на стороне узла; защита от
+  replay (timestamp + одноразовые nonce, окно ±2 мин); AdoptIdentity
+  принимает креденшал ровно один раз.
+- **Center API** (`internal/center`): nodes/groups/tokens/policies/
+  stats/backup/events/diagnostics под `/api/v1/xray/center/*` через
+  существующий аутентифицированный прокси; выключенная подсистема
+  отвечает честным 501.
+- **Публичная доставка**: duck-api монтирует `/sub/<token>` с общей
+  таблицей токенов; рендеринг — через agent IPC от сервис-принципала
+  `duck-api-delivery` (минимальные права), операторская сессия не
+  нужна, vault из публичного демона недоступен.
+- **Enforcement**: минутный цикл Enforcer — сбор stats (subprocess
+  `xray api statsquery`), Accountant, решения квот, suspend в каталоге
+  (пользователь уходит из рендера при следующем apply), события.
+- **Diagnostics** (`internal/xray/diagnostics.go`): структурированные
+  находки (код/серьёзность/свидетельства/ремедиация) для inbound,
+  пользователя, статистики и флота.
+- **E2E-workflows A–F** (`internal/center/workflow_test.go`): сквозные
+  приёмочные сценарии на реальных durable-каталоге, рендере, доставке
+  и транспорте; live-исполнение Xray-core — отдельная квалификация.
+
 ## Фаза 2 (develop/xray-center, c 1fb266a)
 
 - **Multi-node** (`internal/xnode`): одноразовые enrollment-токены
