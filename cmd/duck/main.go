@@ -1125,6 +1125,22 @@ func xrayCmd(args []string) error {
 		return xrayBackupExport(rest)
 	case "restore-preview":
 		return xrayRestorePreview(rest)
+	case "stats":
+		return xrayCenterRead(rest, "center/stats")
+	case "diagnose":
+		fs := flag.NewFlagSet("xray diagnose", flag.ContinueOnError)
+		cf := addCommonFlags(fs)
+		subject := fs.String("subject", "", "Server or user id (empty = fleet overview)")
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		return authedRead(cf, "/api/v1/xray/center/diagnostics?subject="+url.QueryEscape(*subject), "xray diagnose")
+	case "events":
+		return xrayCenterRead(rest, "center/events?limit=100")
+	case "nodes":
+		return xrayNodesCmd(rest)
+	case "groups":
+		return xrayGroupsCmd(rest)
 	default:
 		return fmt.Errorf("xray: unknown operation %q", op)
 	}
@@ -2064,3 +2080,139 @@ func urlQueryEscape(s string) string {
 
 var _ = strconv.Itoa
 var _ = brand.Mark
+
+// xrayCenterRead is a thin authenticated GET against the center
+// surface.
+func xrayCenterRead(args []string, path string) error {
+	fs := flag.NewFlagSet("xray center read", flag.ContinueOnError)
+	cf := addCommonFlags(fs)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	return authedRead(cf, "/api/v1/xray/"+path, "xray center read")
+}
+
+func xrayNodesCmd(args []string) error {
+	if len(args) == 0 {
+		return errors.New("xray nodes: missing operation (list|enroll-token|local|revoke|suspend|resume|rotate)")
+	}
+	op, rest := args[0], args[1:]
+	switch op {
+	case "list":
+		return xrayCenterRead(rest, "center/nodes")
+	case "enroll-token":
+		fs := flag.NewFlagSet("xray nodes enroll-token", flag.ContinueOnError)
+		cf := addCommonFlags(fs)
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		return authedCall(cf, http.MethodPost, "/api/v1/xray/center/nodes/enroll-token", nil, "xray nodes enroll-token")
+	case "local":
+		fs := flag.NewFlagSet("xray nodes local", flag.ContinueOnError)
+		cf := addCommonFlags(fs)
+		name := fs.String("name", "", "Local node name")
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		if *name == "" {
+			return errors.New("xray nodes local: --name is required")
+		}
+		body, _ := json.Marshal(map[string]string{"name": *name})
+		return authedCall(cf, http.MethodPost, "/api/v1/xray/center/nodes/local", body, "xray nodes local")
+	case "revoke", "suspend", "resume":
+		fs := flag.NewFlagSet("xray nodes "+op, flag.ContinueOnError)
+		cf := addCommonFlags(fs)
+		id := fs.String("id", "", "Node id")
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		if *id == "" {
+			return errors.New("xray nodes " + op + ": --id is required")
+		}
+		switch op {
+		case "revoke":
+			return authedCall(cf, http.MethodDelete, "/api/v1/xray/center/nodes/"+*id, nil, "xray nodes revoke")
+		default:
+			body, _ := json.Marshal(map[string]string{})
+			return authedCall(cf, http.MethodPost, "/api/v1/xray/center/nodes/"+*id+"/"+op, body, "xray nodes "+op)
+		}
+	case "rotate":
+		fs := flag.NewFlagSet("xray nodes rotate", flag.ContinueOnError)
+		cf := addCommonFlags(fs)
+		id := fs.String("id", "", "Node id")
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		body, _ := json.Marshal(map[string]string{})
+		return authedCall(cf, http.MethodPost, "/api/v1/xray/center/nodes/"+*id+"/rotate", body, "xray nodes rotate")
+	default:
+		return fmt.Errorf("xray nodes: unknown operation %q", op)
+	}
+}
+
+func xrayGroupsCmd(args []string) error {
+	if len(args) == 0 {
+		return errors.New("xray groups: missing operation (list|create|delete|issue-token|rotate-token|revoke-tokens|preview)")
+	}
+	op, rest := args[0], args[1:]
+	switch op {
+	case "list":
+		return xrayCenterRead(rest, "center/groups")
+	case "create":
+		fs := flag.NewFlagSet("xray groups create", flag.ContinueOnError)
+		cf := addCommonFlags(fs)
+		file := fs.String("file", "", "Path to a group JSON document")
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		if *file == "" {
+			return errors.New("xray groups create: --file is required")
+		}
+		data, err := os.ReadFile(*file)
+		if err != nil {
+			return err
+		}
+		return authedCall(cf, http.MethodPost, "/api/v1/xray/center/groups", data, "xray groups create")
+	case "delete":
+		fs := flag.NewFlagSet("xray groups delete", flag.ContinueOnError)
+		cf := addCommonFlags(fs)
+		id := fs.String("id", "", "Group id")
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		return authedCall(cf, http.MethodDelete, "/api/v1/xray/center/groups/"+*id, nil, "xray groups delete")
+	case "issue-token", "rotate-token":
+		fs := flag.NewFlagSet("xray groups "+op, flag.ContinueOnError)
+		cf := addCommonFlags(fs)
+		id := fs.String("id", "", "Group/subscription id")
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		action := "tokens"
+		if op == "rotate-token" {
+			action = "tokens/rotate"
+		}
+		body, _ := json.Marshal(map[string]any{"subId": *id})
+		return authedCall(cf, http.MethodPost, "/api/v1/xray/center/"+action, body, "xray groups "+op)
+	case "revoke-tokens":
+		fs := flag.NewFlagSet("xray groups revoke-tokens", flag.ContinueOnError)
+		cf := addCommonFlags(fs)
+		id := fs.String("id", "", "Group/subscription id")
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		body, _ := json.Marshal(map[string]any{"subId": *id})
+		return authedCall(cf, http.MethodPost, "/api/v1/xray/center/tokens/revoke", body, "xray groups revoke-tokens")
+	case "preview":
+		fs := flag.NewFlagSet("xray groups preview", flag.ContinueOnError)
+		cf := addCommonFlags(fs)
+		id := fs.String("id", "", "Group id")
+		format := fs.String("format", "clash", "Output format (base64|plain|clash|json)")
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		return authedRead(cf, "/api/v1/xray/center/preview/group/"+url.QueryEscape(*id)+"?format="+url.QueryEscape(*format), "xray groups preview")
+	default:
+		return fmt.Errorf("xray groups: unknown operation %q", op)
+	}
+}
