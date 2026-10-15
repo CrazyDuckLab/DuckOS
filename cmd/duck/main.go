@@ -22,6 +22,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/CrazyDuckLab/DuckOS/internal/ximport"
+	"github.com/CrazyDuckLab/DuckOS/internal/xray"
 	"github.com/CrazyDuckLab/DuckOS/pkg/brand"
 	"github.com/CrazyDuckLab/DuckOS/pkg/buildinfo"
 )
@@ -1109,9 +1111,170 @@ func xrayCmd(args []string) error {
 	switch op {
 	case "servers", "users", "profiles", "subscriptions":
 		return xrayCRUD(op, rest)
+	case "reality":
+		return xrayRealityKeygen(rest)
+	case "import-3xui":
+		return xrayImportThreeUI(rest)
+	case "import-uri":
+		return xrayImportURI(rest)
+	case "parse-uri":
+		return xrayParseURI(rest)
 	default:
 		return fmt.Errorf("xray: unknown operation %q", op)
 	}
+}
+
+// xrayRealityKeygen generates REALITY key material offline. The
+// private key is printed exactly once and must be stored into the
+// vault (purpose reality-private) immediately; it is never written
+// to a file by the CLI.
+func xrayRealityKeygen(args []string) error {
+	fs := flag.NewFlagSet("xray reality keygen", flag.ContinueOnError)
+	pairs := fs.Int("pairs", 1, "Number of keypairs to generate (1..8)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *pairs < 1 || *pairs > 8 {
+		return errors.New("xray reality keygen: --pairs must be 1..8")
+	}
+	type keypair struct {
+		PublicKey  string `json:"publicKey"`
+		PrivateKey string `json:"privateKey"`
+		ShortID    string `json:"shortId"`
+	}
+	out := make([]keypair, 0, *pairs)
+	for i := 0; i < *pairs; i++ {
+		kp, err := xray.GenerateRealityKeypair()
+		if err != nil {
+			return err
+		}
+		sid, err := xray.GenerateShortID()
+		if err != nil {
+			return err
+		}
+		out = append(out, keypair{PublicKey: kp.PublicKey, PrivateKey: kp.PrivateKey, ShortID: sid})
+	}
+	data, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(data))
+	fmt.Fprintln(os.Stderr, "store each privateKey into the vault (purpose reality-private) before use")
+	return nil
+}
+
+// xrayImportThreeUI previews a 3x-ui export as DuckOS drafts. The
+// command is strictly read-only: nothing is committed to the agent.
+func xrayImportThreeUI(args []string) error {
+	fs := flag.NewFlagSet("xray import-3xui", flag.ContinueOnError)
+	file := fs.String("file", "", "Path to a 3x-ui export JSON document")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *file == "" {
+		return errors.New("xray import-3xui: --file is required")
+	}
+	data, err := os.ReadFile(*file)
+	if err != nil {
+		return fmt.Errorf("read export: %w", err)
+	}
+	preview, err := ximport.ParseThreeUIExport(data)
+	if err != nil {
+		return err
+	}
+	out := map[string]any{
+		"servers":     preview.Servers,
+		"users":       preview.Users,
+		"warnings":    preview.Warnings,
+		"unsupported": preview.Unsupported,
+		"note":        "preview only: assign ids and vault bindings at commit time",
+	}
+	data, err = json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(data))
+	return nil
+}
+
+// xrayParseURI validates connection URIs offline.
+func xrayParseURI(args []string) error {
+	fs := flag.NewFlagSet("xray parse-uri", flag.ContinueOnError)
+	file := fs.String("file", "", "Path to a text file with one URI per line (or omit for stdin)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	var data []byte
+	var err error
+	if *file == "" {
+		data, err = io.ReadAll(os.Stdin)
+	} else {
+		data, err = os.ReadFile(*file)
+	}
+	if err != nil {
+		return err
+	}
+	accepted, skipped := 0, 0
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parsed, err := xray.ParseConnectionURI(line)
+		if err != nil {
+			skipped++
+			fmt.Fprintf(os.Stderr, "reject: %v\n", err)
+			continue
+		}
+		accepted++
+		out := map[string]any{
+			"protocol": parsed.Protocol, "host": parsed.Host, "port": parsed.Port,
+			"transport": parsed.Transport, "security": parsed.Security,
+			"unknownQuery": parsed.UnknownQuery,
+		}
+		enc, _ := json.Marshal(out)
+		fmt.Println(string(enc))
+	}
+	fmt.Fprintf(os.Stderr, "%d accepted, %d rejected\n", accepted, skipped)
+	return nil
+}
+
+// xrayImportURI fetches or reads a subscription payload and prints
+// the strictly-validated parsed connections. Fetch requires an
+// https:// URL; local files bypass the network path.
+func xrayImportURI(args []string) error {
+	fs := flag.NewFlagSet("xray import-uri", flag.ContinueOnError)
+	file := fs.String("file", "", "Path to a subscription payload file")
+	url := fs.String("url", "", "https:// subscription URL to fetch")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	var conns []xray.ParsedConnectionWithUnknown
+	var skipped []string
+	var err error
+	switch {
+	case *file != "" && *url != "":
+		return errors.New("xray import-uri: --file and --url are mutually exclusive")
+	case *file != "":
+		var data []byte
+		data, err = os.ReadFile(*file)
+		if err == nil {
+			conns, skipped, err = ximport.ParseSubscriptionPayload(string(data))
+		}
+	case *url != "":
+		conns, skipped, err = ximport.FetchSubscription(context.Background(), *url, ximport.DefaultFetchLimits())
+	default:
+		return errors.New("xray import-uri: --file or --url is required")
+	}
+	if err != nil {
+		return err
+	}
+	data, merr := json.MarshalIndent(map[string]any{"connections": conns, "skipped": skipped}, "", "  ")
+	if merr != nil {
+		return merr
+	}
+	fmt.Println(string(data))
+	return nil
 }
 
 func xrayCRUD(kind string, args []string) error {
@@ -1121,6 +1284,31 @@ func xrayCRUD(kind string, args []string) error {
 	op, rest := args[0], args[1:]
 	path := "/api/v1/xray/" + kind
 	switch op {
+	case "list":
+		fs := flag.NewFlagSet("xray "+kind+" list", flag.ContinueOnError)
+		cf := addCommonFlags(fs)
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		if kind == "users" {
+			server := fs.Arg(0)
+			if server == "" {
+				return errors.New("xray users list: server id argument is required")
+			}
+			return authedRead(cf, path+"?server="+url.QueryEscape(server), "xray users list")
+		}
+		return authedRead(cf, path, "xray "+kind+" list")
+	case "get":
+		fs := flag.NewFlagSet("xray "+kind+" get", flag.ContinueOnError)
+		cf := addCommonFlags(fs)
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		id := fs.Arg(0)
+		if id == "" {
+			return fmt.Errorf("xray %s get: object id argument is required", kind)
+		}
+		return authedRead(cf, path+"/"+id, "xray "+kind+" get")
 	case "create":
 		fs := flag.NewFlagSet("xray "+kind+" create", flag.ContinueOnError)
 		cf := addCommonFlags(fs)
