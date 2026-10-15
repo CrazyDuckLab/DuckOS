@@ -1119,9 +1119,128 @@ func xrayCmd(args []string) error {
 		return xrayImportURI(rest)
 	case "parse-uri":
 		return xrayParseURI(rest)
+	case "policy":
+		return xrayPolicyCompile(rest)
+	case "backup":
+		return xrayBackupExport(rest)
+	case "restore-preview":
+		return xrayRestorePreview(rest)
 	default:
 		return fmt.Errorf("xray: unknown operation %q", op)
 	}
+}
+
+// xrayPolicyCompile validates a policy set and prints the compiled
+// routing rules. Compilation is local; apply still goes through the
+// agent's safe-apply path.
+func xrayPolicyCompile(args []string) error {
+	fs := flag.NewFlagSet("xray policy compile", flag.ContinueOnError)
+	file := fs.String("file", "", "Path to a policy-set JSON document (array of policies)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *file == "" {
+		return errors.New("xray policy compile: --file is required")
+	}
+	data, err := os.ReadFile(*file)
+	if err != nil {
+		return fmt.Errorf("read policies: %w", err)
+	}
+	var policies []xray.Policy
+	if err := json.Unmarshal(data, &policies); err != nil {
+		return fmt.Errorf("decode policies: %w", err)
+	}
+	rules, err := xray.Compile(policies)
+	if err != nil {
+		return err
+	}
+	for _, c := range xray.DetectConflicts(policies) {
+		fmt.Fprintf(os.Stderr, "warning: %s vs %s: %s\n", c.A, c.B, c.Reason)
+	}
+	out, err := json.MarshalIndent(rules, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(out))
+	return nil
+}
+
+// xrayBackupExport builds a backup document from a catalog export
+// file. Secrets are excluded unless --include-secrets is passed
+// (the operator then owns the file's protection).
+func xrayBackupExport(args []string) error {
+	fs := flag.NewFlagSet("xray backup export", flag.ContinueOnError)
+	file := fs.String("file", "", "Path to a catalog export JSON document (with servers/users/profiles/subscriptions keys)")
+	includeSecrets := fs.Bool("include-secrets", false, "Include inline credentials (the operator owns file protection)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *file == "" {
+		return errors.New("xray backup export: --file is required")
+	}
+	data, err := os.ReadFile(*file)
+	if err != nil {
+		return fmt.Errorf("read catalog export: %w", err)
+	}
+	var src struct {
+		Servers       []xray.Server       `json:"servers"`
+		Users         []xray.User         `json:"users"`
+		Profiles      []xray.Profile      `json:"profiles"`
+		Subscriptions []xray.Subscription `json:"subscriptions"`
+	}
+	if err := json.Unmarshal(data, &src); err != nil {
+		return fmt.Errorf("decode catalog export: %w", err)
+	}
+	backup, err := xray.Export(src.Servers, src.Users, src.Profiles, src.Subscriptions,
+		xray.ExportOptions{IncludeSecrets: *includeSecrets, Producer: "duck-cli"})
+	if err != nil {
+		return err
+	}
+	out, err := json.MarshalIndent(backup, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(out))
+	return nil
+}
+
+// xrayRestorePreview validates a backup document and prints the
+// restore classification without touching the agent.
+func xrayRestorePreview(args []string) error {
+	fs := flag.NewFlagSet("xray restore-preview", flag.ContinueOnError)
+	file := fs.String("file", "", "Path to a backup JSON document")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *file == "" {
+		return errors.New("xray restore-preview: --file is required")
+	}
+	data, err := os.ReadFile(*file)
+	if err != nil {
+		return fmt.Errorf("read backup: %w", err)
+	}
+	var backup xray.Backup
+	if err := json.Unmarshal(data, &backup); err != nil {
+		return fmt.Errorf("decode backup: %w", err)
+	}
+	if err := xray.ValidateBackup(backup); err != nil {
+		return err
+	}
+	preview, err := xray.RestorePreview(backup, func() ([]xray.Server, []xray.User, []xray.Profile, []xray.Subscription) {
+		return nil, nil, nil, nil
+	})
+	if err != nil {
+		return err
+	}
+	out, err := json.MarshalIndent(map[string]any{
+		"preview": preview,
+		"note":    "preview against empty live set; run against the live catalog for conflict classification",
+	}, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(out))
+	return nil
 }
 
 // xrayRealityKeygen generates REALITY key material offline. The
