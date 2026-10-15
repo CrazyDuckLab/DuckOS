@@ -1,8 +1,8 @@
 # Beta.3 remediation — qualification evidence
 
 Branch: `fix/beta3-release-blockers` (based on frozen `41921c3`).
-Status: code remediation complete; Linux qualification **blocked** at the
-time of this revision (see §5).
+Status: code remediation complete; Linux qualification **executed** on the
+existing laboratory VMs (2026-10-15, see §3/§3a).
 
 ## 1. Release blockers and their resolution
 
@@ -46,38 +46,84 @@ Additional remediation on the same branch:
   `bash scripts/build.sh all`; ELFs verified (`file`): x86-64, aarch64,
   ARM EABI5, statically linked; SHA256SUMS present in each artifact.
 
-## 3. Linux-native qualification
+## 3. Linux-native qualification (2026-10-15)
 
-**BLOCKED.** Both laboratory VMs (`duck-beta-01` 172.18.4.102/…82,
-`duck-dev-01` 172.18.4.159) are unreachable (SSH and ICMP) from the
-management workstation; the surrounding subnet is alive, so the VMs are
-powered down or the Hyper-V host is offline. Creating or restoring VMs is
-outside this task's authorization. No container runtime exists on the
-workstation, so no substitute Linux environment is available.
+Executed on the existing laboratory VMs after they returned:
 
-Prepared and committed, awaiting a Linux host: the adapter regression suite
-(`internal/agent/fw_host_verify_test.go`) executes with
-`GOOS=linux go test ./internal/agent/`; live nftables verification of the
-JSON parser fixtures (`prio`, payload/meta expression shapes) against real
-`nft -j` output on Debian 13 is the first step of the runbook below.
+- duck-beta-01 — Debian 13.7, kernel 6.12.107+deb13-amd64, amd64, nftables
+  1.1.3, Go 1.27.1; eth0 172.18.4.82/16 via 172.18.1.254 (DHCP); DuckOS
+  beta.2 install running (duck-agent/duck-api/launchers active). Baseline
+  captured before any test; eth0, default route, SSH and host nftables
+  ruleset unchanged after every phase (host `nft list tables` stayed empty).
+- duck-dev-01 — Debian 13.6, kernel 6.12.107+deb13-amd64, amd64; eth0
+  172.18.4.159/16; used as secondary verifier for the core suites.
 
-### Runbook for the laboratory run (when VMs return)
+Source transferred via `git archive` of the branch HEAD; no VM reboot, no
+reinstall, no host networking changes; all nftables qualification ran
+inside dedicated network namespaces (`fwq-*`), cleaned up afterwards.
 
-1. Baseline: hostname, interfaces, addresses, routes, `nft list ruleset`,
-   DuckOS service state; record eth0 management address.
-2. Run `go test -race ./...` on the branch inside the VM.
-3. Compile and run a small harness that applies `fwrules.Render` batches
-   with real `nft`, captures `nft -j list table inet duckos_fw`, and checks
-   `VerifySnapshot` pass/divergence/empty/rollback paths — inside dedicated
-   network namespaces only; never on the management forwarding path.
-4. Coexistence: `inet duckos`, `inet duckos_fw`, `inet duckos_upnp` in one
-   ruleset; delete a UPnP mapping, confirm static firewall rules survive;
-   roll back a firewall change, confirm active mappings survive.
-5. Verify management eth0 state equals the baseline after every phase.
+### 3a. Results
+
+Go suites, `go test -race -count=1 ./...` on duck-beta-01: **122 packages
+ok**; failures (all pre-existing at the frozen `41921c3`, verified by
+re-running the base source, or documented witness behaviour):
+
+- `TestH08PublicSystemdSupervisor` + `TestDV07_*` (cmd/duck-agent,
+  tests/layer_l): refuse to install/replace over the INSTALLED DuckOS —
+  correct fail-closed behaviour; they require a bare host (BLOCKED by
+  design on these machines).
+- `TestNATPMPUDP*` (internal/upnp/frontend): loopback UDP listener gets no
+  response on BOTH VMs and at `41921c3` — environmental, not a regression;
+  the same tests pass on the macOS build host.
+
+duck-dev-01 (as root via sudo): internal/agent, fwrules, network,
+safeapply — ok.
+
+Live nftables suite (`DUCKOS_LIVE_NFT=1`, inside `fwq-*` namespaces) —
+**all PASS**:
+
+- `TestLiveApplyVerifyExact` — apply + exact semantic verify against the
+  real kernel (chain props, matches, verdicts, ordering, comments).
+- `TestLiveVerifyRejectsForeignDrift` — out-of-band rule change with the
+  same rule count is rejected (count-only verification would pass).
+- `TestLiveEmptyCandidateRemovesTable` — empty candidate leaves the owned
+  table absent; Verify agrees.
+- `TestLiveRestoreKnownGood` — restore to prior non-empty and to empty.
+- `TestLiveReadbackAbsentClassification` — absent vs error classification.
+- `TestLiveSafeApplyLifecycle` — journal-first pipeline on the real
+  kernel: admit → apply → confirm; explicit rollback; genuine process
+  death (child process exits without confirming) followed by journal
+  reopen → pending transaction expired, known-good baseline restored;
+  automatic rollback after confirm-window expiry.
+
+Live qualification fixed real defects found only against the kernel
+(committed): nft 1.x JSON shapes (rule-level comments, bare `{"drop":null}`
+verdicts, `{"prefix":{addr,len}}` values) now parsed by `VerifySnapshot`;
+first-boot store creation in `NewFirewallRulesService` (the service could
+never create its journal directory on a fresh host); several linux-only
+test defects (dhcp 403 stub, WAN fixture gateway prefix, service journal
+directory).
+
+Packet-level qualification (`tests/integration/fw_live_netns.sh`,
+namespaces fwq-qual/fwq-cli/fwq-srv) — **all PASS**: baseline forward,
+accept-policy behaviour, drop-rule blocking, coexistence (UPnP DNAT
+mapping survives firewall rollback and vice versa; mapping deletion
+preserves firewall rules), canonical empty state (table absent, forwarding
+resumes), first-rule insertion on a clean table.
+
+Artifacts rebuilt at final HEAD `9b82fafefcdc`
+(`1.0.0-dev.9b82fafefcdc`), `--verify-artifact` PASS for amd64/arm64/armv7.
+
+### Known environment-blocked items
+
+- Witness tests (above) need a bare Debian host — not authorized here.
+- NAT-PMP loopback UDP on both VMs — environmental, pre-existing.
+- ARM64/ARMv7 remain artifact-verified only (no live hardware in scope).
 
 ## 4. Release readiness
 
-Beta.3 must not be released until the blocked Linux qualification
-(§3) completes on the existing laboratory VMs and the parser fixtures are
-confirmed against real nftables output. Code-level blockers A–D are fixed
-and covered by regression tests.
+Code blockers A–D are fixed and live-qualified on Debian 13 with real
+nftables 1.1.3, including safeapply confirm/rollback/crash-recovery and
+cross-table coexistence. Remaining before release: independent Codex audit
+of `fix/beta3-release-blockers`; witness-class tests on a bare host and
+the NAT-PMP loopback anomaly are environment items, not code blockers.
