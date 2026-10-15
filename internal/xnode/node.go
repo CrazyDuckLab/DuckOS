@@ -267,8 +267,8 @@ func (m *Manager) Enroll(token string, info NodeInfo) (Node, string, error) {
 		return Node{}, "", errors.New("xnode: node capacity exceeded")
 	}
 	m.nodes[id] = &node
+	m.persistLocked()
 	m.mu.Unlock()
-	m.persistNodes()
 	return node, credential, nil
 }
 
@@ -298,7 +298,7 @@ func (m *Manager) EnrollLocal(name string) (Node, error) {
 		return Node{}, errors.New("xnode: node capacity exceeded")
 	}
 	m.nodes[id] = &node
-	m.persistNodes()
+	m.persistLocked()
 	return node, nil
 }
 
@@ -343,8 +343,8 @@ func (m *Manager) RotateCredential(nodeID string) (string, error) {
 		return "", errors.New("xnode: local nodes carry no credential")
 	}
 	node.CredentialHash = hashToken("xnode-cred", credential)
+	m.persistLocked()
 	m.mu.Unlock()
-	m.persistNodes()
 	return credential, nil
 }
 
@@ -360,7 +360,7 @@ func (m *Manager) Revoke(nodeID string) error {
 	}
 	node.Status = StatusRevoked
 	node.LastError = "revoked by operator"
-	m.persistNodes()
+	m.persistLocked()
 	return nil
 }
 
@@ -376,7 +376,7 @@ func (m *Manager) setStatus(nodeID string, status Status) error {
 		return errors.New("xnode: node is unknown or revoked")
 	}
 	node.Status = status
-	m.persistNodes()
+	m.persistLocked()
 	return nil
 }
 
@@ -529,17 +529,25 @@ func (m *Manager) Reconcile(ctx Ctx, config []byte) []Plan {
 	return plans
 }
 
+// persistNodes snapshots and persists. Callers that already hold
+// m.mu must use persistLocked instead — this variant is for
+// lock-free call sites.
 func (m *Manager) persistNodes() {
+	m.mu.RLock()
+	m.persistLocked()
+	m.mu.RUnlock()
+}
+
+// persistLocked persists under an already-held lock.
+func (m *Manager) persistLocked() {
 	if m.persist == nil {
 		return
 	}
-	m.mu.RLock()
 	out := make([]*Node, 0, len(m.nodes))
 	for _, n := range m.nodes {
 		c := *n
 		out = append(out, &c)
 	}
-	m.mu.RUnlock()
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	_ = m.persist(out)
 }
