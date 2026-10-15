@@ -18,7 +18,8 @@ import (
 )
 
 var XrayPath = "/usr/local/bin/xray"
-var StageDir = "/var/lib/duckos-agent/xray"
+
+// StageDir is declared platform-neutrally in render.go.
 var ErrBackend = errors.New("xray: backend unavailable")
 var ErrConfig = errors.New("xray: configuration is invalid")
 var ErrActive = errors.New("xray: no active process")
