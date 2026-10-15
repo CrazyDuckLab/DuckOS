@@ -87,6 +87,37 @@ stale — устаревшие цифры никогда не подаются �
 плюс offline-операции `reality keygen`, `import-3xui`, `parse-uri`,
 `import-uri`. CLI не обходит семантику публичного API.
 
+## Фаза 2 (develop/xray-center, c 1fb266a)
+
+- **Multi-node** (`internal/xnode`): одноразовые enrollment-токены
+  (хранятся как SHA-256), креденшалы узлов показываются один раз,
+  ротация и терминальный отзыв, staleness выводится из часов,
+  Reconcile с изоляцией отказа на узел, Adapter для транспорта.
+- **Подписки**: форматы base64/plain/Clash-YAML/JSON (`?format=`),
+  упорядоченные группы с клиентскими именами узлов
+  (`internal/subscription/group.go`).
+- **TLS** (`internal/certs/inventory.go`): инвентарь на реальном
+  PEM-парсинге, классы valid/expiring/expired, renewal-автомат
+  pending/issued/failed с ограниченной диагностикой; исполнение
+  ACME-challenge — отдельная сетевая квалификация.
+- **REALITY** (`internal/xray/realitymgr.go`): инвентарь публичных
+  записей, ротация без разрыва клиентов, жизненный цикл short id,
+  preview клиентских параметров.
+- **Квоты** (`internal/xray/quota.go`): окна сброса day/week/month,
+  решения ok/warn/exhausted, auto-suspend с явным флагом Enforced —
+  это не жёсткое per-packet ограничение.
+- **Политики маршрутизации** (`internal/xray/policy.go`):
+  детерминированная компиляция, обнаружение конфликтов, blackhole
+  только по ссылке, отказ маршрутизации в неизвестный outbound.
+- **Insights** (`internal/xray/insights.go`): кольцо событий
+  (1024 шт., 7 суток) только реальных наблюдений с источником.
+- **Бэкап** (`internal/xray/backup.go`): экспорт без секретов по
+  умолчанию, проверка ссылочной целостности, preview
+  add/update/conflict, транзакционный restore.
+- **Web UI**: P050 заменён на функциональную страницу Xray Center
+  (создание/удаление серверов, клиентов, подписок, матрица
+  совместимости, офлайн-help EN/RU/DE/ES, confirm-диалоги).
+
 ## Честный статус
 
 IMPLEMENTED AND TESTED (unit/race-тесты на darwin, полный
