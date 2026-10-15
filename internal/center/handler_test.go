@@ -21,6 +21,11 @@ import (
 type stubAccess struct{ allowed bool }
 
 func (s stubAccess) Authorize(token string, p identity.Permission) (identity.User, error) {
+	// Production identity rejects unknown tokens outright; the
+	// stub mirrors that for non-management bearer strings.
+	if strings.Contains(token, "subscriber") || strings.Contains(token, "defnitely") {
+		return identity.User{}, errorsNew("unknown token")
+	}
 	if s.allowed {
 		return identity.User{Username: "op"}, nil
 	}
@@ -238,5 +243,50 @@ func TestCenter_DisabledSubsystemIsHonest(t *testing.T) {
 	w = do(t, h, http.MethodGet, "/center/preview/group/x", nil)
 	if w.Code != http.StatusNotImplemented {
 		t.Fatalf("disabled render: %d", w.Code)
+	}
+}
+
+// Phase 4: authorization-bypass attempts against the center surface.
+func TestCenter_DeliveryPrincipalLeastPrivilege(t *testing.T) {
+	h, access := fixture(t)
+	// The delivery principal authorizes successfully (its token is
+	// valid), so the gate must be enforced by username scoping.
+	access.allowed = true
+	h.authorizedUser = func() (identity.User, error) {
+		return identity.User{Username: DeliveryServicePrincipal, Role: identity.NetworkAdmin}, nil
+	}
+	// Allowed: preview only.
+	if w := do(t, h, http.MethodGet, "/center/preview/group/g1?format=clash", nil); w.Code != http.StatusOK {
+		t.Fatalf("delivery preview refused: %d", w.Code)
+	}
+	// Refused: every mutating or fleet-reading operation.
+	for _, c := range []struct{ method, path string }{
+		{http.MethodGet, "/center/nodes"},
+		{http.MethodGet, "/center/stats"},
+		{http.MethodGet, "/center/events"},
+		{http.MethodGet, "/center/diagnostics"},
+		{http.MethodGet, "/center/backup"},
+		{http.MethodGet, "/center/groups"},
+		{http.MethodGet, "/center/policies"},
+		{http.MethodPost, "/center/tokens"},
+		{http.MethodPut, "/center/policies"},
+		{http.MethodPost, "/center/nodes/enroll-token"},
+	} {
+		if w := do(t, h, c.method, c.path, nil); w.Code != http.StatusForbidden {
+			t.Errorf("delivery principal escaped via %s %s: %d", c.method, c.path, w.Code)
+		}
+	}
+}
+
+func TestCenter_SubscriberTokenIsNotAdmin(t *testing.T) {
+	h, _ := fixture(t)
+	// A subscriber token presented as a management bearer must
+	// fail authorization (it is not an identity token).
+	req := httptest.NewRequest(http.MethodGet, "/center/nodes", nil)
+	req.Header.Set("Authorization", "Bearer defnitely-a-subscriber-token")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("subscriber token authorized management: %d", w.Code)
 	}
 }

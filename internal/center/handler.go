@@ -26,6 +26,13 @@ type Access interface {
 	Authorize(token string, p identity.Permission) (identity.User, error)
 }
 
+// DeliveryServicePrincipal is the dedicated least-privilege
+// identity the public delivery daemon uses. It is admitted to
+// exactly ONE operation — content preview — regardless of any role
+// its forwarded token carries; a leaked delivery token cannot read
+// the fleet, mutate nodes, issue tokens or touch backups.
+const DeliveryServicePrincipal = "duck-api-delivery"
+
 // Handler serves /xray/v1/center/*. The zero-value services are
 // optional: a nil subsystem returns a typed 501 so the surface
 // honestly reports what is not wired instead of failing obscurely.
@@ -53,6 +60,9 @@ type Handler struct {
 	Events *xray.EventLog
 	// Diagnose runs the structured diagnostics for a subject.
 	Diagnose func(subject string) ([]xray.Diagnostic, error)
+	// authorizedUser is an internal seam for tests; production
+	// leaves it nil and Authorize supplies the user.
+	authorizedUser func() (identity.User, error)
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -60,7 +70,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		problem(w, 500, "center_unavailable", "Xray Center is not enabled.")
 		return
 	}
-	if _, err := h.Access.Authorize(extractToken(r), identity.ConfigureNetwork); err != nil {
+	user := identity.User{}
+	var err error
+	if h.authorizedUser != nil {
+		user, err = h.authorizedUser()
+	} else {
+		user, err = h.Access.Authorize(extractToken(r), identity.ConfigureNetwork)
+	}
+	if err != nil {
 		problem(w, 403, "forbidden", "Network write permission is required.")
 		return
 	}
@@ -72,6 +89,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	rest = strings.TrimPrefix(rest, "/")
+	// Least privilege: the delivery service principal may render
+	// content and nothing else. Every other center operation is
+	// refused for it even when its token carries broad roles.
+	if user.Username == DeliveryServicePrincipal {
+		if !strings.HasPrefix(rest, "preview/") {
+			problem(w, 403, "forbidden", "The delivery principal may only render subscription content.")
+			return
+		}
+	}
 	switch {
 	case strings.HasPrefix(rest, "nodes"):
 		h.serveNodes(w, r, strings.TrimPrefix(rest, "nodes"))
