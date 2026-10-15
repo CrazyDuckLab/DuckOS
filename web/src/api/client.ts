@@ -56,7 +56,7 @@ export type FetchResult<T> =
 
 export interface FetchOptions {
   signal?: AbortSignal;
-  method?: "GET" | "POST" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "DELETE";
   body?: unknown;
   fallbackToMissing?: boolean;
   /** Pass revision preconditions for conditional mutation. */
@@ -606,6 +606,77 @@ export class APIClient {
   xrayDeleteUser(userId: string, options: FetchOptions = {}) {
     return this.fetch<unknown>(
       `${APIClient.ENDPOINTS.xray}/users/${encodeURIComponent(userId)}`,
+      null,
+      { ...options, method: "DELETE" },
+    );
+  }
+  /* Xray Center: protocol/transport/security capability matrix
+     (same matrix the Go compatibility engine enforces; mirrored
+     client-side so invalid combinations are refused before POST). */
+  static readonly XRAY_PROTOCOLS = [
+    "vless",
+    "vmess",
+    "trojan",
+    "shadowsocks",
+    "socks",
+    "http",
+  ] as const;
+  static readonly XRAY_TRANSPORTS = [
+    "tcp",
+    "ws",
+    "grpc",
+    "xhttp",
+    "httpupgrade",
+    "kcp",
+  ] as const;
+  static readonly XRAY_SECURITY = ["none", "tls", "reality"] as const;
+  static xrayRealityAllowed(protocol: string, transport: string): boolean {
+    return (
+      protocol === "vless" && (transport === "tcp" || transport === "xhttp")
+    );
+  }
+  static xrayFlowAllowed(protocol: string, transport: string, security: string): boolean {
+    return protocol === "vless" && transport === "tcp" && security === "reality";
+  }
+  static readonly XRAY_SS_METHODS = [
+    "aes-128-gcm",
+    "aes-256-gcm",
+    "chacha20-poly1305",
+    "2022-blake3-aes-128-gcm",
+    "2022-blake3-aes-256-gcm",
+    "2022-blake3-chacha20-poly1305",
+  ] as const;
+  xrayUpdateServer(serverId: string, server: unknown, options: FetchOptions = {}) {
+    return this.fetch<unknown>(
+      `${APIClient.ENDPOINTS.xray}/servers/${encodeURIComponent(serverId)}`,
+      null,
+      { ...options, method: "PUT", body: server },
+    );
+  }
+  xrayUpdateUser(userId: string, user: unknown, options: FetchOptions = {}) {
+    return this.fetch<unknown>(
+      `${APIClient.ENDPOINTS.xray}/users/${encodeURIComponent(userId)}`,
+      null,
+      { ...options, method: "PUT", body: user },
+    );
+  }
+  xrayDeleteProfile(profileId: string, options: FetchOptions = {}) {
+    return this.fetch<unknown>(
+      `${APIClient.ENDPOINTS.xray}/profiles/${encodeURIComponent(profileId)}`,
+      null,
+      { ...options, method: "DELETE" },
+    );
+  }
+  xrayCreateSubscription(sub: unknown, options: FetchOptions = {}) {
+    return this.fetch<unknown>(`${APIClient.ENDPOINTS.xray}/subscriptions`, null, {
+      ...options,
+      method: "POST",
+      body: sub,
+    });
+  }
+  xrayDeleteSubscription(subId: string, options: FetchOptions = {}) {
+    return this.fetch<unknown>(
+      `${APIClient.ENDPOINTS.xray}/subscriptions/${encodeURIComponent(subId)}`,
       null,
       { ...options, method: "DELETE" },
     );
