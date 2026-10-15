@@ -309,9 +309,9 @@ func TestCenter_RevocationPersistenceFailureIs503(t *testing.T) {
 	}
 	// Break persistence: hook now always fails.
 	failing := 0
-	h.Nodes.SetPersist(func(xnode.DurableState) error {
+	h.Nodes.SetPersist(func(xnode.DurableState) (xnode.CommitResult, error) {
 		failing++
-		return errorsNew("injected ENOSPC: no space left on device")
+		return xnode.CommitResult{}, errorsNew("injected ENOSPC: no space left on device")
 	})
 	w = do(t, h, http.MethodDelete, "/center/nodes/"+node.ID, nil)
 	if w.Code != http.StatusServiceUnavailable {
@@ -324,7 +324,9 @@ func TestCenter_RevocationPersistenceFailureIs503(t *testing.T) {
 	// exactly as the durable snapshot says.
 	// (Authentication is not exposed over HTTP; assert via manager.)
 	// Restore the hook and retry — deterministic success.
-	h.Nodes.SetPersist(func(xnode.DurableState) error { return nil })
+	h.Nodes.SetPersist(func(xnode.DurableState) (xnode.CommitResult, error) {
+		return xnode.CommitResult{}, nil
+	})
 	w = do(t, h, http.MethodDelete, "/center/nodes/"+node.ID, nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("retry after fault: %d %s", w.Code, w.Body.String())

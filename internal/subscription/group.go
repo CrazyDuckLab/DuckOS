@@ -13,6 +13,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/CrazyDuckLab/DuckOS/internal/persist"
 )
 
 var groupIDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,63}$`)
@@ -119,7 +121,9 @@ type GroupStore struct {
 	mu      sync.RWMutex
 	groups  map[string]Group
 	clock   func() time.Time
-	persist func([]Group) error
+	persist func([]Group) (persist.CommitOutcome, error)
+	// degraded blocks mutations after an uncertain commit.
+	degraded string
 }
 
 const MaxGroups = 256
@@ -143,19 +147,50 @@ func (s *GroupStore) Upsert(g Group) (Group, error) {
 	g.UpdatedAt = now
 	prev, existed := s.groups[g.ID]
 	s.groups[g.ID] = g
-	if err := s.persistLocked(); err != nil {
-		if existed {
-			s.groups[g.ID] = prev
+	outcome, perr := s.persistLocked()
+	if perr != nil {
+		if outcome != persist.CommitUncertain {
+			if existed {
+				s.groups[g.ID] = prev
+			} else {
+				delete(s.groups, g.ID)
+			}
 		} else {
-			delete(s.groups, g.ID)
+			s.degraded = fmt.Sprintf("commit_uncertain on group upsert: %v", perr)
 		}
-		return Group{}, fmt.Errorf("subscription: group not committed durably: %w", err)
+		return Group{}, fmt.Errorf("subscription: group not committed durably: %w", perr)
 	}
 	return g, nil
 }
 
-// SetPersist installs the durability hook.
-func (s *GroupStore) SetPersist(fn func([]Group) error) { s.persist = fn }
+// SetPersist installs the durability hook with commit-phase
+// reporting.
+func (s *GroupStore) SetPersist(fn func([]Group) (persist.CommitOutcome, error)) {
+	s.persist = fn
+}
+
+// Degraded reports the active commit-uncertainty diagnosis.
+func (s *GroupStore) Degraded() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.degraded
+}
+
+// Reconcile adopts the authoritative disk snapshot and clears the
+// degraded flag.
+func (s *GroupStore) Reconcile(groups []Group) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.degraded == "" {
+		return "healthy"
+	}
+	s.groups = map[string]Group{}
+	for _, g := range groups {
+		s.groups[g.ID] = g
+	}
+	s.degraded = ""
+	return "recovered: disk state adopted"
+}
 
 // LoadGroups seeds the store from persisted state (startup).
 func (s *GroupStore) LoadGroups(groups []Group) {
@@ -166,9 +201,9 @@ func (s *GroupStore) LoadGroups(groups []Group) {
 	}
 }
 
-func (s *GroupStore) persistLocked() error {
+func (s *GroupStore) persistLocked() (persist.CommitOutcome, error) {
 	if s.persist == nil {
-		return nil
+		return persist.CommitOK, nil
 	}
 	out := make([]Group, 0, len(s.groups))
 	for _, g := range s.groups {
@@ -192,11 +227,16 @@ func (s *GroupStore) Delete(id string) error {
 	}
 	prev, existed := s.groups[id]
 	delete(s.groups, id)
-	if err := s.persistLocked(); err != nil {
-		if existed {
-			s.groups[id] = prev
+	outcome, perr := s.persistLocked()
+	if perr != nil {
+		if outcome != persist.CommitUncertain {
+			if existed {
+				s.groups[id] = prev
+			}
+		} else {
+			s.degraded = fmt.Sprintf("commit_uncertain on group delete: %v", perr)
 		}
-		return fmt.Errorf("subscription: group deletion not committed durably: %w", err)
+		return fmt.Errorf("subscription: group deletion not committed durably: %w", perr)
 	}
 	return nil
 }

@@ -33,6 +33,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/CrazyDuckLab/DuckOS/internal/persist"
 )
 
 // MaxTokenBytes is the entropy budget of a delivery token.
@@ -59,29 +61,71 @@ type TokenStore struct {
 	mu     sync.RWMutex
 	byHash map[string]*TokenRecord
 	clock  func() time.Time
-	// persist commits the full record set durably; an error means
-	// the mutation is rolled back and the operation fails (a
-	// revoked token that only "exists" in memory could resurrect
-	// after a restart — that must never be acknowledged).
-	persist func([]TokenRecord) error
+	// persist commits the full record set durably and reports the
+	// commit phase. NOT_COMMITTED → the mutation rolls back; an
+	// UNCERTAIN outcome (post-rename fsync failure) KEEPS the new
+	// restrictive state, marks the store degraded and blocks all
+	// further mutations — writing over an uncertain snapshot could
+	// resurrect revoked URLs after a restart.
+	persist func([]TokenRecord) (persist.CommitOutcome, error)
+	// degraded carries the active commit-uncertainty diagnosis;
+	// while set, every mutation is refused until reconciliation.
+	degraded string
 }
 
 func NewTokenStore() *TokenStore {
 	return &TokenStore{byHash: map[string]*TokenRecord{}, clock: time.Now}
 }
 
-// SetPersist installs the durability hook.
-func (s *TokenStore) SetPersist(fn func([]TokenRecord) error) { s.persist = fn }
+// SetPersist installs the durability hook with commit-phase
+// reporting.
+func (s *TokenStore) SetPersist(fn func([]TokenRecord) (persist.CommitOutcome, error)) {
+	s.persist = fn
+}
 
-func (s *TokenStore) persistLocked() error {
+// Degraded reports the active commit-uncertainty diagnosis.
+func (s *TokenStore) Degraded() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.degraded
+}
+
+// Reconcile resolves uncertainty: the disk snapshot becomes
+// authoritative and the store returns to the healthy state. If the
+// disk is older than the uncertain in-memory state, the restrictive
+// in-memory state was NOT durably committed — the operator must
+// re-revoke; this is reported, never silenced.
+func (s *TokenStore) Reconcile(records []TokenRecord) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.degraded == "" {
+		return "healthy"
+	}
+	s.byHash = map[string]*TokenRecord{}
+	for i := range records {
+		rec := records[i]
+		s.byHash[rec.TokenHash] = &rec
+	}
+	s.degraded = ""
+	return "recovered: disk state adopted (verify recent revocations)"
+}
+
+func (s *TokenStore) persistLocked() (persist.CommitOutcome, error) {
 	if s.persist == nil {
-		return nil
+		return persist.CommitOK, nil
 	}
 	out := make([]TokenRecord, 0, len(s.byHash))
 	for _, rec := range s.byHash {
 		out = append(out, *rec)
 	}
 	return s.persist(out)
+}
+
+func (s *TokenStore) requireHealthyLocked() error {
+	if s.degraded != "" {
+		return fmt.Errorf("subscription: storage degraded (%s); reconciliation required before mutations", s.degraded)
+	}
+	return nil
 }
 
 // LoadRecords seeds the store from persisted state (startup).
@@ -120,6 +164,13 @@ func NewToken() (string, error) {
 // Issue mints a new token for the subscription and records its
 // digest. The presentation token is returned exactly once.
 func (s *TokenStore) Issue(subID string, ttl time.Duration) (string, TokenRecord, error) {
+	if err := func() error {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return s.requireHealthyLocked()
+	}(); err != nil {
+		return "", TokenRecord{}, err
+	}
 	if subID == "" {
 		return "", TokenRecord{}, errors.New("subscription: issue requires a subscription id")
 	}
@@ -190,6 +241,10 @@ func (s *TokenStore) Lookup(token string) (TokenRecord, bool) {
 // whose old URLs would resurrect after a restart.
 func (s *TokenStore) Rotate(subID string, ttl time.Duration) (string, TokenRecord, error) {
 	s.mu.Lock()
+	if err := s.requireHealthyLocked(); err != nil {
+		s.mu.Unlock()
+		return "", TokenRecord{}, err
+	}
 	var prevRevoked []string
 	for _, rec := range s.byHash {
 		if rec.SubID == subID && !rec.Revoked {
@@ -197,14 +252,22 @@ func (s *TokenStore) Rotate(subID string, ttl time.Duration) (string, TokenRecor
 			prevRevoked = append(prevRevoked, rec.TokenHash)
 		}
 	}
-	if err := s.persistLocked(); err != nil {
-		for _, h := range prevRevoked {
-			if rec, ok := s.byHash[h]; ok {
-				rec.Revoked = false
+	outcome, perr := s.persistLocked()
+	if perr != nil {
+		if outcome != persist.CommitUncertain {
+			for _, h := range prevRevoked {
+				if rec, ok := s.byHash[h]; ok {
+					rec.Revoked = false
+				}
 			}
+		} else {
+			s.degraded = fmt.Sprintf("commit_uncertain on rotation: %v", perr)
 		}
 		s.mu.Unlock()
-		return "", TokenRecord{}, fmt.Errorf("subscription: rotation not committed durably: %w", err)
+		if outcome == persist.CommitUncertain {
+			return "", TokenRecord{}, fmt.Errorf("subscription: rotation commit outcome UNCERTAIN; restrictive state retained: %w", perr)
+		}
+		return "", TokenRecord{}, fmt.Errorf("subscription: rotation not committed durably: %w", perr)
 	}
 	s.mu.Unlock()
 	token, rec, err := s.Issue(subID, ttl)
@@ -227,14 +290,22 @@ func (s *TokenStore) RevokeSubscription(subID string) (int, error) {
 			n++
 		}
 	}
-	if err := s.persistLocked(); err != nil {
-		for _, h := range prevRevoked {
-			if rec, ok := s.byHash[h]; ok {
-				rec.Revoked = false
+	outcome, perr := s.persistLocked()
+	if perr != nil {
+		if outcome != persist.CommitUncertain {
+			for _, h := range prevRevoked {
+				if rec, ok := s.byHash[h]; ok {
+					rec.Revoked = false
+				}
 			}
+		} else {
+			s.degraded = fmt.Sprintf("commit_uncertain on revocation: %v", perr)
 		}
 		s.mu.Unlock()
-		return 0, fmt.Errorf("subscription: revocation not committed durably: %w", err)
+		if outcome == persist.CommitUncertain {
+			return 0, fmt.Errorf("subscription: revocation commit outcome UNCERTAIN; restrictive state retained: %w", perr)
+		}
+		return 0, fmt.Errorf("subscription: revocation not committed durably: %w", perr)
 	}
 	s.mu.Unlock()
 	return n, nil

@@ -955,10 +955,6 @@ type identityAccess interface {
 // reports center_unavailable) — degradation is honest, never fatal.
 func enableXrayCenter(catalogDir string, access identityAccess, cat *xray.FileCatalog, secrets *agent.VaultLifecycle) (http.Handler, error) {
 	storeDir := filepath.Join(catalogDir, "center")
-	nodeFile, err := persist.Open[[]xnode.Node](storeDir, "nodes.json")
-	if err != nil {
-		return nil, err
-	}
 	groupFile, err := persist.Open[[]subscription.Group](storeDir, "groups.json")
 	if err != nil {
 		return nil, err
@@ -976,39 +972,66 @@ func enableXrayCenter(catalogDir string, access identityAccess, cat *xray.FileCa
 		return nil, err
 	}
 
-	enrollFile, err := persist.Open[[]xnode.EnrollmentToken](storeDir, "enrollments.json")
-	if err != nil {
-		return nil, err
+	// UQ-02: ONE atomic durable snapshot for the whole node-security
+	// domain (identities, credential hashes, revocation/suspension
+	// states, enrollment tokens and consumption marks, monotonic
+	// revision). The legacy two-file layout (nodes.json +
+	// enrollments.json) is migrated read-only before activation;
+	// the legacy files remain on disk as rollback evidence and are
+	// never written again.
+	stateFile, legacyErr2 := persist.Open[xnode.DurableState](storeDir, "xnode-state.json")
+	if legacyErr2 != nil {
+		return nil, legacyErr2
+	}
+	legacyNodes, legacyErr3 := persist.Open[[]xnode.Node](storeDir, "nodes.json")
+	if legacyErr3 != nil {
+		return nil, legacyErr3
+	}
+	legacyEnroll, legacyErr4 := persist.Open[[]xnode.EnrollmentToken](storeDir, "enrollments.json")
+	if legacyErr4 != nil {
+		return nil, legacyErr4
+	}
+	if st := stateFile.Get(); st.Revision == 0 && len(st.Nodes) == 0 && len(st.Enrollments) == 0 {
+		migrated, merr := xnode.MigrateLegacy(legacyNodes.Get(), legacyEnroll.Get())
+		if merr != nil {
+			return nil, fmt.Errorf("xray center: legacy node catalog rejected: %w", merr)
+		}
+		if len(migrated.Nodes) > 0 || len(migrated.Enrollments) > 0 {
+			out, cerr := stateFile.Update(func(cur *xnode.DurableState) { *cur = migrated })
+			if cerr != nil || out == persist.CommitUncertain {
+				return nil, fmt.Errorf("xray center: legacy migration not durably committed (outcome=%s): %w", out, cerr)
+			}
+		}
 	}
 	nodeMgr := xnode.NewManager(xnode.NewNodeHTTPAdapter())
-	// Security durability: the hook MUST commit the whole registry
-	// state and return the error; the manager fails the operation
-	// (revocation, rotation, enrollment, suspension) when the
-	// commit fails, so no acknowledged transition can resurrect
-	// after a restart.
-	nodeMgr.SetPersist(func(st xnode.DurableState) error {
-		if err := nodeFile.Update(func(cur *[]xnode.Node) { *cur = st.Nodes }); err != nil {
-			return err
-		}
-		return enrollFile.Update(func(cur *[]xnode.EnrollmentToken) { *cur = st.Enrollments })
+	// Security durability: the hook commits the whole registry
+	// state atomically and reports the commit phase; the manager
+	// fails the operation on NOT_COMMITTED and enters the degraded
+	// fail-closed mode on COMMIT_UNCERTAIN.
+	nodeMgr.SetPersist(func(st xnode.DurableState) (xnode.CommitResult, error) {
+		out, err := stateFile.Update(func(cur *xnode.DurableState) { *cur = st })
+		return xnode.CommitResult{Uncertain: out == persist.CommitUncertain}, err
 	})
-	nodeMgr.LoadState(xnode.DurableState{Nodes: nodeFile.Get(), Enrollments: enrollFile.Get()})
+	nodeMgr.LoadState(stateFile.Get())
 
 	groups := subscription.NewGroupStore()
-	groups.SetPersist(func(gs []subscription.Group) error {
+	groups.SetPersist(func(gs []subscription.Group) (persist.CommitOutcome, error) {
 		return groupFile.Update(func(cur *[]subscription.Group) { *cur = gs })
 	})
 	groups.LoadGroups(groupFile.Get())
 
 	tokens := subscription.NewTokenStore()
-	tokens.SetPersist(func(recs []subscription.TokenRecord) error {
+	tokens.SetPersist(func(recs []subscription.TokenRecord) (persist.CommitOutcome, error) {
 		return tokenFile.Update(func(cur *[]subscription.TokenRecord) { *cur = recs })
 	})
 	tokens.LoadRecords(tokenFile.Get())
 
 	events := xray.NewEventLog()
 	events.SetPersist(func(evts []xray.Event) error {
-		return eventFile.Update(func(cur *[]xray.Event) { *cur = evts })
+		// Advisory diagnostics: best-effort persistence, failures
+		// are logged but never block the event flow.
+		_, err := eventFile.Update(func(cur *[]xray.Event) { *cur = evts })
+		return err
 	})
 	for _, e := range eventFile.Get() {
 		_ = events.Record(e)

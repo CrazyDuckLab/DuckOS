@@ -173,7 +173,13 @@ type Manager struct {
 	clock    func() time.Time
 	adapter  Adapter
 	staleTTL time.Duration
-	persist  func(DurableState) error
+	persist  func(DurableState) (CommitResult, error)
+	// revision is the monotonic generation of the committed state;
+	// it survives restart through DurableState.Revision.
+	revision uint64
+	// degraded carries the active COMMIT_UNCERTAIN diagnosis, or ""
+	// when storage is healthy. Degraded storage BLOCKS mutations.
+	degraded string
 }
 
 func NewManager(adapter Adapter) *Manager {
@@ -195,20 +201,34 @@ func (m *Manager) SetClock(fn func() time.Time) { m.clock = fn }
 // (revocation, rotation, suspension, token consumption) is durable
 // only when the snapshot carrying it has been committed.
 type DurableState struct {
+	// Revision is the monotonic generation of this snapshot; it is
+	// the reconciliation anchor between memory and disk.
+	Revision    uint64            `json:"revision"`
 	Nodes       []Node            `json:"nodes"`
 	Enrollments []EnrollmentToken `json:"enrollments"`
 }
 
+// CommitResult carries the commit-phase information the manager
+// needs to distinguish pre-rename failures (NOT_COMMITTED: the
+// previous durable state remains authoritative → roll back) from
+// post-rename uncertainty (COMMIT_UNCERTAIN: the new — restrictive
+// — state is what the directory shows; NEVER roll back, enter the
+// degraded fail-closed mode until reconciliation).
+type CommitResult struct {
+	Uncertain bool
+}
+
 // SetPersist installs the durability hook. The hook MUST commit the
-// whole DurableState atomically (the persist.File adapter does:
-// temp write → fsync → rename → dir fsync) and MUST return an error
-// when durability is not achieved; mutation callers roll their
-// in-memory change back and fail the operation in that case.
-func (m *Manager) SetPersist(fn func(DurableState) error) { m.persist = fn }
+// whole DurableState atomically and MUST report the commit phase;
+// mutation callers act on the phase, never on the error alone.
+func (m *Manager) SetPersist(fn func(DurableState) (CommitResult, error)) { m.persist = fn }
 
 // IssueEnrollmentToken mints a single-use enrollment token. The
 // plaintext token is returned exactly once.
 func (m *Manager) IssueEnrollmentToken(ttl time.Duration) (string, EnrollmentToken, error) {
+	if err := m.requireHealthyStorageLocked(); err != nil {
+		return "", EnrollmentToken{}, err
+	}
 	token, err := newSecret()
 	if err != nil {
 		return "", EnrollmentToken{}, err
@@ -231,9 +251,12 @@ func (m *Manager) IssueEnrollmentToken(ttl time.Duration) (string, EnrollmentTok
 		}
 	}
 	m.enroll[rec.TokenHash] = &rec
-	if err := m.persistLocked(); err != nil {
-		delete(m.enroll, rec.TokenHash)
-		return "", EnrollmentToken{}, fmt.Errorf("xnode: enrollment token not committed: %w", err)
+	res, perr := m.persistLocked()
+	if perr != nil {
+		if !res.Uncertain {
+			delete(m.enroll, rec.TokenHash)
+		}
+		return "", EnrollmentToken{}, m.commitOutcomeLocked(res, perr, "enrollment token issuance")
 	}
 	return token, rec, nil
 }
@@ -246,8 +269,12 @@ func (m *Manager) Enroll(token string, info NodeInfo) (Node, string, error) {
 	if err := info.validate(); err != nil {
 		return Node{}, "", err
 	}
-	digest := hashToken("xnode-enroll", token)
 	m.mu.Lock()
+	if err := m.requireHealthyStorage(); err != nil {
+		m.mu.Unlock()
+		return Node{}, "", err
+	}
+	digest := hashToken("xnode-enroll", token)
 	rec, ok := m.enroll[digest]
 	if ok {
 		now := m.clock().UTC()
@@ -294,11 +321,14 @@ func (m *Manager) Enroll(token string, info NodeInfo) (Node, string, error) {
 	}
 	m.nodes[id] = &node
 	rec.UsedBy = id
-	if err := m.persistLocked(); err != nil {
-		delete(m.nodes, id)
-		rec.Used, rec.UsedBy = false, ""
+	res, perr := m.persistLocked()
+	if perr != nil {
+		if !res.Uncertain {
+			delete(m.nodes, id)
+			rec.Used, rec.UsedBy = false, ""
+		}
 		m.mu.Unlock()
-		return Node{}, "", fmt.Errorf("xnode: enrollment not committed (durable state unchanged): %w", err)
+		return Node{}, "", m.commitOutcomeLocked(res, perr, "enrollment")
 	}
 	m.mu.Unlock()
 	return node, credential, nil
@@ -310,6 +340,12 @@ func (m *Manager) EnrollLocal(name string) (Node, error) {
 	if !namePattern.MatchString(name) {
 		return Node{}, errors.New("xnode: node name is not canonical")
 	}
+	m.mu.Lock()
+	if err := m.requireHealthyStorage(); err != nil {
+		m.mu.Unlock()
+		return Node{}, err
+	}
+	m.mu.Unlock()
 	id, err := newID()
 	if err != nil {
 		return Node{}, err
@@ -330,9 +366,12 @@ func (m *Manager) EnrollLocal(name string) (Node, error) {
 		return Node{}, errors.New("xnode: node capacity exceeded")
 	}
 	m.nodes[id] = &node
-	if err := m.persistLocked(); err != nil {
-		delete(m.nodes, id)
-		return Node{}, fmt.Errorf("xnode: local enrollment not committed: %w", err)
+	res, perr := m.persistLocked()
+	if perr != nil {
+		if !res.Uncertain {
+			delete(m.nodes, id)
+		}
+		return Node{}, m.commitOutcomeLocked(res, perr, "local enrollment")
 	}
 	return node, nil
 }
@@ -363,6 +402,9 @@ func (m *Manager) Authenticate(nodeID, credential string) bool {
 // RotateCredential replaces a node credential. The old credential
 // stops validating immediately; the new one is returned once.
 func (m *Manager) RotateCredential(nodeID string) (string, error) {
+	if err := m.requireHealthyStorageLocked(); err != nil {
+		return "", err
+	}
 	credential, err := newSecret()
 	if err != nil {
 		return "", err
@@ -379,10 +421,13 @@ func (m *Manager) RotateCredential(nodeID string) (string, error) {
 	}
 	prevHash := node.CredentialHash
 	node.CredentialHash = hashToken("xnode-cred", credential)
-	if err := m.persistLocked(); err != nil {
-		node.CredentialHash = prevHash
+	res, perr := m.persistLocked()
+	if perr != nil {
+		if !res.Uncertain {
+			node.CredentialHash = prevHash
+		}
 		m.mu.Unlock()
-		return "", fmt.Errorf("xnode: credential rotation not committed (old credential remains authoritative): %w", err)
+		return "", m.commitOutcomeLocked(res, perr, "credential rotation")
 	}
 	m.mu.Unlock()
 	return credential, nil
@@ -394,6 +439,9 @@ func (m *Manager) RotateCredential(nodeID string) (string, error) {
 func (m *Manager) Revoke(nodeID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.requireHealthyStorage(); err != nil {
+		return err
+	}
 	node, ok := m.nodes[nodeID]
 	if !ok {
 		return errors.New("xnode: node is unknown")
@@ -406,9 +454,12 @@ func (m *Manager) Revoke(nodeID string) error {
 	// failed commit the in-memory revocation is rolled back, the
 	// error propagates, and no success is acknowledged — the old
 	// credential must not silently resurrect after a restart.
-	if err := m.persistLocked(); err != nil {
-		node.Status, node.LastError = prevStatus, prevErr
-		return fmt.Errorf("xnode: revocation NOT committed; the credential remains authoritative until a durable commit succeeds: %w", err)
+	res, perr := m.persistLocked()
+	if perr != nil {
+		if !res.Uncertain {
+			node.Status, node.LastError = prevStatus, prevErr
+		}
+		return m.commitOutcomeLocked(res, perr, "revocation")
 	}
 	return nil
 }
@@ -420,15 +471,21 @@ func (m *Manager) Resume(nodeID string) error  { return m.setStatus(nodeID, Stat
 func (m *Manager) setStatus(nodeID string, status Status) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := m.requireHealthyStorage(); err != nil {
+		return err
+	}
 	node, ok := m.nodes[nodeID]
 	if !ok || node.Status == StatusRevoked {
 		return errors.New("xnode: node is unknown or revoked")
 	}
 	prev := node.Status
 	node.Status = status
-	if err := m.persistLocked(); err != nil {
-		node.Status = prev
-		return fmt.Errorf("xnode: status change not committed: %w", err)
+	res, perr := m.persistLocked()
+	if perr != nil {
+		if !res.Uncertain {
+			node.Status = prev
+		}
+		return m.commitOutcomeLocked(res, perr, "status change")
 	}
 	return nil
 }
@@ -576,11 +633,12 @@ func (m *Manager) Reconcile(ctx Ctx, config []byte) []Plan {
 // nil hook (memory-only mode, tests) reports success; production
 // wiring MUST install a hook. SECURITY: a failed commit means the
 // transition is NOT acknowledged — callers roll back and fail.
-func (m *Manager) persistLocked() error {
+func (m *Manager) persistLocked() (CommitResult, error) {
 	if m.persist == nil {
-		return nil
+		return CommitResult{}, nil
 	}
-	st := DurableState{}
+	m.revision++
+	st := DurableState{Revision: m.revision}
 	for _, n := range m.nodes {
 		c := *n
 		st.Nodes = append(st.Nodes, c)
@@ -591,7 +649,92 @@ func (m *Manager) persistLocked() error {
 		st.Enrollments = append(st.Enrollments, c)
 	}
 	sort.Slice(st.Enrollments, func(i, j int) bool { return st.Enrollments[i].TokenHash < st.Enrollments[j].TokenHash })
-	return m.persist(st)
+	res, err := m.persist(st)
+	if err != nil && res.Uncertain {
+		// COMMIT_UNCERTAIN: the restrictive NEW state stays in
+		// memory (rolling it back would let the next mutation
+		// overwrite the revoked snapshot — the exact UQ-02
+		// resurrection). Storage is degraded; mutations block.
+		m.degraded = fmt.Sprintf("commit_uncertain at revision %d: %v", st.Revision, err)
+	}
+	return res, err
+}
+
+// Degraded reports the active storage-uncertainty diagnosis.
+func (m *Manager) Degraded() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.degraded
+}
+
+// ReconcileStorage resolves a COMMIT_UNCERTAIN state against the
+// authoritative disk content:
+//
+//   - disk revision == in-memory revision: the uncertain commit
+//     landed; storage recovers, state unchanged.
+//   - disk revision differs: the disk is authoritative for
+//     restarts; adopt it wholesale and tell the operator to verify
+//     recent revocations — never a silent resolution.
+func (m *Manager) ReconcileStorage(st DurableState) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.degraded == "" {
+		return "healthy", nil
+	}
+	switch {
+	case st.Revision == m.revision:
+		m.degraded = ""
+		return "recovered: uncertain commit is on disk", nil
+	case st.Revision > m.revision:
+		return "", errors.New("xnode: disk revision ahead of memory; refusing to reconcile")
+	default:
+		m.nodes = map[string]*Node{}
+		m.enroll = map[string]*EnrollmentToken{}
+		for i := range st.Nodes {
+			n := st.Nodes[i]
+			m.nodes[n.ID] = &n
+		}
+		for i := range st.Enrollments {
+			e := st.Enrollments[i]
+			m.enroll[e.TokenHash] = &e
+		}
+		m.revision = st.Revision
+		m.degraded = ""
+		return "recovered: disk state adopted (verify recent revocations)", nil
+	}
+}
+
+// commitOutcomeLocked resolves the persist result for a mutation.
+// UNCERTAIN keeps the new (restrictive) state and reports a
+// non-success with the degraded-storage diagnosis; NOT_COMMITTED
+// expects the caller to have rolled back and reports the plain
+// storage failure.
+func (m *Manager) commitOutcomeLocked(res CommitResult, err error, what string) error {
+	if err == nil {
+		return nil
+	}
+	if res.Uncertain {
+		return fmt.Errorf("xnode: %s commit outcome UNCERTAIN; restrictive state retained, storage degraded: %w", what, err)
+	}
+	return fmt.Errorf("xnode: %s not committed (durable state unchanged): %w", what, err)
+}
+
+// requireHealthyStorageLocked is the mutation gate for callers that
+// already hold the lock.
+func (m *Manager) requireHealthyStorageLocked() error {
+	if m.degraded != "" {
+		return fmt.Errorf("xnode: storage degraded (%s); reconciliation required before mutations", m.degraded)
+	}
+	return nil
+}
+
+// requireHealthyStorage is the gate for callers that must acquire
+// the lock themselves.
+func (m *Manager) requireHealthyStorage() error {
+	if m.degraded != "" {
+		return fmt.Errorf("xnode: storage degraded (%s); reconciliation required before mutations", m.degraded)
+	}
+	return nil
 }
 
 // LoadState seeds the registry from persisted state (startup):
@@ -600,6 +743,8 @@ func (m *Manager) persistLocked() error {
 func (m *Manager) LoadState(st DurableState) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.nodes = map[string]*Node{}
+	m.enroll = map[string]*EnrollmentToken{}
 	for i := range st.Nodes {
 		n := st.Nodes[i]
 		m.nodes[n.ID] = &n
@@ -608,4 +753,5 @@ func (m *Manager) LoadState(st DurableState) {
 		e := st.Enrollments[i]
 		m.enroll[e.TokenHash] = &e
 	}
+	m.revision = st.Revision
 }

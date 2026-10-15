@@ -54,38 +54,45 @@ func (f *File[T]) Get() T {
 	return f.state
 }
 
-// Update applies mut to the state and persists. On a persist error
-// the in-memory state is rolled back so memory never diverges from
-// disk.
-func (f *File[T]) Update(mut func(*T)) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	prev := f.state
-	mut(&f.state)
-	raw, err := json.Marshal(f.state)
+// jsonMarshal, syncFile and closeTmp are the per-stage helpers the
+// commit protocol uses (declared here to keep file.go the storage
+// surface and commit.go the transaction protocol).
+func jsonMarshal(v any) ([]byte, error) { return json.Marshal(v) }
+
+// syncFile fsyncs an open-by-path file: open, sync, keep the handle
+// for the explicit close stage.
+func syncFile(path string) error {
+	fh, err := os.OpenFile(path, os.O_RDONLY, 0o600)
 	if err != nil {
-		f.state = prev
-		return fmt.Errorf("persist: encode: %w", err)
+		return err
 	}
-	tmp := f.path() + ".tmp"
-	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
-		f.state = prev
-		return fmt.Errorf("persist: write: %w", err)
+	if err := fh.Sync(); err != nil {
+		fh.Close()
+		return err
 	}
-	if err := os.Rename(tmp, f.path()); err != nil {
-		f.state = prev
-		_ = os.Remove(tmp)
-		return fmt.Errorf("persist: rename: %w", err)
-	}
-	if err := syncDir(f.dir); err != nil {
-		// The rename already made the state durable enough for the
-		// catalog contract; a dir-fsync failure is reported but the
-		// state stays.
-		return fmt.Errorf("persist: fsync dir: %w", err)
-	}
-	return nil
+	return fh.Close()
 }
 
+// closeTmp re-verifies the temp file closes cleanly (the write
+// handle from WriteFile is already closed; this is the explicit
+// post-fsync close-error stage required by the commit protocol).
+func closeTmp(path string) error {
+	fh, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	return fh.Close()
+}
+
+// SyncDirForTest exposes the directory-fsync boundary injection
+// point (tests only).
+func SyncDirForTest(fn func(string) error) (restore func()) {
+	prev := syncDirFn
+	syncDirFn = fn
+	return func() { syncDirFn = prev }
+}
+
+// syncDir fsyncs a directory so the rename becomes durable.
 func syncDir(dir string) error {
 	d, err := os.Open(dir)
 	if err != nil {

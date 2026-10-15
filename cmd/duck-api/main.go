@@ -197,7 +197,7 @@ func enableSubscriptionDelivery(catalogDir string, eng *engine.Engine, assertion
 	if err != nil {
 		return nil
 	}
-	tokens.SetPersist(func(recs []subscription.TokenRecord) error {
+	tokens.SetPersist(func(recs []subscription.TokenRecord) (persist.CommitOutcome, error) {
 		return tokenFile.Update(func(cur *[]subscription.TokenRecord) { *cur = recs })
 	})
 	tokens.LoadRecords(tokenFile.Get())

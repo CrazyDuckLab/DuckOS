@@ -21,8 +21,9 @@ func TestUQ01_E_SubscriptionRevocationSurvivesRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := NewTokenStore()
-	store.SetPersist(func(recs []TokenRecord) error {
-		return tokenFile.Update(func(cur *[]TokenRecord) { *cur = recs })
+	store.SetPersist(func(recs []TokenRecord) (persist.CommitOutcome, error) {
+		out, err := tokenFile.Update(func(cur *[]TokenRecord) { *cur = recs })
+		return out, err
 	})
 	tok, _, _ := store.Issue("g1", time.Hour)
 	if n, err := store.RevokeSubscription("g1"); err != nil || n != 1 {
@@ -43,7 +44,9 @@ func TestUQ01_E_SubscriptionRevocationSurvivesRestart(t *testing.T) {
 func TestUQ01_F_SubscriptionRevokeFailureNotAcknowledged(t *testing.T) {
 	// Injected fault via hook:
 	failing := NewTokenStore()
-	failing.SetPersist(func([]TokenRecord) error { return errENOSPC })
+	failing.SetPersist(func([]TokenRecord) (persist.CommitOutcome, error) {
+		return persist.CommitNotCommitted, errENOSPC
+	})
 	t2, _, _ := failing.Issue("g1", time.Hour)
 	if _, err := failing.RevokeSubscription("g1"); err == nil || !strings.Contains(err.Error(), "ENOSPC") {
 		t.Fatalf("revocation acknowledged despite failed commit: %v", err)
@@ -55,7 +58,10 @@ func TestUQ01_F_SubscriptionRevokeFailureNotAcknowledged(t *testing.T) {
 	}
 	// Retry with a working hook commits and takes effect.
 	committed := false
-	failing.SetPersist(func(recs []TokenRecord) error { committed = true; return nil })
+	failing.SetPersist(func(recs []TokenRecord) (persist.CommitOutcome, error) {
+		committed = true
+		return persist.CommitOK, nil
+	})
 	if _, err := failing.RevokeSubscription("g1"); err != nil || !committed {
 		t.Fatalf("retry after fault: err=%v committed=%v", err, committed)
 	}
@@ -72,8 +78,9 @@ func TestUQ01_RotationSurvivesRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := NewTokenStore()
-	store.SetPersist(func(recs []TokenRecord) error {
-		return tokenFile.Update(func(cur *[]TokenRecord) { *cur = recs })
+	store.SetPersist(func(recs []TokenRecord) (persist.CommitOutcome, error) {
+		out, err := tokenFile.Update(func(cur *[]TokenRecord) { *cur = recs })
+		return out, err
 	})
 	oldTok, _, _ := store.Issue("g1", time.Hour)
 	newTok, _, err := store.Rotate("g1", time.Hour)
@@ -91,3 +98,45 @@ func TestUQ01_RotationSurvivesRestart(t *testing.T) {
 }
 
 var errENOSPC = errors.New("injected ENOSPC: no space left on device")
+
+// UQ-02: post-rename uncertainty during subscription revocation —
+// the revoked state is KEPT, the store degrades, mutations block,
+// and reconciliation from disk resolves; a subsequent unrelated
+// mutation cannot resurrect revoked URLs.
+func TestUQ02_SubscriptionUncertainRevocation(t *testing.T) {
+	store := NewTokenStore()
+	var failures int
+	store.SetPersist(func(recs []TokenRecord) (persist.CommitOutcome, error) {
+		if failures > 0 {
+			failures--
+			return persist.CommitUncertain, errENOSPC
+		}
+		return persist.CommitOK, nil
+	})
+	tok, _, _ := store.Issue("g1", time.Hour)
+	failures = 1
+	if _, err := store.RevokeSubscription("g1"); err == nil || !strings.Contains(err.Error(), "UNCERTAIN") {
+		t.Fatalf("uncertain revocation not reported: %v", err)
+	}
+	// Restrictive state retained: the URL stays dead.
+	if _, ok := store.Lookup(tok); ok {
+		t.Fatal("revoked URL resurrected in memory after uncertain commit")
+	}
+	// Mutations are blocked while degraded.
+	if _, _, err := store.Issue("g1", time.Hour); err == nil || !strings.Contains(err.Error(), "degraded") {
+		t.Fatalf("mutation during degradation allowed: %v", err)
+	}
+	// Reconciliation adopts the disk snapshot; revoked stays revoked.
+	res := store.Reconcile([]TokenRecord{{TokenHash: hashTokenForTest(tok), SubID: "g1", Revoked: true}})
+	if !strings.Contains(res, "recovered") {
+		t.Fatalf("reconcile: %s", res)
+	}
+	if _, ok := store.Lookup(tok); ok {
+		t.Fatal("revoked URL resurrected after reconciliation")
+	}
+	if store.Degraded() != "" {
+		t.Fatal("degraded flag not cleared")
+	}
+}
+
+func hashTokenForTest(token string) string { return hashToken(token) }

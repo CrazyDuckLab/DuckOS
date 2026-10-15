@@ -20,7 +20,7 @@ func TestRoundTripAndUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.Update(func(d *doc) { d.Items = []string{"a", "b"}; d.N = 2 }); err != nil {
+	if _, err := f.Update(func(d *doc) { d.Items = []string{"a", "b"}; d.N = 2 }); err != nil {
 		t.Fatal(err)
 	}
 	g, err := Open[doc](dir, "test.json")
@@ -43,7 +43,7 @@ func TestRoundTripAndUpdate(t *testing.T) {
 func TestUpdateRollbackOnPersistFailure(t *testing.T) {
 	dir := t.TempDir()
 	f, _ := Open[doc](dir, "test.json")
-	_ = f.Update(func(d *doc) { d.N = 1 })
+	_, _ = f.Update(func(d *doc) { d.N = 1 })
 	// Make the persist path fail: replace the target file with a
 	// directory so the final rename cannot succeed.
 	if err := os.Remove(filepath.Join(dir, "test.json")); err != nil {
@@ -52,7 +52,7 @@ func TestUpdateRollbackOnPersistFailure(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "test.json"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.Update(func(d *doc) { d.N = 99 }); err == nil {
+	if out, err := f.Update(func(d *doc) { d.N = 99 }); err == nil || out != CommitNotCommitted {
 		t.Fatal("persist error expected")
 	}
 	if got := f.Get(); got.N != 1 {
@@ -77,7 +77,7 @@ func TestConcurrentUpdates(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_ = f.Update(func(d *doc) { d.N++ })
+			_, _ = f.Update(func(d *doc) { d.N++ })
 		}()
 	}
 	wg.Wait()

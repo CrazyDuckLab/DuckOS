@@ -21,8 +21,9 @@ func diskFixture(t *testing.T) (*Manager, string) {
 		t.Fatal(err)
 	}
 	m := NewManager(nil)
-	m.SetPersist(func(st DurableState) error {
-		return stateFile.Update(func(cur *DurableState) { *cur = st })
+	m.SetPersist(func(st DurableState) (CommitResult, error) {
+		out, err := stateFile.Update(func(cur *DurableState) { *cur = st })
+		return CommitResult{Uncertain: out == persist.CommitUncertain}, err
 	})
 	m.LoadState(stateFile.Get())
 	return m, dir
@@ -47,8 +48,9 @@ func TestDisk_RevokeSurvivesRealRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	m2 := NewManager(nil)
-	m2.SetPersist(func(st DurableState) error {
-		return stateFile2.Update(func(cur *DurableState) { *cur = st })
+	m2.SetPersist(func(st DurableState) (CommitResult, error) {
+		out, err := stateFile2.Update(func(cur *DurableState) { *cur = st })
+		return CommitResult{Uncertain: out == persist.CommitUncertain}, err
 	})
 	m2.LoadState(stateFile2.Get())
 	if m2.Authenticate(node.ID, cred) {

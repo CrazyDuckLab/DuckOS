@@ -27,7 +27,7 @@ type flakyPersist struct {
 	commits  int
 }
 
-func (f *flakyPersist) persist(st DurableState) error {
+func (f *flakyPersist) persist(st DurableState) (CommitResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.failures > 0 {
@@ -35,11 +35,11 @@ func (f *flakyPersist) persist(st DurableState) error {
 		if f.err == nil {
 			f.err = errors.New("injected ENOSPC: no space left on device")
 		}
-		return f.err
+		return CommitResult{}, f.err
 	}
 	f.store = st
 	f.commits++
-	return nil
+	return CommitResult{}, nil
 }
 
 func (f *flakyPersist) failNext(times int, err error) {

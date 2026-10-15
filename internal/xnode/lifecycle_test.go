@@ -97,9 +97,9 @@ func TestLifecycle_ControllerRestartRestoresState(t *testing.T) {
 	tok, _, _ := m.IssueEnrollmentToken(time.Hour)
 	node, _, _ := m.Enroll(tok, NodeInfo{Name: "edge"})
 	var persisted []Node
-	m.SetPersist(func(st DurableState) error {
+	m.SetPersist(func(st DurableState) (CommitResult, error) {
 		persisted = st.Nodes
-		return nil
+		return CommitResult{}, nil
 	})
 	_ = m.Revoke(node.ID) // triggers persist
 	if len(persisted) != 1 || persisted[0].Status != StatusRevoked {

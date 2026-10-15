@@ -60,6 +60,12 @@ type Handler struct {
 	Events *xray.EventLog
 	// Diagnose runs the structured diagnostics for a subject.
 	Diagnose func(subject string) ([]xray.Diagnostic, error)
+	// StorageStatus reports per-domain degraded diagnoses (empty
+	// map = all healthy).
+	StorageStatus func() map[string]string
+	// ReconcileStorage resolves commit uncertainty against the
+	// authoritative disk snapshot.
+	ReconcileStorage func() (string, error)
 	// authorizedUser is an internal seam for tests; production
 	// leaves it nil and Authorize supplies the user.
 	authorizedUser func() (identity.User, error)
@@ -107,6 +113,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.servePolicies(w, r)
 	case strings.HasPrefix(rest, "stats"):
 		h.serveStats(w, r)
+	case strings.HasPrefix(rest, "storage"):
+		h.serveStorage(w, r, strings.TrimPrefix(rest, "storage"))
 	case strings.HasPrefix(rest, "tokens"):
 		h.serveTokens(w, r, strings.TrimPrefix(rest, "tokens"))
 	case strings.HasPrefix(rest, "preview"):
@@ -166,11 +174,14 @@ func (h *Handler) serveNodes(w http.ResponseWriter, r *http.Request, rest string
 		id := strings.TrimSuffix(strings.TrimPrefix(rest, "/"), "/rotate")
 		credential, err := h.Nodes.RotateCredential(id)
 		if err != nil {
-			if strings.Contains(strings.ToLower(err.Error()), "not committed") {
+			switch {
+			case strings.Contains(strings.ToLower(err.Error()), "uncertain"):
+				problem(w, 503, "rotation_commit_uncertain", err.Error())
+			case strings.Contains(strings.ToLower(err.Error()), "not committed"):
 				problem(w, 503, "rotation_not_committed", err.Error())
-				return
+			default:
+				problem(w, 409, "rotate_failed", err.Error())
 			}
-			problem(w, 409, "rotate_failed", err.Error())
 			return
 		}
 		writeJSON(w, 200, map[string]string{"credential": credential})
@@ -193,11 +204,14 @@ func (h *Handler) serveNodes(w http.ResponseWriter, r *http.Request, rest string
 			// A persistence failure must never look like a plain
 			// not-found: the operator has to know the durable
 			// state did not change.
-			if strings.Contains(strings.ToLower(err.Error()), "not committed") {
+			switch {
+			case strings.Contains(strings.ToLower(err.Error()), "uncertain"):
+				problem(w, 503, "revocation_commit_uncertain", err.Error())
+			case strings.Contains(strings.ToLower(err.Error()), "not committed"):
 				problem(w, 503, "revocation_not_committed", err.Error())
-				return
+			default:
+				problem(w, 404, "node_not_found", err.Error())
 			}
-			problem(w, 404, "node_not_found", err.Error())
 			return
 		}
 		writeJSON(w, 200, map[string]bool{"ok": true})
@@ -266,8 +280,13 @@ func (h *Handler) servePolicies(w http.ResponseWriter, r *http.Request) {
 			problem(w, 422, "invalid_policies", err.Error())
 			return
 		}
-		if err := h.Policies.Update(func(p *[]xray.Policy) { *p = policies }); err != nil {
-			problem(w, 503, "policies_persist_failed", "Policy store rejected the update.")
+		outcome, err := h.Policies.Update(func(p *[]xray.Policy) { *p = policies })
+		if err != nil {
+			code := "policies_persist_failed"
+			if outcome == persist.CommitUncertain {
+				code = "policies_commit_uncertain"
+			}
+			problem(w, 503, code, "Policy store rejected the update.")
 			return
 		}
 		writeJSON(w, 200, map[string]bool{"ok": true})
@@ -316,7 +335,7 @@ func (h *Handler) serveTokens(w http.ResponseWriter, r *http.Request, rest strin
 		ttl := time.Duration(body.TTLHours) * time.Hour
 		token, rec, err := h.Tokens.Issue(body.SubID, ttl)
 		if err != nil {
-			problem(w, 503, "token_issue_failed", err.Error())
+			problem(w, 503, tokenErrorCode(err), err.Error())
 			return
 		}
 		writeJSON(w, 201, map[string]any{"token": token, "record": rec})
@@ -331,7 +350,7 @@ func (h *Handler) serveTokens(w http.ResponseWriter, r *http.Request, rest strin
 		}
 		token, rec, err := h.Tokens.Rotate(body.SubID, time.Duration(body.TTLHours)*time.Hour)
 		if err != nil {
-			problem(w, 503, "token_rotate_failed", err.Error())
+			problem(w, 503, tokenErrorCode(err), err.Error())
 			return
 		}
 		writeJSON(w, 200, map[string]any{"token": token, "record": rec})
@@ -345,7 +364,7 @@ func (h *Handler) serveTokens(w http.ResponseWriter, r *http.Request, rest strin
 		}
 		n, err := h.Tokens.RevokeSubscription(body.SubID)
 		if err != nil {
-			problem(w, 503, "token_revoke_failed", err.Error())
+			problem(w, 503, tokenErrorCode(err), err.Error())
 			return
 		}
 		writeJSON(w, 200, map[string]int{"revoked": n})
@@ -516,4 +535,32 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func problem(w http.ResponseWriter, status int, code, message string) {
 	writeJSON(w, status, map[string]any{"error": map[string]string{"code": code, "message": message}})
+}
+
+// serveStorage exposes the degraded-storage status and the
+// controlled reconciliation entry point.
+func (h *Handler) serveStorage(w http.ResponseWriter, r *http.Request, rest string) {
+	switch {
+	case r.Method == http.MethodGet && rest == "" && h.StorageStatus != nil:
+		writeJSON(w, 200, map[string]any{"domains": h.StorageStatus()})
+	case r.Method == http.MethodPost && strings.TrimPrefix(rest, "/") == "reconcile" && h.ReconcileStorage != nil:
+		result, err := h.ReconcileStorage()
+		if err != nil {
+			problem(w, 409, "reconcile_failed", err.Error())
+			return
+		}
+		writeJSON(w, 200, map[string]string{"result": result})
+	default:
+		problem(w, 404, "not_found", "Unknown storage operation.")
+	}
+}
+
+// tokenErrorCode keeps the structured non-success codes distinct:
+// an uncertain commit is a degraded-storage condition, not a plain
+// persistence failure.
+func tokenErrorCode(err error) string {
+	if strings.Contains(strings.ToLower(err.Error()), "uncertain") {
+		return "token_commit_uncertain"
+	}
+	return "token_persist_failed"
 }
