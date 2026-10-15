@@ -22,7 +22,7 @@ const NATPMPVersion = 0
 const (
 	NATPMPOpUDPPortMapping = 1
 	NATPMPOpTCPPortMapping = 2
-	NATPMPOpPublicAddress  = 128
+	NATPMPOpPublicAddress  = 0
 )
 
 // NAT-PMP result codes (server -> client).
@@ -33,7 +33,7 @@ const (
 	NATPMPResultNetworkFailure = 3
 	NATPMPResultOutOfResources = 4
 	NATPMPResultUnsupportedOp  = 5
-	NATPMPResultRefused        = 6
+	NATPMPResultRefused        = NATPMPResultNotAuthorized
 )
 
 // NATPMPMaxRequest is the largest request the server will
@@ -66,13 +66,10 @@ func (r NATPMPRequest) TransportProtocol() string {
 
 // ParseNATPMPRequest decodes one NAT-PMP request. It refuses
 // nil buffers, oversized packets, unknown versions and
-// unknown opcodes. The src port of the UDP datagram carries
-// the internal port per RFC 6886 §3.2 — the server passes
-// the received InternalPort from the packet (clients set it
-// to their source port) and the server should verify equality
-// at the transport layer.
+// unknown opcodes. RFC 6886 section 3.3 carries the internal
+// port after the two reserved bytes, independently of the UDP source port.
 func ParseNATPMPRequest(buf []byte) (NATPMPRequest, error) {
-	if len(buf) == 0 {
+	if len(buf) < 2 {
 		return NATPMPRequest{}, errors.New("natpmp: empty request")
 	}
 	if len(buf) > NATPMPMaxRequest {
@@ -87,9 +84,9 @@ func ParseNATPMPRequest(buf []byte) (NATPMPRequest, error) {
 		if len(buf) < 12 {
 			return NATPMPRequest{}, errors.New("natpmp: truncated mapping request")
 		}
-		req.InternalPort = binary.BigEndian.Uint16(buf[2:4])
-		req.ExternalPort = binary.BigEndian.Uint16(buf[4:6])
-		req.LifetimeSec = binary.BigEndian.Uint32(buf[6:12])
+		req.InternalPort = binary.BigEndian.Uint16(buf[4:6])
+		req.ExternalPort = binary.BigEndian.Uint16(buf[6:8])
+		req.LifetimeSec = binary.BigEndian.Uint32(buf[8:12])
 	case NATPMPOpPublicAddress:
 		if len(buf) != 2 {
 			return NATPMPRequest{}, errors.New("natpmp: malformed public-address request")

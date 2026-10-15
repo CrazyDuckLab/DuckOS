@@ -98,7 +98,7 @@ func (s *udpSocket) dispatch(srv *Server, networkRef string, from *net.UDPAddr, 
 		res := srv.HandlePCP(packet, fromAddr, upnp.Network{NetworkRef: networkRef})
 		resp = res.Response
 	default:
-		return
+		resp = srv.HandleNATPMP(packet, fromAddr, uint16(from.Port), upnp.Network{NetworkRef: networkRef}).Response
 	}
 	if resp == nil {
 		return

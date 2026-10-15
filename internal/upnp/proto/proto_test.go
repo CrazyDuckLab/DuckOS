@@ -15,9 +15,9 @@ func TestParseNATPMPMappingRequest(t *testing.T) {
 	buf := make([]byte, 12)
 	buf[0] = 0
 	buf[1] = NATPMPOpUDPPortMapping
-	binary.BigEndian.PutUint16(buf[2:4], 5000)
-	binary.BigEndian.PutUint16(buf[4:6], 0)
-	binary.BigEndian.PutUint32(buf[6:12], 3600)
+	binary.BigEndian.PutUint16(buf[4:6], 5000)
+	binary.BigEndian.PutUint16(buf[6:8], 0)
+	binary.BigEndian.PutUint32(buf[8:12], 3600)
 	req, err := ParseNATPMPRequest(buf)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
@@ -33,6 +33,7 @@ func TestParseNATPMPMappingRequest(t *testing.T) {
 func TestParseNATPMPRefusals(t *testing.T) {
 	cases := [][]byte{
 		nil,
+		{0},
 		{},
 		bytes.Repeat([]byte{0}, 13),
 		{1, NATPMPOpUDPPortMapping, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, // bad version
@@ -156,4 +157,19 @@ func TestParseMSearch(t *testing.T) {
 	if _, err := ParseMSearch(make([]byte, SSDPMaxRequest+1)); err == nil {
 		t.Fatal("oversized accepted")
 	}
+}
+
+func TestNATPMPRFCWireFixture(t *testing.T) {
+	// Reserved bytes are ignored; independently encoded RFC 6886 section 3.3.
+	r, e := ParseNATPMPRequest([]byte{0, 2, 0xab, 0xcd, 0x13, 0x88, 0x17, 0x70, 0, 0, 2, 0x58})
+	if e != nil || r.InternalPort != 5000 || r.ExternalPort != 6000 || r.LifetimeSec != 600 {
+		t.Fatalf("RFC fixture: %+v %v", r, e)
+	}
+}
+
+func FuzzNATPMPDecoder(f *testing.F) {
+	f.Add([]byte{0})
+	f.Add([]byte{0, 0})
+	f.Add(make([]byte, 12))
+	f.Fuzz(func(t *testing.T, b []byte) { _, _ = ParseNATPMPRequest(b) })
 }

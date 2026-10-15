@@ -28,20 +28,27 @@ type NATPMPResult struct {
 }
 
 // HandleNATPMP processes one NAT-PMP datagram that arrived
-// on the trusted network n from clientAddr. srcPort is the
-// UDP source port of the datagram: RFC 6886 §3.2 requires
-// the client to send mapping requests from the internal port
-// it asks to map, so a mismatch is refused before any state
-// changes (an attacker must not be able to nominate an
-// internal port it does not own the source socket for).
-func (s *Server) HandleNATPMP(datagram []byte, clientAddr netip.Addr, srcPort uint16, n upnp.Network) NATPMPResult {
+// on the trusted network n from clientAddr. RFC 6886 permits an
+// ephemeral UDP source port; ownership is bound to the source IP.
+func (s *Server) HandleNATPMP(datagram []byte, clientAddr netip.Addr, _ uint16, n upnp.Network) NATPMPResult {
 	res := NATPMPResult{}
+	if len(datagram) < 2 || datagram[1] >= 128 {
+		return res
+	}
 	if !s.core.admit(clientAddr.String()) {
 		res.Counted = true
 		// Still answer so the client learns it is refused; a
 		// silent drop would trigger client retries.
 		res.Response = refuseNATPMP(datagram, proto.NATPMPResultRefused, s.epoch(s.core.nowFn()))
 		s.core.reject(true, "nat-pmp", clientAddr.String(), n.NetworkRef, "rate limit exceeded")
+		return res
+	}
+	if datagram[0] != proto.NATPMPVersion {
+		res.Response = refuseNATPMP(datagram, proto.NATPMPResultUnsupportedVer, s.epoch(s.core.nowFn()))
+		return res
+	}
+	if datagram[1] > proto.NATPMPOpTCPPortMapping {
+		res.Response = refuseNATPMP(datagram, proto.NATPMPResultUnsupportedOp, s.epoch(s.core.nowFn()))
 		return res
 	}
 	req, err := proto.ParseNATPMPRequest(datagram)
@@ -59,16 +66,28 @@ func (s *Server) HandleNATPMP(datagram []byte, clientAddr netip.Addr, srcPort ui
 		res.Response = s.publicAddressResponse()
 		return res
 	}
-	if req.InternalPort != srcPort {
-		res.Response = refuseNATPMP(datagram, proto.NATPMPResultRefused, s.epoch(s.core.nowFn()))
-		s.core.reject(false, "nat-pmp", clientAddr.String(), n.NetworkRef, "internal port differs from UDP source port")
-		return res
-	}
 	transport := upnp.Transport(req.TransportProtocol())
 	sink := s.core.sink
 	if sink == nil {
 		res.Response = refuseNATPMP(datagram, proto.NATPMPResultNetworkFailure, s.epoch(s.core.nowFn()))
 		s.core.reject(false, "nat-pmp", clientAddr.String(), n.NetworkRef, "mapping sink unavailable")
+		return res
+	}
+	if req.LifetimeSec == 0 {
+		remover, ok := sink.(interface{ RemoveMapping(string) error })
+		if !ok {
+			res.Response = refuseNATPMP(datagram, proto.NATPMPResultNetworkFailure, s.epoch(s.core.nowFn()))
+			return res
+		}
+		for _, m := range sink.Mappings() {
+			if m.ClientIP == clientAddr.String() && m.NetworkRef == n.NetworkRef && m.Protocol == upnp.ProtoNATPMP && sameTrans(m.Transport, transport) && (req.InternalPort == 0 || m.InternalPort == int(req.InternalPort)) {
+				if err := remover.RemoveMapping(m.ID); err != nil {
+					res.Response = refuseNATPMP(datagram, proto.NATPMPResultNetworkFailure, s.epoch(s.core.nowFn()))
+					return res
+				}
+			}
+		}
+		res.Response = (proto.NATPMPResponse{Op: req.Op, InternalPort: req.InternalPort, EpochSec: s.epoch(s.core.nowFn())}).EncodeMapping()
 		return res
 	}
 	// Global and per-client capacity.
@@ -212,11 +231,21 @@ func sinkClientCount(mappings []upnp.Mapping, clientIP string) int {
 func refuseNATPMP(datagram []byte, code uint16, epochSec uint32) []byte {
 	out := make([]byte, 8)
 	out[0] = proto.NATPMPVersion
+	if code == proto.NATPMPResultUnsupportedVer {
+		binary.BigEndian.PutUint16(out[2:4], code)
+		binary.BigEndian.PutUint32(out[4:8], epochSec)
+		return out
+	}
 	if len(datagram) >= 2 {
 		op := datagram[1]
+		out[1] = op | 128
 		switch op {
 		case proto.NATPMPOpUDPPortMapping, proto.NATPMPOpTCPPortMapping, proto.NATPMPOpPublicAddress:
-			out[1] = op + 128
+			if len(datagram) == 12 && op != proto.NATPMPOpPublicAddress {
+				out = (proto.NATPMPResponse{Op: op, ResultCode: code, EpochSec: epochSec, InternalPort: binary.BigEndian.Uint16(datagram[4:6])}).EncodeMapping()
+			} else if op == proto.NATPMPOpPublicAddress {
+				out = (proto.NATPMPResponse{Op: op, ResultCode: code, EpochSec: epochSec}).EncodePublicAddress()
+			}
 		}
 	}
 	binary.BigEndian.PutUint16(out[2:4], code)

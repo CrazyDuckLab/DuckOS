@@ -31,6 +31,11 @@ func skipUnlessLive(t *testing.T) {
 	if os.Getenv("DUCKOS_LIVE_NFT") != "1" {
 		t.Skip("live nft qualification disabled (set DUCKOS_LIVE_NFT=1)")
 	}
+	self, err := os.Readlink("/proc/self/ns/net")
+	init, initErr := os.Readlink("/proc/1/ns/net")
+	if err != nil || initErr != nil || self == init {
+		t.Fatal("refusing live nftables qualification in host network namespace")
+	}
 	if os.Geteuid() != 0 {
 		t.Skip("live nft qualification requires root")
 	}

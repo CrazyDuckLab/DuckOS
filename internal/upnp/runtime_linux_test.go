@@ -667,3 +667,19 @@ func TestRuntime_SubscribeFreshChannel(t *testing.T) {
 	case <-time.After(50 * time.Millisecond):
 	}
 }
+
+func TestRuntimeAllowedClientsAtMutationBoundary(t *testing.T) {
+	mgr := NewManager()
+	n := Network{NetworkRef: "lan-test", Protocols: []Protocol{ProtoNATPMP}, TTLSec: 3600, AllowedClients: []string{"192.168.10.99"}}
+	r := NewRuntime(mgr, &recordingBackend{})
+	if err := r.EnableNetwork(n, ""); err != nil {
+		t.Fatal(err)
+	}
+	m := Mapping{ID: "policy-test", NetworkRef: n.NetworkRef, Protocol: ProtoNATPMP, Transport: TransportUDP, ClientIP: "192.168.10.50", InternalHost: "192.168.10.50", InternalPort: 5000, ExternalPort: 5000, ExpiresAt: time.Now().Add(time.Hour), CreatedAt: time.Now()}
+	if err := r.AddMapping(m, "nat-pmp:test"); err == nil {
+		t.Fatal("runtime accepted a client outside the network allow-list")
+	}
+	if len(r.Mappings()) != 0 {
+		t.Fatal("rejected mapping persisted")
+	}
+}

@@ -50,27 +50,15 @@ func natPMPReqAt(transport byte, intPort, extPort uint16, lifetime uint32, srcPo
 	b := make([]byte, 12)
 	b[0] = 0
 	b[1] = transport
-	b[2] = byte(intPort >> 8)
-	b[3] = byte(intPort)
-	b[4] = byte(extPort >> 8)
-	b[5] = byte(extPort)
-	b[6] = byte(lifetime >> 24)
-	b[7] = byte(lifetime >> 16)
-	b[8] = byte(lifetime >> 8)
-	b[9] = byte(lifetime)
+	binary.BigEndian.PutUint16(b[4:6], intPort)
+	binary.BigEndian.PutUint16(b[6:8], extPort)
+	binary.BigEndian.PutUint32(b[8:12], lifetime)
 	return b
 }
 
-// natPMPReq builds a request whose source port equals the
-// internal port (the RFC 6886 compliant shape).
+// natPMPReq encodes the RFC 6886 reserved/ports/lifetime layout.
 func natPMPReq(transport byte, intPort, extPort uint16, lifetime uint32) []byte {
-	return natPMPReqAt(transport, intPort, extPort, lifetime, intPort)
-}
-
-// natPMPReqBadSrc builds a request whose source port differs
-// from the claimed internal port.
-func natPMPReqBadSrc(transport byte, intPort, extPort uint16, lifetime uint32) []byte {
-	return natPMPReqAt(transport, intPort, extPort, lifetime, intPort+1)
+	return natPMPReqAt(transport, intPort, extPort, lifetime, 0)
 }
 
 func clientIP() netip.Addr { return netip.MustParseAddr("192.168.10.50") }
@@ -174,7 +162,7 @@ func TestNATPMPQuotaAndRateLimit(t *testing.T) {
 	fresh := netip.MustParseAddr("192.168.10.78")
 	denied := 0
 	for i := 0; i < limits.RequestsPerMinute+10; i++ {
-		if !s.HandleNATPMP(natPMPReq(1, 30000, 0, 0), fresh, 30000, lanNet).Accepted {
+		if !s.HandleNATPMP(natPMPReq(1, 30000, 0, 60), fresh, 30000, lanNet).Accepted {
 			denied++
 		}
 	}
@@ -213,7 +201,7 @@ func TestNATPMPMalformedAndPublicAddress(t *testing.T) {
 		t.Fatalf("malformed handling: %+v", res)
 	}
 	// Public address returns the observed external address.
-	res = s.HandleNATPMP([]byte{0, 128}, clientIP(), 0, lanNet)
+	res = s.HandleNATPMP([]byte{0, 0}, clientIP(), 0, lanNet)
 	if res.Accepted || len(res.Response) != 12 {
 		t.Fatalf("public address: %+v", res)
 	}
@@ -222,7 +210,7 @@ func TestNATPMPMalformedAndPublicAddress(t *testing.T) {
 	}
 	// Unobserved external address = honest network failure.
 	s2 := NewServer(Limits{}, nil, newMemSink(t))
-	res = s2.HandleNATPMP([]byte{0, 128}, clientIP(), 0, lanNet)
+	res = s2.HandleNATPMP([]byte{0, 0}, clientIP(), 0, lanNet)
 	if res.Response[2] != 0 || res.Response[3] != 3 {
 		t.Fatalf("expected network-failure code, got %v", res.Response[2:4])
 	}
@@ -363,23 +351,57 @@ func TestBindCrossSubnetGuard(t *testing.T) {
 	}
 }
 
-func TestNATPMPSourcePortMismatchRefused(t *testing.T) {
+func TestNATPMPIndependentSourcePort(t *testing.T) {
 	s, sink := newTestServer(t, nil)
-	// Epoch is measured from server start (real clock), so the
-	// fake clock must stay ahead of it.
-	base := time.Now().Add(10 * time.Second)
-	s.core.nowFn = func() time.Time { return base }
-	// natPMPReqBadSrc claims internal port 5000 but "arrives"
-	// from a different source port.
-	res := s.HandleNATPMP(natPMPReqBadSrc(1, 5000, 0, 600), clientIP(), 0, lanNet)
-	if res.Accepted {
-		t.Fatal("mismatched source port accepted")
+	res := s.HandleNATPMP(natPMPReq(1, 5000, 0, 600), clientIP(), 49152, lanNet)
+	if !res.Accepted || len(sink.Mappings()) != 1 {
+		t.Fatal("ephemeral control source port must be accepted")
 	}
-	if n := len(sink.Mappings()); n != 0 {
-		t.Fatalf("mapping created: %d", n)
+}
+
+func (m *memSink) RemoveMapping(id string) error {
+	if m.fail {
+		return errSinkDown
 	}
-	// The refusal must still carry the epoch (RFC 6886).
-	if got := binary.BigEndian.Uint32(res.Response[4:8]); got == 0 {
-		t.Fatal("refusal missing epoch")
+	m.mgr.RevokeMapping(id)
+	return nil
+}
+
+func TestNATPMPDeletionOwnership(t *testing.T) {
+	s, sink := newTestServer(t, nil)
+	other := netip.MustParseAddr("192.168.10.51")
+	s.HandleNATPMP(natPMPReq(1, 5000, 5000, 600), clientIP(), 49152, lanNet)
+	s.HandleNATPMP(natPMPReq(1, 5001, 5001, 600), other, 49152, lanNet)
+	for range 2 {
+		r := s.HandleNATPMP(natPMPReq(1, 5000, 0, 0), clientIP(), 49152, lanNet)
+		if len(r.Response) != 16 || binary.BigEndian.Uint16(r.Response[2:4]) != 0 || binary.BigEndian.Uint32(r.Response[12:16]) != 0 {
+			t.Fatalf("deletion: %+v", r)
+		}
+	}
+	if got := sink.Mappings(); len(got) != 1 || got[0].ClientIP != other.String() {
+		t.Fatalf("foreign mapping changed: %+v", got)
+	}
+}
+
+func TestNATPMPShortPacketsAndVersion(t *testing.T) {
+	s, _ := newTestServer(t, nil)
+	for _, b := range [][]byte{nil, {0}, {0, 128}, {0, 255}} {
+		if r := s.HandleNATPMP(b, clientIP(), 49152, lanNet); r.Response != nil {
+			t.Fatalf("must ignore %v", b)
+		}
+	}
+	r := s.HandleNATPMP([]byte{7, 1}, clientIP(), 49152, lanNet)
+	if len(r.Response) != 8 || r.Response[1] != 0 || binary.BigEndian.Uint16(r.Response[2:4]) != 1 {
+		t.Fatalf("version: %v", r.Response)
+	}
+}
+
+func TestNATPMPDeletionFailureIsNotAcknowledged(t *testing.T) {
+	s, sink := newTestServer(t, nil)
+	s.HandleNATPMP(natPMPReq(1, 5000, 5000, 600), clientIP(), 49152, lanNet)
+	sink.fail = true
+	r := s.HandleNATPMP(natPMPReq(1, 5000, 0, 0), clientIP(), 49152, lanNet)
+	if binary.BigEndian.Uint16(r.Response[2:4]) == 0 || len(sink.Mappings()) != 1 {
+		t.Fatal("failed deletion acknowledged")
 	}
 }

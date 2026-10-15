@@ -193,6 +193,15 @@ func (r *Runtime) AddMapping(m Mapping, source string) error {
 	if !protocolAllowed(net, m.Protocol) {
 		return fmt.Errorf("upnp: protocol %s is not enabled on %s", m.Protocol, m.NetworkRef)
 	}
+	if len(net.AllowedClients) > 0 {
+		allowed := false
+		for _, client := range net.AllowedClients {
+			allowed = allowed || client == m.ClientIP
+		}
+		if !allowed {
+			return errors.New("upnp: client is not allowed on this network")
+		}
+	}
 	if m.ExpiresAt.IsZero() {
 		ttl := time.Duration(net.TTLSec) * time.Second
 		if ttl <= 0 {
@@ -223,17 +232,26 @@ func (r *Runtime) AddMapping(m Mapping, source string) error {
 
 // RevokeMapping removes the mapping and tells the backend.
 func (r *Runtime) RevokeMapping(id string) {
+	_ = r.RemoveMapping(id)
+}
+
+// RemoveMapping preserves desired state if the kernel refuses removal.
+// Protocol deletion must not acknowledge a mapping that is still installed.
+func (r *Runtime) RemoveMapping(id string) error {
 	for _, m := range r.mgr.Mappings() {
 		if m.ID == id {
-			_ = r.backend.Remove(id)
+			if err := r.backend.Remove(id); err != nil {
+				return err
+			}
 			r.mgr.RevokeMapping(id)
 			r.mu.Lock()
 			r.observedAt = time.Now().UTC()
 			r.mu.Unlock()
 			r.emit(MappingEvent{Kind: "removed", Mapping: m, At: r.observedAt, Source: "operator"})
-			return
+			return nil
 		}
 	}
+	return nil
 }
 
 // ObservedAt returns the last time the runtime state changed.
