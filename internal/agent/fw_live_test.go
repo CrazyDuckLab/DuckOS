@@ -325,19 +325,15 @@ func kernelRuleComments(t *testing.T) string {
 	}
 	var comments []string
 	for _, entry := range wire.NFTables {
+		// nft 1.x carries the comment as a rule-level field.
 		var rule struct {
-			Expr []map[string]json.RawMessage `json:"expr"`
+			Comment string `json:"comment"`
 		}
 		if json.Unmarshal(entry["rule"], &rule) != nil {
 			continue
 		}
-		for _, expr := range rule.Expr {
-			var c struct {
-				Comment string `json:"comment"`
-			}
-			if json.Unmarshal(expr["comment"], &c) == nil && c.Comment != "" {
-				comments = append(comments, c.Comment)
-			}
+		if rule.Comment != "" {
+			comments = append(comments, rule.Comment)
 		}
 	}
 	return strings.Join(comments, ",")
