@@ -36,17 +36,24 @@ var (
 type Protocol string
 
 const (
-	ProtocolVLESS  Protocol = "vless"
-	ProtocolTrojan Protocol = "trojan"
+	ProtocolVLESS       Protocol = "vless"
+	ProtocolTrojan      Protocol = "trojan"
+	ProtocolVMess       Protocol = "vmess"
+	ProtocolShadowsocks Protocol = "shadowsocks"
+	ProtocolSOCKS       Protocol = "socks"
+	ProtocolHTTP        Protocol = "http"
 )
 
 // Transport is the underlying connection transport.
 type Transport string
 
 const (
-	TransportTCP  Transport = "tcp"
-	TransportWeb  Transport = "ws"
-	TransportGRPC Transport = "grpc"
+	TransportTCP         Transport = "tcp"
+	TransportWeb         Transport = "ws"
+	TransportGRPC        Transport = "grpc"
+	TransportXHTTP       Transport = "xhttp"
+	TransportHTTPUpgrade Transport = "httpupgrade"
+	TransportKCP         Transport = "kcp"
 )
 
 // Security is the transport security layer.
@@ -76,10 +83,65 @@ type Server struct {
 	RealitySNI    []string  `json:"realitySni,omitempty"`
 	Fingerprint   string    `json:"fingerprint,omitempty"`
 	ShortIDRef    *KeyRef   `json:"shortIdRef,omitempty"`
-	Enabled       bool      `json:"enabled"`
-	Tags          []string  `json:"tags,omitempty"`
-	CreatedAt     time.Time `json:"createdAt"`
-	UpdatedAt     time.Time `json:"updatedAt"`
+	// RealityPublicKey is the public half of the REALITY X25519
+	// keypair. It is NOT a secret (the private half lives in the
+	// vault) and is required to build client share links for
+	// REALITY inbounds.
+	RealityPublicKey string `json:"realityPublicKey,omitempty"`
+	// SSMethod is the AEAD cipher for the shadowsocks inbound.
+	SSMethod          string             `json:"ssMethod,omitempty"`
+	TransportSettings *TransportSettings `json:"transportSettings,omitempty"`
+	Enabled           bool               `json:"enabled"`
+	Tags              []string           `json:"tags,omitempty"`
+	CreatedAt         time.Time          `json:"createdAt"`
+	UpdatedAt         time.Time          `json:"updatedAt"`
+}
+
+// TransportSettings carries the transport-specific tuning for the
+// inbound. Exactly one block matching Server.Transport may be
+// present; the validator enforces the pairing.
+type TransportSettings struct {
+	WS          *WSSettings          `json:"ws,omitempty"`
+	GRPC        *GRPCSettings        `json:"grpc,omitempty"`
+	TCP         *TCPSettings         `json:"tcp,omitempty"`
+	XHTTP       *XHTTPSettings       `json:"xhttp,omitempty"`
+	HTTPUpgrade *HTTPUpgradeSettings `json:"httpUpgrade,omitempty"`
+	KCP         *KCPSettings         `json:"kcp,omitempty"`
+}
+
+type WSSettings struct {
+	Path string `json:"path,omitempty"`
+	Host string `json:"host,omitempty"`
+}
+
+type GRPCSettings struct {
+	ServiceName string `json:"serviceName,omitempty"`
+	MultiMode   bool   `json:"multiMode,omitempty"`
+}
+
+type TCPSettings struct {
+	// HeaderType is "" (raw) or "http" (HTTP header obfuscation).
+	HeaderType string `json:"headerType,omitempty"`
+}
+
+type XHTTPSettings struct {
+	Path string `json:"path,omitempty"`
+	Host string `json:"host,omitempty"`
+	// Mode is one of auto, packet-up, stream-up, stream-one.
+	Mode string `json:"mode,omitempty"`
+	// Extra preserves unknown imported XHTTP fields so an import
+	// never silently drops settings it does not model.
+	Extra map[string]any `json:"extra,omitempty"`
+}
+
+type HTTPUpgradeSettings struct {
+	Path string `json:"path,omitempty"`
+	Host string `json:"host,omitempty"`
+}
+
+type KCPSettings struct {
+	MTU        int    `json:"mtu,omitempty"`
+	HeaderType string `json:"headerType,omitempty"`
 }
 
 // KeyRef is the bounded pointer at a vault-managed secret. The vault
@@ -93,11 +155,15 @@ type KeyRef struct {
 // User is a credentialed Xray client. The credentials themselves are
 // vault-managed; the canonical record holds only the references.
 type User struct {
-	ID         string    `json:"id"`
-	ServerID   string    `json:"serverId"`
-	Name       string    `json:"name"`
-	UUID       string    `json:"uuid,omitempty"`
-	Password   string    `json:"password,omitempty"`
+	ID       string `json:"id"`
+	ServerID string `json:"serverId"`
+	Name     string `json:"name"`
+	UUID     string `json:"uuid,omitempty"`
+	Password string `json:"password,omitempty"`
+	// Flow is the VLESS proxy-protocol flow (e.g. xtls-rprx-vision).
+	// Any non-empty value is validated against the compatibility
+	// matrix (VLESS + tcp + REALITY only).
+	Flow       string    `json:"flow,omitempty"`
 	Credential *KeyRef   `json:"credential,omitempty"`
 	Email      string    `json:"email,omitempty"`
 	Enabled    bool      `json:"enabled"`
@@ -155,11 +221,19 @@ type Subscription struct {
 }
 
 func IsValidProtocol(p Protocol) bool {
-	return p == ProtocolVLESS || p == ProtocolTrojan
+	switch p {
+	case ProtocolVLESS, ProtocolTrojan, ProtocolVMess, ProtocolShadowsocks, ProtocolSOCKS, ProtocolHTTP:
+		return true
+	}
+	return false
 }
 
 func IsValidTransport(t Transport) bool {
-	return t == TransportTCP || t == TransportWeb || t == TransportGRPC
+	switch t {
+	case TransportTCP, TransportWeb, TransportGRPC, TransportXHTTP, TransportHTTPUpgrade, TransportKCP:
+		return true
+	}
+	return false
 }
 
 func IsValidSecurity(s Security) bool {
@@ -173,16 +247,24 @@ func (s Server) Validate() error {
 		return errors.New("invalid xray server id or name")
 	}
 	if !IsValidProtocol(s.Protocol) {
-		return errors.New("xray protocol must be vless or trojan")
+		return errors.New("xray protocol must be vless, vmess, trojan, shadowsocks, socks or http")
 	}
 	if !IsValidTransport(s.Transport) {
-		return errors.New("xray transport must be tcp, ws or grpc")
+		return errors.New("xray transport must be tcp, ws, grpc, xhttp, httpupgrade or kcp")
 	}
 	if !IsValidSecurity(s.Security) {
 		return errors.New("xray security must be none, tls or reality")
 	}
 	if s.Protocol == ProtocolTrojan && s.Security == SecurityReality {
 		return errors.New("REALITY requires VLESS")
+	}
+	if s.Security == SecurityReality && s.RealityPublicKey != "" {
+		if !isRealityPublicKey(s.RealityPublicKey) {
+			return errors.New("REALITY public key must be 43 characters of unpadded URL-safe base64")
+		}
+	}
+	if err := ValidateCompatibility(s); err != nil {
+		return err
 	}
 	if s.Security == SecurityNone && s.Protocol == ProtocolVLESS {
 		// VLESS without TLS is acceptable but the operator should

@@ -119,6 +119,11 @@ func renderInbound(server Server, users []User) (Inbound, error) {
 	if len(matched) == 0 {
 		return Inbound{}, fmt.Errorf("xray: server %s has no enabled users", server.Name)
 	}
+	for _, u := range matched {
+		if err := ValidateUserForServer(server, u); err != nil {
+			return Inbound{}, fmt.Errorf("xray: server %s user %s: %w", server.Name, u.Name, err)
+		}
+	}
 	settings, err := buildProtocolSettings(server, matched)
 	if err != nil {
 		return Inbound{}, err
@@ -162,6 +167,17 @@ func matchUsers(server Server, users []User) []User {
 }
 
 func buildProtocolSettings(server Server, users []User) (json.RawMessage, error) {
+	// credentialFor picks the value the renderer emits for the
+	// client entry: the inline secret when present, otherwise the
+	// vault placeholder the materialiser substitutes at apply
+	// time (the placeholder carries the vault KeyID so distinct
+	// xray-credential records never collide).
+	credentialFor := func(u User) string {
+		if u.Credential == nil {
+			return ""
+		}
+		return CredentialPlaceholder(u.Credential.KeyID)
+	}
 	switch server.Protocol {
 	case ProtocolVLESS:
 		// VLESS inbound settings: xray(8) requires
@@ -172,22 +188,14 @@ func buildProtocolSettings(server Server, users []User) (json.RawMessage, error)
 		// "please add/set 'decryption':'none'".
 		clients := []map[string]any{}
 		for _, u := range users {
-			// A user may carry a Credential vault ref
-			// (purpose "xray-credential") instead of an
-			// inline UUID. xray(8) refuses to start with
-			// an empty settings.clients[].id, so the
-			// renderer emits a placeholder of the form
-			// "<resolved at apply time; see vault record
-			// <Credential.KeyID>>" and the materialiser
-			// substitutes the resolved UUID bytes at
-			// apply time. The placeholder carries the
-			// vault KeyID so two users with two distinct
-			// xray-credential records do not collide.
 			id := u.UUID
-			if id == "" && u.Credential != nil {
-				id = CredentialPlaceholder(u.Credential.KeyID)
+			if id == "" {
+				id = credentialFor(u)
 			}
 			entry := map[string]any{"id": id, "level": 0}
+			if u.Flow != "" {
+				entry["flow"] = u.Flow
+			}
 			if u.Email != "" {
 				entry["email"] = u.Email
 			}
@@ -198,17 +206,76 @@ func buildProtocolSettings(server Server, users []User) (json.RawMessage, error)
 			"decryption": "none",
 		}
 		return json.Marshal(payload)
-	case ProtocolTrojan:
-		passwords := []map[string]any{}
+	case ProtocolVMess:
+		// VMess inbound: clients carry UUIDs; alterId is fixed at
+		// 0 (the only value supported by modern Xray-core).
+		clients := []map[string]any{}
 		for _, u := range users {
-			entry := map[string]any{"password": u.Password, "level": 0}
+			id := u.UUID
+			if id == "" {
+				id = credentialFor(u)
+			}
+			entry := map[string]any{"id": id, "level": 0, "alterId": 0}
 			if u.Email != "" {
 				entry["email"] = u.Email
 			}
-			passwords = append(passwords, entry)
+			clients = append(clients, entry)
+		}
+		return json.Marshal(map[string]any{"clients": clients})
+	case ProtocolTrojan:
+		clients := []map[string]any{}
+		for _, u := range users {
+			password := u.Password
+			if password == "" {
+				password = credentialFor(u)
+			}
+			entry := map[string]any{"password": password, "level": 0}
+			if u.Email != "" {
+				entry["email"] = u.Email
+			}
+			clients = append(clients, entry)
+		}
+		return json.Marshal(map[string]any{"clients": clients})
+	case ProtocolShadowsocks:
+		// Shadowsocks inbound: the cipher is inbound-wide; each
+		// client carries its own password (an independent PSK for
+		// the 2022 methods).
+		clients := []map[string]any{}
+		for _, u := range users {
+			password := u.Password
+			if password == "" {
+				password = credentialFor(u)
+			}
+			entry := map[string]any{"password": password}
+			if u.Email != "" {
+				entry["email"] = u.Email
+			}
+			clients = append(clients, entry)
 		}
 		payload := map[string]any{
-			"clients": passwords,
+			"method":  server.SSMethod,
+			"network": "tcp,udp",
+			"clients": clients,
+		}
+		return json.Marshal(payload)
+	case ProtocolSOCKS, ProtocolHTTP:
+		// SOCKS / HTTP inbounds: username+password accounts.
+		accounts := []map[string]any{}
+		for _, u := range users {
+			password := u.Password
+			if password == "" {
+				password = credentialFor(u)
+			}
+			accounts = append(accounts, map[string]any{"user": u.Name, "pass": password})
+		}
+		payload := map[string]any{
+			"auth":     "password",
+			"accounts": accounts,
+		}
+		if server.Protocol == ProtocolHTTP {
+			// xray(8) http inbound has no top-level "auth";
+			// accounts alone enable password auth.
+			delete(payload, "auth")
 		}
 		return json.Marshal(payload)
 	}
@@ -216,10 +283,16 @@ func buildProtocolSettings(server Server, users []User) (json.RawMessage, error)
 }
 
 func buildStreamSettings(server Server) (json.RawMessage, error) {
+	settings := map[string]any{}
 	switch server.Security {
 	case SecurityNone:
-		// No transport security, no stream settings.
-		return nil, nil
+		// No transport security, but non-TCP transports still
+		// need streamSettings to carry their transport block.
+		if server.Transport == TransportTCP {
+			return nil, nil
+		}
+		applyTransport(server, settings)
+		return json.Marshal(settings)
 	case SecurityTLS:
 		settings := map[string]any{
 			"security": "tls",
@@ -252,19 +325,85 @@ func buildStreamSettings(server Server) (json.RawMessage, error) {
 }
 
 func applyTransport(server Server, settings map[string]any) {
+	// explicit path/host values win over the legacy name-derived
+	// defaults so imports and edits are preserved verbatim.
+	ts := server.TransportSettings
 	switch server.Transport {
 	case TransportTCP:
 		settings["network"] = "tcp"
+		if ts != nil && ts.TCP != nil && ts.TCP.HeaderType == "http" {
+			settings["tcpSettings"] = map[string]any{
+				"header": map[string]any{"type": "http"},
+			}
+		}
 	case TransportWeb:
 		settings["network"] = "ws"
-		settings["wsSettings"] = map[string]any{
-			"path": "/" + server.Name,
+		ws := map[string]any{"path": "/" + server.Name}
+		if ts != nil && ts.WS != nil {
+			if ts.WS.Path != "" {
+				ws["path"] = ts.WS.Path
+			}
+			if ts.WS.Host != "" {
+				ws["headers"] = map[string]any{"Host": ts.WS.Host}
+			}
 		}
+		settings["wsSettings"] = ws
 	case TransportGRPC:
 		settings["network"] = "grpc"
-		settings["grpcSettings"] = map[string]any{
-			"serviceName": "duckos-" + server.Name,
+		grpc := map[string]any{"serviceName": "duckos-" + server.Name}
+		if ts != nil && ts.GRPC != nil {
+			if ts.GRPC.ServiceName != "" {
+				grpc["serviceName"] = ts.GRPC.ServiceName
+			}
+			if ts.GRPC.MultiMode {
+				grpc["multiMode"] = true
+			}
 		}
+		settings["grpcSettings"] = grpc
+	case TransportXHTTP:
+		settings["network"] = "xhttp"
+		xh := map[string]any{"path": "/" + server.Name}
+		if ts != nil && ts.XHTTP != nil {
+			if ts.XHTTP.Path != "" {
+				xh["path"] = ts.XHTTP.Path
+			}
+			if ts.XHTTP.Host != "" {
+				xh["host"] = ts.XHTTP.Host
+			}
+			if ts.XHTTP.Mode != "" {
+				xh["mode"] = ts.XHTTP.Mode
+			}
+			for k, v := range ts.XHTTP.Extra {
+				if _, exists := xh[k]; !exists {
+					xh[k] = v
+				}
+			}
+		}
+		settings["xhttpSettings"] = xh
+	case TransportHTTPUpgrade:
+		settings["network"] = "httpupgrade"
+		hu := map[string]any{"path": "/" + server.Name}
+		if ts != nil && ts.HTTPUpgrade != nil {
+			if ts.HTTPUpgrade.Path != "" {
+				hu["path"] = ts.HTTPUpgrade.Path
+			}
+			if ts.HTTPUpgrade.Host != "" {
+				hu["host"] = ts.HTTPUpgrade.Host
+			}
+		}
+		settings["httpupgradeSettings"] = hu
+	case TransportKCP:
+		settings["network"] = "kcp"
+		kcp := map[string]any{}
+		if ts != nil && ts.KCP != nil {
+			if ts.KCP.MTU > 0 {
+				kcp["mtu"] = ts.KCP.MTU
+			}
+			if ts.KCP.HeaderType != "" {
+				kcp["header"] = map[string]any{"type": ts.KCP.HeaderType}
+			}
+		}
+		settings["kcpSettings"] = kcp
 	}
 }
 

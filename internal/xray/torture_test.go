@@ -35,14 +35,17 @@ func tortureValidServerFixture() Server {
 // protocol round-trips and every non-canonical protocol is
 // rejected.
 func TestTorture_ProtocolWhitelist(t *testing.T) {
-	for _, p := range []Protocol{ProtocolVLESS, ProtocolTrojan} {
+	for _, p := range []Protocol{ProtocolVLESS, ProtocolTrojan, ProtocolVMess, ProtocolShadowsocks, ProtocolSOCKS, ProtocolHTTP} {
 		s := tortureValidServerFixture()
 		s.Protocol = p
+		if p == ProtocolShadowsocks && s.SSMethod == "" {
+			s.SSMethod = "aes-256-gcm"
+		}
 		if err := s.Validate(); err != nil {
 			t.Errorf("canonical protocol %q rejected: %v", p, err)
 		}
 	}
-	for _, p := range []Protocol{"", "wireguard", "openvpn", "vless+", "shadowsocks", "socks"} {
+	for _, p := range []Protocol{"", "wireguard", "openvpn", "vless+", "shadowsock"} {
 		s := tortureValidServerFixture()
 		s.Protocol = p
 		if err := s.Validate(); err == nil {
