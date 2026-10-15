@@ -170,12 +170,13 @@ func TestFirewallServiceRollback(t *testing.T) {
 func TestComposeWANCandidateStaticAndDHCP(t *testing.T) {
 	current, err := os.ReadFile("testdata/wan-current.json")
 	if err != nil {
-		// Fall back to a minimal inline fixture carrying the WAN
-		// links the providers in this test attach to.
-		current = []byte(`{"version":1,"interfaces":[{"id":"wan-eth","name":"eth-wan","role":"wan","kind":"physical","mtu":1500,"addresses":["192.168.1.10/24"],"dhcpClient":"none"},{"id":"wan-eth2","name":"eth-wan2","role":"wan","kind":"physical","mtu":1500,"addresses":[],"dhcpClient":"none"}],"routes":[],"firewall":{"masquerade":[],"forwards":[],"rules":[]},"dns":{"upstreams":[],"records":[]}}`)
+		// Fall back to a minimal inline fixture.
+		current = []byte(`{"version":1,"interfaces":[{"id":"mgmt","name":"eth-mgmt","role":"lan","kind":"physical","mtu":1500,"addresses":["192.168.1.10/24"],"dhcpClient":"none","management":true}],"routes":[],"firewall":{"masquerade":[],"forwards":[],"rules":[]},"dns":{"upstreams":[],"records":[]}}`)
 	}
 	// Static.
-	p := wanProviderFixture("up1", "static", "eth-wan", "203.0.113.2/32", "203.0.113.1")
+	// The static address must be a prefix that contains the
+	// gateway (a /32 has no connected subnet for the gateway).
+	p := wanProviderFixture("up1", "static", "eth-wan", "203.0.113.2/24", "203.0.113.1")
 	cand, err := composeWANCandidate(current, p)
 	if err != nil {
 		t.Fatalf("static compose: %v", err)

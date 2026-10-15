@@ -211,7 +211,7 @@ func NewFirewallRulesService(storePath, stageDir, nftBin string, acc UPnPAccess)
 	if err := os.MkdirAll(stageDir, 0o700); err != nil {
 		return nil, fmt.Errorf("fwrules: stage dir: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(storePath), 0o700); err != nil {
+	if err := os.MkdirAll(storePath, 0o700); err != nil {
 		return nil, fmt.Errorf("fwrules: store dir: %w", err)
 	}
 	validate := func(raw json.RawMessage) error {
@@ -220,7 +220,10 @@ func NewFirewallRulesService(storePath, stageDir, nftBin string, acc UPnPAccess)
 	}
 	var store *state.Store
 	var err error
-	if _, statErr := os.Stat(storePath); statErr == nil {
+	// The store path IS the private journal directory; first boot
+	// creates it and its empty baseline, every later boot opens
+	// the existing journal or fails closed.
+	if _, statErr := os.Stat(filepath.Join(storePath, "state.json")); statErr == nil {
 		store, err = state.OpenExisting(storePath, validate)
 	} else {
 		empty, _ := json.Marshal(fwrules.Wire{Version: 1, Rules: []fwrules.Rule{}})
