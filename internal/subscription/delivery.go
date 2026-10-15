@@ -237,10 +237,15 @@ func (l *rateLimiter) allow(key string) bool {
 // DeliveryHandler serves the public subscription endpoint.
 type DeliveryHandler struct {
 	Store *TokenStore
-	// Render produces the payload for a subscription id. It must
-	// internally refuse disabled/expired subscriptions; any error
-	// becomes the uniform 404 so state never leaks.
+	// Render produces the default (base64) payload for a
+	// subscription id. It must internally refuse disabled/expired
+	// subscriptions; any error becomes the uniform 404 so state
+	// never leaks.
 	Render func(subID string) ([]byte, error)
+	// RenderFormat, when wired, produces the payload in the
+	// requested format. The ?format= query value is validated
+	// against the Formats allow-list before this is called.
+	RenderFormat func(subID string, format Format) ([]byte, error)
 	// Prefix is the mounted path, default "/sub".
 	Prefix string
 	// RequestsPerMinute is the per-token and per-IP limit.
@@ -278,6 +283,14 @@ func (h *DeliveryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		uniform404(w)
 		return
 	}
+	format := Format(r.URL.Query().Get("format"))
+	if r.URL.Query().Get("format") != "" && !Formats[format] {
+		uniform404(w)
+		return
+	}
+	if format == "" {
+		format = FormatBase64
+	}
 	path := strings.TrimPrefix(r.URL.Path, h.Prefix)
 	token := strings.Trim(path, "/")
 	// The URL shape is exactly /<token>: any extra segments,
@@ -299,17 +312,23 @@ func (h *DeliveryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		uniform404(w)
 		return
 	}
-	if h.Render == nil {
-		uniform404(w)
-		return
+	var payload []byte
+	var err error
+	if format == FormatBase64 || h.RenderFormat == nil {
+		if h.Render == nil {
+			uniform404(w)
+			return
+		}
+		payload, err = h.Render(rec.SubID)
+	} else {
+		payload, err = h.RenderFormat(rec.SubID, format)
 	}
-	payload, err := h.Render(rec.SubID)
 	if err != nil || len(payload) == 0 {
 		uniform404(w)
 		return
 	}
 	hd := w.Header()
-	hd.Set("Content-Type", "text/plain; charset=utf-8")
+	hd.Set("Content-Type", format.ContentType())
 	hd.Set("Cache-Control", "no-store")
 	hd.Set("X-Content-Type-Options", "nosniff")
 	hd.Set("Content-Length", fmt.Sprint(len(payload)))
