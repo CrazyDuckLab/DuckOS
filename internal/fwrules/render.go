@@ -18,20 +18,38 @@ import (
 // TableName is the exclusively-owned nftables table.
 const TableName = "duckos_fw"
 
+// EnabledRules returns the subset of rules that render into
+// the kernel, in manager order.
+func EnabledRules(rules []Rule) []Rule {
+	var enabled []Rule
+	for _, r := range rules {
+		if r.Enabled {
+			enabled = append(enabled, r)
+		}
+	}
+	return enabled
+}
+
 // Render produces one atomic nft transaction that replaces
 // inet duckos_fw with exactly one rule per enabled rule, in
-// deterministic id order.
+// deterministic id order. A candidate with no enabled rules
+// renders as an idempotent table removal: the canonical empty
+// firewall state is "owned table absent", so Render, Apply,
+// readback and Verify agree on what empty means.
 func Render(rules []Rule) ([]byte, error) {
 	var b strings.Builder
 	b.WriteString("# duckos.duckos_fw atomic table replacement\n")
+	enabled := EnabledRules(rules)
+	if len(enabled) == 0 {
+		b.WriteString("add table inet " + TableName + "\n")
+		b.WriteString("delete table inet " + TableName + "\n")
+		return []byte(b.String()), nil
+	}
 	b.WriteString("add table inet " + TableName + "\n")
 	b.WriteString("delete table inet " + TableName + "\n")
 	b.WriteString("add table inet " + TableName + "\n")
 	b.WriteString("add chain inet " + TableName + " forward { type filter hook forward priority filter ; policy accept ; }\n")
-	for _, r := range rules {
-		if !r.Enabled {
-			continue
-		}
+	for _, r := range enabled {
 		line, err := renderRule(r)
 		if err != nil {
 			return nil, err
@@ -108,13 +126,16 @@ func sanitizeComment(c string) string {
 
 // DecodeSnapshotObjects decodes an `nft -j list table inet
 // duckos_fw` readback into the validated object list. Empty
-// output (table absent) decodes to an empty list, not an
-// error, so Verify can distinguish the two states.
+// stdout decodes to an empty list with no error; whether the
+// table is legitimately absent or nft itself failed must be
+// decided by the caller from the process exit status, never
+// from this function. Any object outside the owned inet
+// duckos_fw scope is a hard error, never silently dropped.
 func DecodeSnapshotObjects(raw []byte) ([]json.RawMessage, error) {
 	if len(raw) == 0 {
-		return nil, nil
+		return []json.RawMessage{}, nil
 	}
-	snap, err := network.DecodeNFTSnapshot(raw)
+	snap, err := network.DecodeNFTSnapshotForTable(raw, TableName)
 	if err != nil {
 		return nil, err
 	}

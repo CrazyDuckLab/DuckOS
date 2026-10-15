@@ -11,6 +11,11 @@ import (
 
 const maxNFTSnapshotBytes = 512 << 10
 
+// OwnedTable is the exclusively enrolled network-core table. The firewall
+// rule module owns a separate table (fwrules.TableName) decoded through the
+// same contract via DecodeNFTSnapshotForTable.
+const OwnedTable = "duckos"
+
 // NFTSnapshot is kernel readback of the exclusively enrolled inet/duckos table.
 // It belongs in the private Agent recovery journal, never in mutation input.
 // Empty Objects means the table was absent, not that observation failed.
@@ -19,6 +24,14 @@ type NFTSnapshot struct {
 }
 
 func DecodeNFTSnapshot(raw []byte) (NFTSnapshot, error) {
+	return DecodeNFTSnapshotForTable(raw, OwnedTable)
+}
+
+// DecodeNFTSnapshotForTable decodes an `nft --json list table` readback that
+// must belong to exactly one owned table: the named inet table, with chains
+// and rules scoped to it. Any object outside that table, any malformed or
+// unsupported object, and any incomplete envelope fails closed.
+func DecodeNFTSnapshotForTable(raw []byte, table string) (NFTSnapshot, error) {
 	var wire struct {
 		NFTables *[]json.RawMessage `json:"nftables"`
 	}
@@ -41,10 +54,14 @@ func DecodeNFTSnapshot(raw []byte) (NFTSnapshot, error) {
 		}
 		s.Objects = append(s.Objects, append(json.RawMessage(nil), rawObject...))
 	}
-	return s, s.Validate()
+	return s, s.validateForTable(table)
 }
 
 func (s NFTSnapshot) Validate() error {
+	return s.validateForTable(OwnedTable)
+}
+
+func (s NFTSnapshot) validateForTable(table string) error {
 	if len(s.Objects) > 4096 {
 		return errors.New("too many nft objects")
 	}
@@ -72,11 +89,11 @@ func (s NFTSnapshot) Validate() error {
 				return errors.New("nft object outside owned family")
 			}
 			if kind == "table" {
-				if scope.Name != "duckos" {
+				if scope.Name != table {
 					return errors.New("nft table outside owned scope")
 				}
 				tables++
-			} else if scope.Table != "duckos" {
+			} else if scope.Table != table {
 				return errors.New("nft object outside owned table")
 			}
 		}

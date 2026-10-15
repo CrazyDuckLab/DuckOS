@@ -88,26 +88,32 @@ func (a *fwrulesAdapter) Apply(_ context.Context, _ /*current*/, candidate json.
 	return a.runNFT(batch)
 }
 
-// Verify reads back the kernel: rules present ⇔ owned table
-// present with objects; empty ruleset ⇔ table absent. The
-// controller treats a Verify error as apply failure and
-// rolls back automatically.
+// Verify reads back the kernel and compares the full semantic
+// state against the candidate: enabled rules present ⇔ owned
+// table present with exactly those rules; empty ruleset ⇔
+// owned table absent. A failed observation is an error, never
+// a successful empty state; the controller treats a Verify
+// error as apply failure and rolls back automatically.
 func (a *fwrulesAdapter) Verify(_ context.Context, candidate json.RawMessage) error {
 	rules, err := a.decode(candidate)
 	if err != nil {
 		return err
 	}
-	objs := readbackFwrTable(a.nftBin)
-	if len(rules) == 0 {
-		if len(objs) != 0 {
-			return fmt.Errorf("fwrules: verify failed: table still present after empty apply")
+	objs, absent, err := a.readback()
+	if err != nil {
+		return fmt.Errorf("fwrules: verify failed: kernel readback error: %w", err)
+	}
+	enabled := fwrules.EnabledRules(rules)
+	if len(enabled) == 0 {
+		if !absent {
+			return fmt.Errorf("fwrules: verify failed: owned table still present after empty apply")
 		}
 		return nil
 	}
-	if len(objs) == 0 {
+	if absent {
 		return fmt.Errorf("fwrules: verify failed: owned table absent after apply")
 	}
-	return nil
+	return fwrules.VerifySnapshot(enabled, objs)
 }
 
 // Restore re-applies the previous known-good ruleset (or
@@ -150,19 +156,32 @@ func (a *fwrulesAdapter) runNFT(batch []byte) error {
 	return nil
 }
 
-// readbackFwrTable lists the owned table; nil = absent/error.
-func readbackFwrTable(nftBin string) []json.RawMessage {
+// readback lists the owned table, distinguishing the three
+// observation outcomes fail-closed: (objects, table absent,
+// error). A nonzero nft exit is only "absent" when nft itself
+// reports the table does not exist; every other failure and
+// every decode error surface as errors, never as an empty
+// successful state.
+func (a *fwrulesAdapter) readback() ([]json.RawMessage, bool, error) {
+	return readbackFwrTable(a.nftBin)
+}
+
+func readbackFwrTable(nftBin string) ([]json.RawMessage, bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, nftBin, "-j", "list", "table", "inet", fwrules.TableName).Output()
+	cmd := exec.CommandContext(ctx, nftBin, "-j", "list", "table", "inet", fwrules.TableName)
+	out, err := cmd.Output()
 	if err != nil {
-		return nil
+		if exitErr, ok := err.(*exec.ExitError); ok && strings.Contains(string(exitErr.Stderr), "No such file") {
+			return nil, true, nil
+		}
+		return nil, false, fmt.Errorf("fwrules: nft list failed: %w", err)
 	}
 	objs, err := fwrules.DecodeSnapshotObjects(out)
 	if err != nil {
-		return nil
+		return nil, false, fmt.Errorf("fwrules: kernel readback decode failed: %w", err)
 	}
-	return objs
+	return objs, false, nil
 }
 
 // FirewallRulesService is the journal-first firewall rule
@@ -457,11 +476,18 @@ func (s *FirewallRulesService) handleObserved(w http.ResponseWriter, r *http.Req
 	s.mu.Lock()
 	nftBin := s.nftBin
 	s.mu.Unlock()
-	objs := readbackFwrTable(nftBin)
-	empty := len(objs) == 0
+	objs, absent, err := readbackFwrTable(nftBin)
+	if err != nil {
+		writeFwrJSON(w, http.StatusBadGateway, map[string]any{
+			"error":      map[string]string{"code": "observation_failed", "message": err.Error()},
+			"observedAt": time.Now().UTC().Format(time.RFC3339),
+		})
+		return
+	}
 	writeFwrJSON(w, http.StatusOK, map[string]any{
 		"objects":    objs,
-		"empty":      empty,
+		"absent":     absent,
+		"empty":      absent || len(objs) == 0,
 		"observedAt": time.Now().UTC().Format(time.RFC3339),
 	})
 }
