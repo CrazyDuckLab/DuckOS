@@ -166,6 +166,10 @@ func (h *Handler) serveNodes(w http.ResponseWriter, r *http.Request, rest string
 		id := strings.TrimSuffix(strings.TrimPrefix(rest, "/"), "/rotate")
 		credential, err := h.Nodes.RotateCredential(id)
 		if err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), "not committed") {
+				problem(w, 503, "rotation_not_committed", err.Error())
+				return
+			}
 			problem(w, 409, "rotate_failed", err.Error())
 			return
 		}
@@ -186,6 +190,13 @@ func (h *Handler) serveNodes(w http.ResponseWriter, r *http.Request, rest string
 		writeJSON(w, 200, map[string]bool{"ok": true})
 	case r.Method == http.MethodDelete && rest != "":
 		if err := h.Nodes.Revoke(strings.TrimPrefix(rest, "/")); err != nil {
+			// A persistence failure must never look like a plain
+			// not-found: the operator has to know the durable
+			// state did not change.
+			if strings.Contains(strings.ToLower(err.Error()), "not committed") {
+				problem(w, 503, "revocation_not_committed", err.Error())
+				return
+			}
 			problem(w, 404, "node_not_found", err.Error())
 			return
 		}
@@ -332,7 +343,11 @@ func (h *Handler) serveTokens(w http.ResponseWriter, r *http.Request, rest strin
 			problem(w, 400, "invalid_request", "Revocation needs a subId.")
 			return
 		}
-		n := h.Tokens.RevokeSubscription(body.SubID)
+		n, err := h.Tokens.RevokeSubscription(body.SubID)
+		if err != nil {
+			problem(w, 503, "token_revoke_failed", err.Error())
+			return
+		}
 		writeJSON(w, 200, map[string]int{"revoked": n})
 	case r.Method == http.MethodGet && rest != "":
 		subID := strings.TrimPrefix(rest, "/")

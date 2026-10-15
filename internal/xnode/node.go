@@ -173,7 +173,7 @@ type Manager struct {
 	clock    func() time.Time
 	adapter  Adapter
 	staleTTL time.Duration
-	persist  func([]*Node) error
+	persist  func(DurableState) error
 }
 
 func NewManager(adapter Adapter) *Manager {
@@ -189,9 +189,22 @@ func NewManager(adapter Adapter) *Manager {
 // SetClock overrides the wall clock (testing).
 func (m *Manager) SetClock(fn func() time.Time) { m.clock = fn }
 
-// SetPersist installs a persistence hook invoked after every
-// mutation with the sorted node list.
-func (m *Manager) SetPersist(fn func([]*Node) error) { m.persist = fn }
+// DurableState is the complete persisted registry state: nodes and
+// enrollment tokens. After a restart the manager is reconstructed
+// exactly from this snapshot, so every security-relevant transition
+// (revocation, rotation, suspension, token consumption) is durable
+// only when the snapshot carrying it has been committed.
+type DurableState struct {
+	Nodes       []Node            `json:"nodes"`
+	Enrollments []EnrollmentToken `json:"enrollments"`
+}
+
+// SetPersist installs the durability hook. The hook MUST commit the
+// whole DurableState atomically (the persist.File adapter does:
+// temp write → fsync → rename → dir fsync) and MUST return an error
+// when durability is not achieved; mutation callers roll their
+// in-memory change back and fail the operation in that case.
+func (m *Manager) SetPersist(fn func(DurableState) error) { m.persist = fn }
 
 // IssueEnrollmentToken mints a single-use enrollment token. The
 // plaintext token is returned exactly once.
@@ -218,6 +231,10 @@ func (m *Manager) IssueEnrollmentToken(ttl time.Duration) (string, EnrollmentTok
 		}
 	}
 	m.enroll[rec.TokenHash] = &rec
+	if err := m.persistLocked(); err != nil {
+		delete(m.enroll, rec.TokenHash)
+		return "", EnrollmentToken{}, fmt.Errorf("xnode: enrollment token not committed: %w", err)
+	}
 	return token, rec, nil
 }
 
@@ -235,18 +252,27 @@ func (m *Manager) Enroll(token string, info NodeInfo) (Node, string, error) {
 	if ok {
 		now := m.clock().UTC()
 		ok = !rec.Used && (rec.ExpiresAt.IsZero() || now.Before(rec.ExpiresAt))
-		rec.Used = true // single-use regardless of outcome beyond this point
 	}
-	m.mu.Unlock()
 	if !ok {
+		m.mu.Unlock()
 		return Node{}, "", errors.New("xnode: enrollment token is unknown, used or expired")
 	}
+	// Transactional enrollment: burn the token, create the node,
+	// commit — any failure rolls BOTH back, so a consumed token
+	// never reappears usable after a restart and a failed durable
+	// commit is never acknowledged as a successful enrollment.
+	rec.Used = true
+	rec.UsedBy = "pending"
 	credential, err := newSecret()
 	if err != nil {
+		rec.Used, rec.UsedBy = false, ""
+		m.mu.Unlock()
 		return Node{}, "", err
 	}
 	id, err := newID()
 	if err != nil {
+		rec.Used, rec.UsedBy = false, ""
+		m.mu.Unlock()
 		return Node{}, "", err
 	}
 	now := m.clock().UTC()
@@ -261,13 +287,19 @@ func (m *Manager) Enroll(token string, info NodeInfo) (Node, string, error) {
 		EnrolledAt:     now,
 		LastSeenAt:     now,
 	}
-	m.mu.Lock()
 	if len(m.nodes) >= MaxNodes {
+		rec.Used, rec.UsedBy = false, ""
 		m.mu.Unlock()
 		return Node{}, "", errors.New("xnode: node capacity exceeded")
 	}
 	m.nodes[id] = &node
-	m.persistLocked()
+	rec.UsedBy = id
+	if err := m.persistLocked(); err != nil {
+		delete(m.nodes, id)
+		rec.Used, rec.UsedBy = false, ""
+		m.mu.Unlock()
+		return Node{}, "", fmt.Errorf("xnode: enrollment not committed (durable state unchanged): %w", err)
+	}
 	m.mu.Unlock()
 	return node, credential, nil
 }
@@ -298,7 +330,10 @@ func (m *Manager) EnrollLocal(name string) (Node, error) {
 		return Node{}, errors.New("xnode: node capacity exceeded")
 	}
 	m.nodes[id] = &node
-	m.persistLocked()
+	if err := m.persistLocked(); err != nil {
+		delete(m.nodes, id)
+		return Node{}, fmt.Errorf("xnode: local enrollment not committed: %w", err)
+	}
 	return node, nil
 }
 
@@ -342,8 +377,13 @@ func (m *Manager) RotateCredential(nodeID string) (string, error) {
 		m.mu.Unlock()
 		return "", errors.New("xnode: local nodes carry no credential")
 	}
+	prevHash := node.CredentialHash
 	node.CredentialHash = hashToken("xnode-cred", credential)
-	m.persistLocked()
+	if err := m.persistLocked(); err != nil {
+		node.CredentialHash = prevHash
+		m.mu.Unlock()
+		return "", fmt.Errorf("xnode: credential rotation not committed (old credential remains authoritative): %w", err)
+	}
 	m.mu.Unlock()
 	return credential, nil
 }
@@ -358,9 +398,18 @@ func (m *Manager) Revoke(nodeID string) error {
 	if !ok {
 		return errors.New("xnode: node is unknown")
 	}
+	prevStatus, prevErr := node.Status, node.LastError
 	node.Status = StatusRevoked
 	node.LastError = "revoked by operator"
-	m.persistLocked()
+	// SECURITY (UQ-01): the operation succeeds ONLY when the
+	// durable snapshot carrying the revocation is committed. On a
+	// failed commit the in-memory revocation is rolled back, the
+	// error propagates, and no success is acknowledged — the old
+	// credential must not silently resurrect after a restart.
+	if err := m.persistLocked(); err != nil {
+		node.Status, node.LastError = prevStatus, prevErr
+		return fmt.Errorf("xnode: revocation NOT committed; the credential remains authoritative until a durable commit succeeds: %w", err)
+	}
 	return nil
 }
 
@@ -375,8 +424,12 @@ func (m *Manager) setStatus(nodeID string, status Status) error {
 	if !ok || node.Status == StatusRevoked {
 		return errors.New("xnode: node is unknown or revoked")
 	}
+	prev := node.Status
 	node.Status = status
-	m.persistLocked()
+	if err := m.persistLocked(); err != nil {
+		node.Status = prev
+		return fmt.Errorf("xnode: status change not committed: %w", err)
+	}
 	return nil
 }
 
@@ -394,17 +447,6 @@ func (m *Manager) markSeen(nodeID, version string, capabilities []string) {
 	node.Capabilities = append([]string(nil), capabilities...)
 	if node.Status == StatusStale || node.Status == StatusPending {
 		node.Status = StatusActive
-	}
-}
-
-// LoadNodes seeds the registry from persisted state (startup).
-// Revoked records are loaded as-is so revocation survives restart.
-func (m *Manager) LoadNodes(nodes []Node) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	for i := range nodes {
-		n := nodes[i]
-		m.nodes[n.ID] = &n
 	}
 }
 
@@ -529,25 +571,41 @@ func (m *Manager) Reconcile(ctx Ctx, config []byte) []Plan {
 	return plans
 }
 
-// persistNodes snapshots and persists. Callers that already hold
-// m.mu must use persistLocked instead — this variant is for
-// lock-free call sites.
-func (m *Manager) persistNodes() {
-	m.mu.RLock()
-	m.persistLocked()
-	m.mu.RUnlock()
-}
-
-// persistLocked persists under an already-held lock.
-func (m *Manager) persistLocked() {
+// persistLocked commits the complete registry state under an
+// already-held lock and returns the durability error verbatim. A
+// nil hook (memory-only mode, tests) reports success; production
+// wiring MUST install a hook. SECURITY: a failed commit means the
+// transition is NOT acknowledged — callers roll back and fail.
+func (m *Manager) persistLocked() error {
 	if m.persist == nil {
-		return
+		return nil
 	}
-	out := make([]*Node, 0, len(m.nodes))
+	st := DurableState{}
 	for _, n := range m.nodes {
 		c := *n
-		out = append(out, &c)
+		st.Nodes = append(st.Nodes, c)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
-	_ = m.persist(out)
+	sort.Slice(st.Nodes, func(i, j int) bool { return st.Nodes[i].ID < st.Nodes[j].ID })
+	for _, e := range m.enroll {
+		c := *e
+		st.Enrollments = append(st.Enrollments, c)
+	}
+	sort.Slice(st.Enrollments, func(i, j int) bool { return st.Enrollments[i].TokenHash < st.Enrollments[j].TokenHash })
+	return m.persist(st)
+}
+
+// LoadState seeds the registry from persisted state (startup):
+// nodes INCLUDING revoked records (revocation survives restart) and
+// enrollment tokens with their consumption marks.
+func (m *Manager) LoadState(st DurableState) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := range st.Nodes {
+		n := st.Nodes[i]
+		m.nodes[n.ID] = &n
+	}
+	for i := range st.Enrollments {
+		e := st.Enrollments[i]
+		m.enroll[e.TokenHash] = &e
+	}
 }

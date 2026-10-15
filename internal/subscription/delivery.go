@@ -59,8 +59,10 @@ type TokenStore struct {
 	mu     sync.RWMutex
 	byHash map[string]*TokenRecord
 	clock  func() time.Time
-	// persist, when set, receives the full record set after every
-	// mutation (state survives restart).
+	// persist commits the full record set durably; an error means
+	// the mutation is rolled back and the operation fails (a
+	// revoked token that only "exists" in memory could resurrect
+	// after a restart — that must never be acknowledged).
 	persist func([]TokenRecord) error
 }
 
@@ -71,15 +73,15 @@ func NewTokenStore() *TokenStore {
 // SetPersist installs the durability hook.
 func (s *TokenStore) SetPersist(fn func([]TokenRecord) error) { s.persist = fn }
 
-func (s *TokenStore) persistLocked() {
+func (s *TokenStore) persistLocked() error {
 	if s.persist == nil {
-		return
+		return nil
 	}
 	out := make([]TokenRecord, 0, len(s.byHash))
 	for _, rec := range s.byHash {
 		out = append(out, *rec)
 	}
-	_ = s.persist(out)
+	return s.persist(out)
 }
 
 // LoadRecords seeds the store from persisted state (startup).
@@ -182,32 +184,60 @@ func (s *TokenStore) Lookup(token string) (TokenRecord, bool) {
 }
 
 // Rotate revokes every active token of the subscription and issues
-// a replacement. The old URLs stop resolving immediately.
+// a replacement. The revocation part is transactional: if the
+// durable commit fails, the previous tokens stay active and the
+// error propagates — the caller never sees a "rotated" success
+// whose old URLs would resurrect after a restart.
 func (s *TokenStore) Rotate(subID string, ttl time.Duration) (string, TokenRecord, error) {
 	s.mu.Lock()
+	var prevRevoked []string
 	for _, rec := range s.byHash {
 		if rec.SubID == subID && !rec.Revoked {
 			rec.Revoked = true
+			prevRevoked = append(prevRevoked, rec.TokenHash)
 		}
 	}
+	if err := s.persistLocked(); err != nil {
+		for _, h := range prevRevoked {
+			if rec, ok := s.byHash[h]; ok {
+				rec.Revoked = false
+			}
+		}
+		s.mu.Unlock()
+		return "", TokenRecord{}, fmt.Errorf("subscription: rotation not committed durably: %w", err)
+	}
 	s.mu.Unlock()
-	return s.Issue(subID, ttl)
+	token, rec, err := s.Issue(subID, ttl)
+	if err != nil {
+		return "", TokenRecord{}, err
+	}
+	return token, rec, nil
 }
 
 // RevokeSubscription revokes every token of a subscription
 // (suspend / delete path).
-func (s *TokenStore) RevokeSubscription(subID string) int {
+func (s *TokenStore) RevokeSubscription(subID string) (int, error) {
 	s.mu.Lock()
 	n := 0
+	var prevRevoked []string
 	for _, rec := range s.byHash {
 		if rec.SubID == subID && !rec.Revoked {
 			rec.Revoked = true
+			prevRevoked = append(prevRevoked, rec.TokenHash)
 			n++
 		}
 	}
-	s.persistLocked()
+	if err := s.persistLocked(); err != nil {
+		for _, h := range prevRevoked {
+			if rec, ok := s.byHash[h]; ok {
+				rec.Revoked = false
+			}
+		}
+		s.mu.Unlock()
+		return 0, fmt.Errorf("subscription: revocation not committed durably: %w", err)
+	}
 	s.mu.Unlock()
-	return n
+	return n, nil
 }
 
 // TokenCount reports the active token count for a subscription.

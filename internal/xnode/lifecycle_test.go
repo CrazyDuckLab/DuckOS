@@ -97,11 +97,8 @@ func TestLifecycle_ControllerRestartRestoresState(t *testing.T) {
 	tok, _, _ := m.IssueEnrollmentToken(time.Hour)
 	node, _, _ := m.Enroll(tok, NodeInfo{Name: "edge"})
 	var persisted []Node
-	m.SetPersist(func(nodes []*Node) error {
-		persisted = nil
-		for _, n := range nodes {
-			persisted = append(persisted, *n)
-		}
+	m.SetPersist(func(st DurableState) error {
+		persisted = st.Nodes
 		return nil
 	})
 	_ = m.Revoke(node.ID) // triggers persist
@@ -111,7 +108,7 @@ func TestLifecycle_ControllerRestartRestoresState(t *testing.T) {
 	// A fresh coordinator restores from the same records: the
 	// revocation survives restart.
 	m2 := NewManager(adapter)
-	m2.LoadNodes(persisted)
+	m2.LoadState(DurableState{Nodes: persisted})
 	if m2.Authenticate(node.ID, "anything") {
 		t.Fatal("revocation lost across restart")
 	}

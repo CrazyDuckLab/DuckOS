@@ -976,15 +976,23 @@ func enableXrayCenter(catalogDir string, access identityAccess, cat *xray.FileCa
 		return nil, err
 	}
 
+	enrollFile, err := persist.Open[[]xnode.EnrollmentToken](storeDir, "enrollments.json")
+	if err != nil {
+		return nil, err
+	}
 	nodeMgr := xnode.NewManager(xnode.NewNodeHTTPAdapter())
-	nodeMgr.SetPersist(func(nodes []*xnode.Node) error {
-		out := make([]xnode.Node, 0, len(nodes))
-		for _, n := range nodes {
-			out = append(out, *n)
+	// Security durability: the hook MUST commit the whole registry
+	// state and return the error; the manager fails the operation
+	// (revocation, rotation, enrollment, suspension) when the
+	// commit fails, so no acknowledged transition can resurrect
+	// after a restart.
+	nodeMgr.SetPersist(func(st xnode.DurableState) error {
+		if err := nodeFile.Update(func(cur *[]xnode.Node) { *cur = st.Nodes }); err != nil {
+			return err
 		}
-		return nodeFile.Update(func(cur *[]xnode.Node) { *cur = out })
+		return enrollFile.Update(func(cur *[]xnode.EnrollmentToken) { *cur = st.Enrollments })
 	})
-	nodeMgr.LoadNodes(nodeFile.Get())
+	nodeMgr.LoadState(xnode.DurableState{Nodes: nodeFile.Get(), Enrollments: enrollFile.Get()})
 
 	groups := subscription.NewGroupStore()
 	groups.SetPersist(func(gs []subscription.Group) error {

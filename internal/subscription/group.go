@@ -141,8 +141,16 @@ func (s *GroupStore) Upsert(g Group) (Group, error) {
 		g.CreatedAt = now
 	}
 	g.UpdatedAt = now
+	prev, existed := s.groups[g.ID]
 	s.groups[g.ID] = g
-	s.persistLocked()
+	if err := s.persistLocked(); err != nil {
+		if existed {
+			s.groups[g.ID] = prev
+		} else {
+			delete(s.groups, g.ID)
+		}
+		return Group{}, fmt.Errorf("subscription: group not committed durably: %w", err)
+	}
 	return g, nil
 }
 
@@ -158,15 +166,15 @@ func (s *GroupStore) LoadGroups(groups []Group) {
 	}
 }
 
-func (s *GroupStore) persistLocked() {
+func (s *GroupStore) persistLocked() error {
 	if s.persist == nil {
-		return
+		return nil
 	}
 	out := make([]Group, 0, len(s.groups))
 	for _, g := range s.groups {
 		out = append(out, g)
 	}
-	_ = s.persist(out)
+	return s.persist(out)
 }
 
 func (s *GroupStore) Get(id string) (Group, bool) {
@@ -182,8 +190,14 @@ func (s *GroupStore) Delete(id string) error {
 	if _, ok := s.groups[id]; !ok {
 		return errors.New("subscription: group not found")
 	}
+	prev, existed := s.groups[id]
 	delete(s.groups, id)
-	s.persistLocked()
+	if err := s.persistLocked(); err != nil {
+		if existed {
+			s.groups[id] = prev
+		}
+		return fmt.Errorf("subscription: group deletion not committed durably: %w", err)
+	}
 	return nil
 }
 

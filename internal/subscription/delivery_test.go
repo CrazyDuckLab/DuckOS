@@ -106,7 +106,7 @@ func TestDelivery_RotationAndRevocation(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("new token failed: %d", w.Code)
 	}
-	if n := store.RevokeSubscription("live-sub"); n < 1 {
+	if n, err := store.RevokeSubscription("live-sub"); err != nil || n < 1 {
 		t.Fatalf("revocation count %d", n)
 	}
 	w = httptest.NewRecorder()
