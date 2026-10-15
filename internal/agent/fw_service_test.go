@@ -254,10 +254,13 @@ func TestFirewallServiceRollback(t *testing.T) {
 		TransactionID string `json:"transactionId"`
 	}
 	_ = json.Unmarshal(rec.Body.Bytes(), &job)
-	job.TransactionID = txIDOf(t, svc)
-	// Roll the transaction back explicitly.
+	// Roll the transaction back explicitly; the id appears once
+	// the worker reaches the confirmation window.
 	deadline := time.Now().Add(5 * time.Second)
 	for {
+		if id := txIDOf(t, svc); id != "" {
+			job.TransactionID = id
+		}
 		rec = doReq(t, svc, http.MethodPost, "/agent/v1/fwrules/fwrules/v1/rollback", `{"transactionId":"`+job.TransactionID+`"}`)
 		if rec.Code == 200 {
 			break
@@ -331,7 +334,7 @@ func TestComposeWANCandidateStaticAndDHCP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("recompose: %v", err)
 	}
-	if strings.Count(string(cand3), `"wan-up1"`) != 1 {
+	if strings.Count(string(cand3), `"id":"wan-up1"`) != 1 {
 		t.Fatalf("duplicate composition: %s", cand3)
 	}
 	// PPPoE/L2TP cannot be applied yet.
