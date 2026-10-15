@@ -1,6 +1,10 @@
 // verify_test.go: regression coverage for exact semantic
 // firewall verification, empty-ruleset semantics and scoped
 // snapshot decoding (beta.3 release-blocker remediation).
+// Fixtures mirror REAL `nft -j list table` output (Debian 13,
+// nftables 1.1.3): comments are rule-level fields, terminal
+// verdicts are bare {"drop":null} keys, prefixes are
+// {"prefix":{addr,len}} objects.
 package fwrules
 
 import (
@@ -17,17 +21,17 @@ func chainObject(table string) string {
 	return `{"chain":{"family":"inet","table":"` + table + `","name":"forward","type":"filter","hook":"forward","prio":0,"policy":"accept"}}`
 }
 
-func ruleObject(table, chain string, exprs ...string) string {
-	return `{"rule":{"family":"inet","table":"` + table + `","chain":"` + chain + `","handle":7,"expr":[` +
+func ruleObject(comment string, exprs ...string) string {
+	return `{"rule":{"family":"inet","table":"` + TableName + `","chain":"forward","handle":7,"comment":"` + comment + `","expr":[` +
 		strings.Join(exprs, ",") + `]}}`
 }
 
 const (
-	commentLAN = `{"comment":"duckos_fw:lan-web"}`
-	matchSaddr = `{"match":{"op":"==","left":{"payload":{"protocol":"ip","field":"saddr"}},"right":"10.0.0.0/8"}}`
+	matchSaddr = `{"match":{"op":"==","left":{"payload":{"protocol":"ip","field":"saddr"}},"right":{"prefix":{"addr":"10.0.0.0","len":8}}}}`
 	matchDport = `{"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":443}}`
-	verdictAcc = `{"verdict":{"verdict":"accept"}}`
-	counter    = `{"counter":{"packets":5,"bytes":120}}`
+	verdictAcc = `{"accept":null}`
+	verdictDrp = `{"drop":null}`
+	counter    = `{"counter":{"bytes":120,"packets":5}}`
 )
 
 func lanWebRule() Rule {
@@ -44,9 +48,9 @@ func objects(raw ...string) []json.RawMessage {
 }
 
 func TestDecodeSnapshotObjectsAcceptsOwnedTable(t *testing.T) {
-	wire := `{"nftables":[{"metainfo":{"version":"1.0.9"}},` +
+	wire := `{"nftables":[{"metainfo":{"version":"1.1.3","json_schema_version":1}},` +
 		tableObject(TableName) + `,` + chainObject(TableName) + `,` +
-		ruleObject(TableName, "forward", matchSaddr, matchDport, counter, commentLAN, verdictAcc) + `]}`
+		ruleObject("duckos_fw:lan-web", matchSaddr, matchDport, counter, verdictAcc) + `]}`
 	objs, err := DecodeSnapshotObjects([]byte(wire))
 	if err != nil {
 		t.Fatalf("owned snapshot rejected: %v", err)
@@ -69,7 +73,7 @@ func TestDecodeSnapshotObjectsRejectsForeignTables(t *testing.T) {
 		"upnp table":     `{"nftables":[` + tableObject("duckos_upnp") + `]}`,
 		"foreign family": `{"nftables":[{"table":{"family":"ip","name":"duckos_fw"}}]}`,
 		"foreign chain":  `{"nftables":[` + chainObject("duckos") + `]}`,
-		"foreign rule":   `{"nftables":[` + ruleObject("duckos", "forward", verdictAcc) + `]}`,
+		"foreign rule":   `{"nftables":[{"rule":{"family":"inet","table":"duckos","chain":"forward","expr":[{"accept":null}]}}]}`,
 		"malformed json": `{"nftables":[{"table":}]}`,
 		"bad envelope":   `{"nftables":null}`,
 		"unknown field":  `{"nftables":[],"extra":1}`,
@@ -106,9 +110,10 @@ func TestVerifySnapshotExactState(t *testing.T) {
 	objs := objects(
 		tableObject(TableName),
 		chainObject(TableName),
-		ruleObject(TableName, "forward", matchSaddr, matchDport, counter, commentLAN, verdictAcc),
-		ruleObject(TableName, "forward", `{"match":{"op":"==","left":{"meta":{"key":"oifname"}},"right":"eth1"}}`,
-			counter, `{"comment":"duckos_fw:wan-drop"}`, `{"verdict":{"verdict":"drop"}}`),
+		ruleObject("duckos_fw:lan-web", matchSaddr, matchDport, counter, verdictAcc),
+		ruleObject("duckos_fw:wan-drop",
+			`{"match":{"op":"==","left":{"meta":{"key":"oifname"}},"right":"eth1"}}`,
+			counter, verdictDrp),
 	)
 	if err := VerifySnapshot(rules, objs); err != nil {
 		t.Fatalf("exact state must verify: %v", err)
@@ -118,84 +123,75 @@ func TestVerifySnapshotExactState(t *testing.T) {
 func TestVerifySnapshotRejectsDivergence(t *testing.T) {
 	base := func() []json.RawMessage {
 		return objects(tableObject(TableName), chainObject(TableName),
-			ruleObject(TableName, "forward", matchSaddr, matchDport, counter, commentLAN, verdictAcc))
+			ruleObject("duckos_fw:lan-web", matchSaddr, matchDport, counter, verdictAcc))
 	}
 	cases := map[string]func() []json.RawMessage{
 		"table missing": func() []json.RawMessage {
 			return objects(chainObject(TableName),
-				ruleObject(TableName, "forward", matchSaddr, matchDport, counter, commentLAN, verdictAcc))
+				ruleObject("duckos_fw:lan-web", matchSaddr, matchDport, counter, verdictAcc))
 		},
 		"chain missing": func() []json.RawMessage {
 			return objects(tableObject(TableName),
-				ruleObject(TableName, "forward", matchSaddr, matchDport, counter, commentLAN, verdictAcc))
+				ruleObject("duckos_fw:lan-web", matchSaddr, matchDport, counter, verdictAcc))
 		},
 		"extra chain": func() []json.RawMessage {
 			return append(base(), json.RawMessage(chainObject(TableName)))
 		},
 		"wrong policy": func() []json.RawMessage {
-			return objects(tableObject(TableName), chainObject(TableName), // placeholder, replaced below
-				ruleObject(TableName, "forward", matchSaddr, matchDport, counter, commentLAN, verdictAcc))
+			return objects(tableObject(TableName),
+				`{"chain":{"family":"inet","table":"duckos_fw","name":"forward","type":"filter","hook":"forward","prio":0,"policy":"drop"}}`,
+				ruleObject("duckos_fw:lan-web", matchSaddr, matchDport, counter, verdictAcc))
 		},
 		"missing rule": func() []json.RawMessage {
 			return objects(tableObject(TableName), chainObject(TableName))
 		},
 		"extra rule": func() []json.RawMessage {
-			return append(base(), json.RawMessage(ruleObject(TableName, "forward", verdictAcc)))
+			return append(base(), json.RawMessage(ruleObject("someone-else", verdictAcc)))
 		},
 		"wrong order": func() []json.RawMessage {
 			return objects(tableObject(TableName), chainObject(TableName),
-				ruleObject(TableName, "forward", matchSaddr, matchDport, counter, commentLAN, verdictAcc),
-				ruleObject(TableName, "forward", verdictAcc))
+				ruleObject("duckos_fw:wan-drop", verdictDrp),
+				ruleObject("duckos_fw:lan-web", matchSaddr, matchDport, counter, verdictAcc))
 		},
 		"wrong action": func() []json.RawMessage {
 			return objects(tableObject(TableName), chainObject(TableName),
-				ruleObject(TableName, "forward", matchSaddr, matchDport, counter, commentLAN,
-					`{"verdict":{"verdict":"drop"}}`))
+				ruleObject("duckos_fw:lan-web", matchSaddr, matchDport, counter, verdictDrp))
 		},
 		"wrong port": func() []json.RawMessage {
 			return objects(tableObject(TableName), chainObject(TableName),
-				ruleObject(TableName, "forward", matchSaddr,
+				ruleObject("duckos_fw:lan-web", matchSaddr,
 					`{"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":8443}}`,
-					counter, commentLAN, verdictAcc))
+					counter, verdictAcc))
 		},
 		"wrong comment": func() []json.RawMessage {
 			return objects(tableObject(TableName), chainObject(TableName),
-				ruleObject(TableName, "forward", matchSaddr, matchDport, counter, `{"comment":"someone-else"}`, verdictAcc))
+				ruleObject("someone-else", matchSaddr, matchDport, counter, verdictAcc))
 		},
 		"wrong srcprefix": func() []json.RawMessage {
 			return objects(tableObject(TableName), chainObject(TableName),
-				ruleObject(TableName, "forward",
-					`{"match":{"op":"==","left":{"payload":{"protocol":"ip","field":"saddr"}},"right":"192.168.0.0/16"}}`,
-					matchDport, counter, commentLAN, verdictAcc))
+				ruleObject("duckos_fw:lan-web",
+					`{"match":{"op":"==","left":{"payload":{"protocol":"ip","field":"saddr"}},"right":{"prefix":{"addr":"192.168.0.0","len":16}}}}`,
+					matchDport, counter, verdictAcc))
 		},
 		"no verdict": func() []json.RawMessage {
 			return objects(tableObject(TableName), chainObject(TableName),
-				ruleObject(TableName, "forward", matchSaddr, matchDport, counter, commentLAN))
+				ruleObject("duckos_fw:lan-web", matchSaddr, matchDport, counter))
 		},
 		"unsupported expr": func() []json.RawMessage {
 			return objects(tableObject(TableName), chainObject(TableName),
-				ruleObject(TableName, "forward", matchSaddr, matchDport, `{"limit":{"rate":1}}`, counter, commentLAN, verdictAcc))
+				ruleObject("duckos_fw:lan-web", matchSaddr, matchDport, `{"limit":{"rate":1}}`, counter, verdictAcc))
 		},
 	}
 	for name, build := range cases {
-		var objs []json.RawMessage
-		if name == "wrong policy" {
-			objs = objects(tableObject(TableName),
-				`{"chain":{"family":"inet","table":"duckos_fw","name":"forward","type":"filter","hook":"forward","prio":0,"policy":"drop"}}`,
-				ruleObject(TableName, "forward", matchSaddr, matchDport, counter, commentLAN, verdictAcc))
-		} else {
-			objs = build()
-		}
-		if err := VerifySnapshot([]Rule{lanWebRule()}, objs); err == nil {
+		if err := VerifySnapshot([]Rule{lanWebRule()}, build()); err == nil {
 			t.Fatalf("%s: expected verification failure", name)
 		}
 	}
 }
 
 func TestVerifySnapshotEmptyExpectation(t *testing.T) {
-	// An empty expectation with a present owned table is a
-	// divergence the adapter catches via "absent"; here a
-	// table-only readback must fail because the chain exists.
+	// Canonical empty state: Render removes the whole table, so a
+	// readback containing any owned object is a divergence.
 	if err := VerifySnapshot(nil, objects(tableObject(TableName), chainObject(TableName))); err == nil {
 		t.Fatal("empty ruleset with live chain must not verify")
 	}

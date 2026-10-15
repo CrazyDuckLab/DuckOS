@@ -191,7 +191,7 @@ func TestLiveSafeApplyLifecycle(t *testing.T) {
 		t.Fatalf("service: %v", err)
 	}
 	rule1 := liveRule("allow-web", "")
-	if _, err := svc.worker.SubmitRequest("", "", liveCandidate(t, rule1), "test", "live-admit", FirewallConfirmWindow); err != nil {
+	if _, err := svc.worker.SubmitRequest(currentRevision(t, svc), "", liveCandidate(t, rule1), "test", "live-admit", FirewallConfirmWindow); err != nil {
 		t.Fatalf("admit: %v", err)
 	}
 	waitKernelRule(t, "allow-web")
@@ -202,7 +202,7 @@ func TestLiveSafeApplyLifecycle(t *testing.T) {
 	// Explicit rollback of a second change.
 	rule2 := fwrules.Rule{ID: "block-guest", Enabled: true, Action: "drop",
 		Direction: "forward", Protocol: "udp", DstPort: 53}
-	if _, err := svc.worker.SubmitRequest("", "", liveCandidate(t, rule1, rule2), "test", "live-admit-2", FirewallConfirmWindow); err != nil {
+	if _, err := svc.worker.SubmitRequest(currentRevision(t, svc), "", liveCandidate(t, rule1, rule2), "test", "live-admit-2", FirewallConfirmWindow); err != nil {
 		t.Fatalf("admit 2: %v", err)
 	}
 	waitKernelRule(t, "block-guest")
@@ -216,7 +216,7 @@ func TestLiveSafeApplyLifecycle(t *testing.T) {
 	// the last known-good state and expire the pending transaction.
 	pending := fwrules.Rule{ID: "crash-rule", Enabled: true, Action: "reject",
 		Direction: "forward", Protocol: "any"}
-	if _, err := svc.worker.SubmitRequest("", "", liveCandidate(t, rule1, pending), "test", "live-admit-3", FirewallConfirmWindow); err != nil {
+	if _, err := svc.worker.SubmitRequest(currentRevision(t, svc), "", liveCandidate(t, rule1, pending), "test", "live-admit-3", FirewallConfirmWindow); err != nil {
 		t.Fatalf("admit 3: %v", err)
 	}
 	waitKernelRule(t, "crash-rule")
@@ -356,4 +356,15 @@ func waitPendingID(t *testing.T, svc *FirewallRulesService) string {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
+}
+
+// currentRevision returns the journaled current revision id for
+// optimistic admission, mirroring the service admit path.
+func currentRevision(t *testing.T, svc *FirewallRulesService) string {
+	t.Helper()
+	_, revision, err := svc.currentDoc()
+	if err != nil {
+		t.Fatalf("current revision: %v", err)
+	}
+	return revision
 }

@@ -166,10 +166,11 @@ func ruleMatches(want Rule, got *observedRule) error {
 // verification closed.
 func decodeObservedRule(body []byte) (*observedRule, error) {
 	var wire struct {
-		Family string `json:"family"`
-		Table  string `json:"table"`
-		Chain  string `json:"chain"`
-		Expr   []map[string]json.RawMessage
+		Family  string `json:"family"`
+		Table   string `json:"table"`
+		Chain   string `json:"chain"`
+		Comment string `json:"comment"`
+		Expr    []map[string]json.RawMessage
 	}
 	// The envelope is decoded leniently because the kernel adds
 	// bookkeeping fields (e.g. handles); every semantic element
@@ -177,7 +178,7 @@ func decodeObservedRule(body []byte) (*observedRule, error) {
 	if err := json.Unmarshal(body, &wire); err != nil {
 		return nil, fmt.Errorf("fwrules: verify: invalid observed rule")
 	}
-	r := &observedRule{Family: wire.Family, Table: wire.Table, Chain: wire.Chain}
+	r := &observedRule{Family: wire.Family, Table: wire.Table, Chain: wire.Chain, comment: wire.Comment}
 	for _, expr := range wire.Expr {
 		kind, payload := onlyKey(expr)
 		switch kind {
@@ -200,11 +201,24 @@ func decodeObservedRule(body []byte) (*observedRule, error) {
 			if err := strictUnmarshal(payload, &v); err != nil {
 				return nil, fmt.Errorf("fwrules: verify: invalid verdict expression")
 			}
-			if r.action != "" || (v.Verdict != "accept" && v.Verdict != "drop" && v.Verdict != "reject") {
-				return nil, fmt.Errorf("fwrules: verify: unexpected verdict %q", v.Verdict)
+			if err := r.setVerdict(v.Verdict); err != nil {
+				return nil, err
 			}
-			r.action = v.Verdict
+		case "accept", "drop":
+			// nft 1.x emits terminal verdicts as bare {"drop":null}.
+			if err := r.setVerdict(kind); err != nil {
+				return nil, err
+			}
+		case "reject":
+			var rej struct {
+				Type string `json:"type"`
+			}
+			_ = json.Unmarshal(payload, &rej)
+			if err := r.setVerdict("reject"); err != nil {
+				return nil, err
+			}
 		case "comment":
+			// Legacy shape: comment carried as an expression.
 			var s string
 			if err := json.Unmarshal(payload, &s); err != nil {
 				return nil, fmt.Errorf("fwrules: verify: invalid comment expression")
@@ -220,6 +234,14 @@ func decodeObservedRule(body []byte) (*observedRule, error) {
 		return nil, fmt.Errorf("fwrules: verify: observed rule without a terminal verdict")
 	}
 	return r, nil
+}
+
+func (r *observedRule) setVerdict(v string) error {
+	if r.action != "" || (v != "accept" && v != "drop" && v != "reject") {
+		return fmt.Errorf("fwrules: verify: unexpected verdict %q", v)
+	}
+	r.action = v
+	return nil
 }
 
 func (r *observedRule) applyMatch(left map[string]json.RawMessage, right json.RawMessage) error {
@@ -269,7 +291,23 @@ func decodeString(raw json.RawMessage, dst *string) error {
 	if *dst != "" {
 		return fmt.Errorf("fwrules: verify: duplicate match on the same key")
 	}
-	return json.Unmarshal(raw, dst)
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		*dst = s
+		return nil
+	}
+	// nft 1.x emits prefixes as {"prefix":{"addr":..,"len":..}}.
+	var p struct {
+		Prefix struct {
+			Addr string `json:"addr"`
+			Len  int    `json:"len"`
+		} `json:"prefix"`
+	}
+	if err := json.Unmarshal(raw, &p); err == nil && p.Prefix.Addr != "" {
+		*dst = p.Prefix.Addr + "/" + fmt.Sprint(p.Prefix.Len)
+		return nil
+	}
+	return fmt.Errorf("fwrules: verify: match value is neither a string nor a prefix")
 }
 
 func decodeInt(raw json.RawMessage, dst *int) error {

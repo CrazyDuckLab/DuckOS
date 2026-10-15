@@ -22,12 +22,11 @@ func fwrSnapshot() []json.RawMessage {
 	return []json.RawMessage{
 		fwrObj(`{"table":{"family":"inet","name":"duckos_fw"}}`),
 		fwrObj(`{"chain":{"family":"inet","table":"duckos_fw","name":"forward","type":"filter","hook":"forward","prio":0,"policy":"accept"}}`),
-		fwrObj(`{"rule":{"family":"inet","table":"duckos_fw","chain":"forward","handle":9,"expr":[` +
-			`{"match":{"op":"==","left":{"payload":{"protocol":"ip","field":"saddr"}},"right":"10.0.0.0/8"}},` +
+		fwrObj(`{"rule":{"family":"inet","table":"duckos_fw","chain":"forward","handle":9,"comment":"duckos_fw:lan-web","expr":[` +
+			`{"match":{"op":"==","left":{"payload":{"protocol":"ip","field":"saddr"}},"right":{"prefix":{"addr":"10.0.0.0","len":8}}}},` +
 			`{"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":443}},` +
-			`{"counter":{"packets":1,"bytes":64}},` +
-			`{"comment":"duckos_fw:lan-web"},` +
-			`{"verdict":{"verdict":"accept"}}]}}`),
+			`{"counter":{"bytes":64,"packets":1}},` +
+			`{"accept":null}]}}`),
 	}
 }
 
@@ -58,11 +57,10 @@ func TestFwrulesVerifyExactState(t *testing.T) {
 
 func TestFwrulesVerifyRejectsDivergence(t *testing.T) {
 	wrong := fwrSnapshot()
-	wrong[2] = fwrObj(`{"rule":{"family":"inet","table":"duckos_fw","chain":"forward","handle":9,"expr":[` +
-		`{"match":{"op":"==","left":{"payload":{"protocol":"ip","field":"saddr"}},"right":"10.0.0.0/8"}},` +
+	wrong[2] = fwrObj(`{"rule":{"family":"inet","table":"duckos_fw","chain":"forward","handle":9,"comment":"duckos_fw:lan-web","expr":[` +
+		`{"match":{"op":"==","left":{"payload":{"protocol":"ip","field":"saddr"}},"right":{"prefix":{"addr":"10.0.0.0","len":8}}}},` +
 		`{"match":{"op":"==","left":{"payload":{"protocol":"tcp","field":"dport"}},"right":8443}},` +
-		`{"comment":"duckos_fw:lan-web"},` +
-		`{"verdict":{"verdict":"accept"}}]}}`)
+		`{"accept":null}]}}`)
 	a := fwrAdapter(func(string) ([]json.RawMessage, bool, error) { return wrong, false, nil })
 	if err := a.Verify(t.Context(), fwrCandidate(t, lanWeb())); err == nil {
 		t.Fatal("diverging kernel rule must fail verification (count-only check would pass)")
