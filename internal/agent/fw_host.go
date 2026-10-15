@@ -201,6 +201,9 @@ type FirewallRulesService struct {
 	storePath  string
 	stageDir   string
 	nftBin     string
+	// adapter is the pipeline over the owned table; its
+	// readbackFn seam is test-only.
+	adapter *fwrulesAdapter
 }
 
 // NewFirewallRulesService opens the durable journal (creating
@@ -245,6 +248,7 @@ func NewFirewallRulesService(storePath, stageDir, nftBin string, acc UPnPAccess)
 		storePath:  storePath,
 		stageDir:   stageDir,
 		nftBin:     nftBin,
+		adapter:    adapter,
 	}, nil
 }
 

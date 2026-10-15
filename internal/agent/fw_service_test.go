@@ -11,6 +11,7 @@ package agent
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -68,17 +69,110 @@ func newTestFwService(t *testing.T) (*FirewallRulesService, string) {
 	if err := os.MkdirAll(store, 0o700); err != nil {
 		t.Fatalf("store dir: %v", err)
 	}
+	stage := filepath.Join(dir, "stage")
 	svc, err := NewFirewallRulesService(
 		store,
-		filepath.Join(dir, "stage"),
+		stage,
 		writeFakeNFT(t, dir, stateFile),
 		acceptAccess{},
 	)
 	if err != nil {
 		t.Fatalf("service: %v", err)
 	}
+	// The fake nft cannot render kernel-accurate JSON readback,
+	// so the readback seam synthesizes the owned-table snapshot
+	// from the staged batch the adapter just applied.
+	svc.adapter.readbackFn = func(string) ([]json.RawMessage, bool, error) {
+		return fwrSnapshotFromStage(stage)
+	}
 	t.Cleanup(svc.Close)
 	return svc, dir
+}
+
+// fwrSnapshotFromStage builds an nft JSON snapshot equivalent to
+// the last staged batch, honoring the empty-state contract (an
+// empty batch means the owned table is absent).
+func fwrSnapshotFromStage(stageDir string) ([]json.RawMessage, bool, error) {
+	raw, err := os.ReadFile(filepath.Join(stageDir, "duckos-fw.batch.nft"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, true, nil
+		}
+		return nil, false, err
+	}
+	var rules []json.RawMessage
+	for _, line := range strings.Split(string(raw), "\n") {
+		if !strings.HasPrefix(line, "add rule inet duckos_fw forward ") {
+			continue
+		}
+		rule, err := fwrRuleObjectFromLine(line)
+		if err != nil {
+			return nil, false, err
+		}
+		rules = append(rules, rule)
+	}
+	if len(rules) == 0 {
+		return nil, true, nil
+	}
+	objs := []json.RawMessage{
+		json.RawMessage(`{"table":{"family":"inet","name":"duckos_fw"}}`),
+		json.RawMessage(`{"chain":{"family":"inet","table":"duckos_fw","name":"forward","type":"filter","hook":"forward","prio":0,"policy":"accept"}}`),
+	}
+	return append(objs, rules...), false, nil
+}
+
+// fwrRuleObjectFromLine translates one rendered `add rule` line
+// into the nft JSON shape VerifySnapshot decodes.
+func fwrRuleObjectFromLine(line string) (json.RawMessage, error) {
+	var exprs []map[string]any
+	add := func(expr map[string]any) { exprs = append(exprs, expr) }
+	tokens := strings.Fields(strings.TrimPrefix(line, "add rule inet duckos_fw forward "))
+	for i := 0; i < len(tokens); i++ {
+		switch tokens[i] {
+		case "ip":
+			field := tokens[i+1]
+			i += 2
+			proto := map[string]any{"protocol": "ip", "field": field + "addr"}
+			add(map[string]any{"match": map[string]any{"op": "==", "left": map[string]any{"payload": proto}, "right": tokens[i]}})
+		case "iifname", "oifname":
+			key := tokens[i]
+			value := strings.Trim(tokens[i+1], "\"")
+			i += 1
+			add(map[string]any{"match": map[string]any{"op": "==", "left": map[string]any{"meta": map[string]any{"key": key}}, "right": value}})
+		case "meta":
+			// meta l4proto <p>
+			i += 2
+			add(map[string]any{"match": map[string]any{"op": "==", "left": map[string]any{"meta": map[string]any{"key": "l4proto"}}, "right": tokens[i]}})
+		case "tcp", "udp":
+			// <proto> dport <n>
+			proto := tokens[i]
+			i += 2
+			add(map[string]any{"match": map[string]any{"op": "==", "left": map[string]any{"payload": map[string]any{"protocol": proto, "field": "dport"}}, "right": json.Number(tokens[i])}})
+		case "accept", "drop", "reject":
+			add(map[string]any{"verdict": map[string]any{"verdict": tokens[i]}})
+		case "comment":
+			i += 1
+			add(map[string]any{"comment": strings.Trim(tokens[i], "\"")})
+		default:
+			return nil, fmt.Errorf("unmodelled rule token %q", tokens[i])
+		}
+	}
+	body, err := json.Marshal(map[string]any{"family": "inet", "table": "duckos_fw", "chain": "forward", "handle": 1, "expr": exprs})
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(`{"rule":` + string(body) + `}`), nil
+}
+
+// txIDOf returns the pending transaction id, empty while the
+// worker has not yet picked the admission up.
+func txIDOf(t *testing.T, svc *FirewallRulesService) string {
+	t.Helper()
+	job, _, err := svc.worker.Status()
+	if err != nil {
+		return ""
+	}
+	return job.TransactionID
 }
 
 func fwRuleJSON(id string) []byte {
@@ -111,11 +205,22 @@ func TestFirewallServiceAdmitApplyConfirm(t *testing.T) {
 	var job struct {
 		TransactionID string `json:"transactionId"`
 	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &job); err != nil || job.TransactionID == "" {
-		t.Fatalf("job: %v %s", err, rec.Body.String())
+	// The transaction id is assigned once the worker starts the
+	// apply; poll the status until it is visible.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		st := doReq(t, svc, http.MethodGet, "/agent/v1/fwrules/fwrules/v1/status", "")
+		if id := txIDOf(t, svc); id != "" {
+			job.TransactionID = id
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("tx id never assigned: %s", st.Body.String())
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 	// Wait briefly for the worker to apply the batch.
-	deadline := time.Now().Add(5 * time.Second)
+	deadline = time.Now().Add(5 * time.Second)
 	for {
 		st := doReq(t, svc, http.MethodGet, "/agent/v1/fwrules/fwrules/v1/status", "")
 		if !bytes.Contains(st.Body.Bytes(), []byte(`"applied"`)) && !strings.Contains(st.Body.String(), "awaiting-confirmation") {
@@ -149,6 +254,7 @@ func TestFirewallServiceRollback(t *testing.T) {
 		TransactionID string `json:"transactionId"`
 	}
 	_ = json.Unmarshal(rec.Body.Bytes(), &job)
+	job.TransactionID = txIDOf(t, svc)
 	// Roll the transaction back explicitly.
 	deadline := time.Now().Add(5 * time.Second)
 	for {
@@ -183,10 +289,10 @@ func TestComposeWANCandidateStaticAndDHCP(t *testing.T) {
 	}
 	var cfg struct {
 		Interfaces []struct {
-			ID   string `json:"id"`
-			Role string `json:"role"`
-			DHCP string `json:"dhcpClient"`
-			Addr string `json:"addresses"`
+			ID   string   `json:"id"`
+			Role string   `json:"role"`
+			DHCP string   `json:"dhcpClient"`
+			Addr []string `json:"addresses"`
 		} `json:"interfaces"`
 		Routes []struct {
 			Destination string `json:"destination"`
