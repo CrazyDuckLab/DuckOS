@@ -11,6 +11,7 @@ package agent
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -211,34 +212,47 @@ func TestLiveSafeApplyLifecycle(t *testing.T) {
 	}
 	waitKernelWithoutRule(t, "block-guest")
 
-	// Crash recovery: admit a third change and abandon the process
-	// (Close without confirm); reopening the journal must restore
-	// the last known-good state and expire the pending transaction.
-	pending := fwrules.Rule{ID: "crash-rule", Enabled: true, Action: "reject",
-		Direction: "forward", Protocol: "any"}
-	if _, err := svc.worker.SubmitRequest(currentRevision(t, svc), "", liveCandidate(t, rule1, pending), "test", "live-admit-3", FirewallConfirmWindow); err != nil {
-		t.Fatalf("admit 3: %v", err)
+	// Crash recovery: a CHILD PROCESS admits a change on a fresh
+	// journal and dies without confirming (real process death, so
+	// the flock is genuinely released and the pending transaction
+	// is durably pending). Reopening the journal must expire the
+	// pending transaction and restore the known-good baseline.
+	crashStore, crashStage := filepath.Join(dir, "store3"), filepath.Join(dir, "stage3")
+	for _, d := range []string{crashStore, crashStage} {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			t.Fatalf("dir %s: %v", d, err)
+		}
+	}
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatalf("self: %v", err)
+	}
+	child := exec.Command(self, "-test.run", "TestLiveCrashHelperChild", "-test.v")
+	child.Env = append(os.Environ(),
+		"DUCKOS_LIVE_NFT=1",
+		"DUCKOS_CRASH_STORE="+crashStore,
+		"DUCKOS_CRASH_STAGE="+crashStage)
+	out, err := child.CombinedOutput()
+	if err == nil || !strings.Contains(string(out), "crash helper exiting") {
+		t.Fatalf("crash child did not die as arranged: %v: %s", err, out)
 	}
 	waitKernelRule(t, "crash-rule")
-	svc.Close()
-	svc2, err := NewFirewallRulesService(storePath, stageDir, liveNFT, acceptAccess{})
+	svc2, err := NewFirewallRulesService(crashStore, crashStage, liveNFT, acceptAccess{})
 	if err != nil {
-		t.Fatalf("reopen: %v", err)
+		t.Fatalf("reopen after crash: %v", err)
 	}
 	t.Cleanup(svc2.Close)
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		rules := kernelRuleComments(t)
-		if !strings.Contains(rules, "crash-rule") {
+		_, absent, err := readbackFwrTable(liveNFT)
+		if err == nil && absent {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("pending transaction not recovered after restart; kernel still has: %s", rules)
+			t.Fatalf("pending transaction not recovered after restart; kernel still has: %s (err=%v)",
+				kernelRuleComments(t), err)
 		}
 		time.Sleep(100 * time.Millisecond)
-	}
-	if err := liveAdapter(t).Verify(t.Context(), liveCandidate(t, rule1)); err != nil {
-		t.Fatalf("recovered state must equal last confirmed: %v", err)
 	}
 	svc2.Close()
 
@@ -363,4 +377,47 @@ func currentRevision(t *testing.T, svc *FirewallRulesService) string {
 		t.Fatalf("current revision: %v", err)
 	}
 	return revision
+}
+
+// TestLiveCrashHelperChild admits a change and dies without
+// confirming; it runs only as a subprocess of the lifecycle test
+// so the pending transaction survives as a real process death.
+func TestLiveCrashHelperChild(t *testing.T) {
+	store, stage := os.Getenv("DUCKOS_CRASH_STORE"), os.Getenv("DUCKOS_CRASH_STAGE")
+	if store == "" {
+		t.Skip("crash helper child")
+	}
+	svc, err := NewFirewallRulesService(store, stage, liveNFT, acceptAccess{})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "child service: %v\n", err)
+		os.Exit(2)
+	}
+	rule := fwrules.Rule{ID: "crash-rule", Enabled: true, Action: "reject",
+		Direction: "forward", Protocol: "any"}
+	raw, err := json.Marshal(fwrules.Wire{Version: 1, Rules: []fwrules.Rule{rule}})
+	if err != nil {
+		os.Exit(2)
+	}
+	_, revision, err := svc.currentDoc()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "child revision: %v\n", err)
+		os.Exit(2)
+	}
+	if _, err := svc.worker.SubmitRequest(revision, "", raw, "test", "crash", FirewallConfirmWindow); err != nil {
+		fmt.Fprintf(os.Stderr, "child admit: %v\n", err)
+		os.Exit(2)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if strings.Contains(kernelRuleComments(t), "duckos_fw:crash-rule") {
+			break
+		}
+		if time.Now().After(deadline) {
+			fmt.Fprintln(os.Stderr, "child: rule never reached the kernel")
+			os.Exit(2)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	fmt.Fprintln(os.Stderr, "crash helper exiting")
+	os.Exit(3)
 }
