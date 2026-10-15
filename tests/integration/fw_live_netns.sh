@@ -54,8 +54,10 @@ render() {
 	} > "$out"
 }
 
-trap 'ip netns del "$QUAL" >/dev/null 2>&1' EXIT
+trap 'ip netns del "$QUAL" >/dev/null 2>&1; ip netns del "$CLI" >/dev/null 2>&1; ip netns del "$SRV" >/dev/null 2>&1' EXIT
 ip netns add "$QUAL" || { say 'BLOCKED: cannot create test namespace'; exit 1; }
+ip netns add "$CLI"
+ip netns add "$SRV"
 
 q() { ip netns exec "$QUAL" "$@"; }
 
@@ -80,7 +82,7 @@ ip netns exec "$CLI" ip link set lo up
 ip netns exec "$SRV" ip link set lo up
 
 BATCH=$(mktemp)
-trap 'rm -f "$BATCH"; ip netns del "$QUAL" >/dev/null 2>&1' EXIT
+trap 'rm -f "$BATCH"; ip netns del "$QUAL" >/dev/null 2>&1; ip netns del "$CLI" >/dev/null 2>&1; ip netns del "$SRV" >/dev/null 2>&1' EXIT
 
 say "== baseline (no owned table, kernel forward enabled) =="
 check 'ping cli->srv passes without firewall' pass ip netns exec "$CLI" ping -c3 -W3 10.250.0.6
