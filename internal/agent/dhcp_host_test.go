@@ -12,7 +12,7 @@ import (
 func TestDhcpHostLeasesRoundTrip(t *testing.T) {
 	h := NewDhcpHost(func() ([]dhcpsnoop.Lease, error) {
 		return []dhcpsnoop.Lease{{MAC: "aa:bb:cc:dd:ee:ff", IP: "192.168.10.50", Hostname: "client-1", Trusted: true}}, nil
-	}, stubUPnPAccess{}, "test-leases")
+	}, acceptAccess{}, "test-leases")
 	req := httptest.NewRequest(http.MethodGet, "/agent/v1/dhcp/dhcp/v1/leases", nil)
 	req.Header.Set("Authorization", "Bearer test-token")
 	rec := httptest.NewRecorder()
@@ -39,7 +39,7 @@ func TestDhcpHostRequiresAuth(t *testing.T) {
 func TestDhcpHostReportsSourceErrorHonestly(t *testing.T) {
 	h := NewDhcpHost(func() ([]dhcpsnoop.Lease, error) {
 		return nil, errLeaseSourceDown
-	}, stubUPnPAccess{}, "missing-file")
+	}, acceptAccess{}, "missing-file")
 	req := httptest.NewRequest(http.MethodGet, "/agent/v1/dhcp/dhcp/v1/leases", nil)
 	req.Header.Set("Authorization", "Bearer test-token")
 	rec := httptest.NewRecorder()

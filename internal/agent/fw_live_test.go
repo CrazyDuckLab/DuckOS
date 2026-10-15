@@ -88,7 +88,8 @@ func TestLiveApplyVerifyExact(t *testing.T) {
 	a := liveAdapter(t)
 	rules := []fwrules.Rule{liveRule("allow-web", "LAN web"), {ID: "wan-drop", Enabled: true,
 		Action: "drop", Direction: "forward", Protocol: "any", OutIface: "lo"}}
-	if err := a.Apply(t.Context(), liveCandidate(t, rules...), json.RawMessage{}); err != nil {
+	// Apply signature: (ctx, current, candidate).
+	if err := a.Apply(t.Context(), json.RawMessage("{}"), liveCandidate(t, rules...)); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 	if err := a.Verify(t.Context(), liveCandidate(t, rules...)); err != nil {
@@ -105,7 +106,7 @@ func TestLiveVerifyRejectsForeignDrift(t *testing.T) {
 	cleanupOwnedTable(t)
 	a := liveAdapter(t)
 	rules := []fwrules.Rule{liveRule("allow-web", "")}
-	if err := a.Apply(t.Context(), liveCandidate(t, rules...), json.RawMessage{}); err != nil {
+	if err := a.Apply(t.Context(), json.RawMessage("{}"), liveCandidate(t, rules...)); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 	// Out-of-band mutation: same number of rules, different port —
@@ -121,10 +122,10 @@ func TestLiveEmptyCandidateRemovesTable(t *testing.T) {
 	skipUnlessLive(t)
 	cleanupOwnedTable(t)
 	a := liveAdapter(t)
-	if err := a.Apply(t.Context(), liveCandidate(t, liveRule("allow-web", "")), json.RawMessage{}); err != nil {
+	if err := a.Apply(t.Context(), json.RawMessage("{}"), liveCandidate(t, liveRule("allow-web", ""))); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
-	if err := a.Apply(t.Context(), liveCandidate(t), json.RawMessage{}); err != nil {
+	if err := a.Apply(t.Context(), json.RawMessage("{}"), liveCandidate(t)); err != nil {
 		t.Fatalf("empty apply: %v", err)
 	}
 	if _, absent := mustReadback(t); !absent {
@@ -142,11 +143,13 @@ func TestLiveRestoreKnownGood(t *testing.T) {
 	first := []fwrules.Rule{liveRule("allow-web", "")}
 	second := []fwrules.Rule{liveRule("allow-web", ""), {ID: "block-guest", Enabled: true,
 		Action: "drop", Direction: "forward", Protocol: "udp", DstPort: 53, SrcPrefix: "10.250.1.0/24"}}
-	if err := a.Apply(t.Context(), liveCandidate(t, first...), json.RawMessage{}); err != nil {
+	if err := a.Apply(t.Context(), json.RawMessage("{}"), liveCandidate(t, first...)); err != nil {
 		t.Fatalf("apply first: %v", err)
 	}
+	// Restore re-applies `before`; the candidate documents the
+	// failed change being rolled back.
 	if err := a.Restore(t.Context(), liveCandidate(t, second...), liveCandidate(t, first...)); err != nil {
-		t.Fatalf("restore to prior state: %v", err)
+		t.Fatalf("restore to known-good: %v", err)
 	}
 	if err := a.Verify(t.Context(), liveCandidate(t, second...)); err != nil {
 		t.Fatalf("restored state must verify: %v", err)
@@ -177,6 +180,12 @@ func TestLiveSafeApplyLifecycle(t *testing.T) {
 	cleanupOwnedTable(t)
 	dir := t.TempDir()
 	storePath, stageDir := filepath.Join(dir, "store"), filepath.Join(dir, "stage")
+	// The journal path is a private, pre-existing directory.
+	for _, d := range []string{storePath, stageDir} {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			t.Fatalf("dir %s: %v", d, err)
+		}
+	}
 	svc, err := NewFirewallRulesService(storePath, stageDir, liveNFT, acceptAccess{})
 	if err != nil {
 		t.Fatalf("service: %v", err)
@@ -235,13 +244,20 @@ func TestLiveSafeApplyLifecycle(t *testing.T) {
 
 	// Automatic rollback when the confirmation window expires.
 	store2 := filepath.Join(dir, "store2")
+	if err := os.MkdirAll(store2, 0o700); err != nil {
+		t.Fatalf("store2: %v", err)
+	}
 	validate := func(raw json.RawMessage) error { _, err := fwrules.LoadWire(raw); return err }
 	empty, _ := json.Marshal(fwrules.Wire{Version: 1, Rules: []fwrules.Rule{}})
 	st, err := state.Open(store2, empty, validate)
 	if err != nil {
 		t.Fatalf("store: %v", err)
 	}
-	adapter := &fwrulesAdapter{nftBin: liveNFT, stageDir: filepath.Join(dir, "stage2")}
+	stage2 := filepath.Join(dir, "stage2")
+	if err := os.MkdirAll(stage2, 0o700); err != nil {
+		t.Fatalf("stage2: %v", err)
+	}
+	adapter := &fwrulesAdapter{nftBin: liveNFT, stageDir: stage2}
 	ctl, err := safeapply.Open(st, adapter)
 	if err != nil {
 		t.Fatalf("controller: %v", err)
