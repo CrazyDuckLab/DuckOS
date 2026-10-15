@@ -218,7 +218,9 @@ func TestNATPMPMalformedAndPublicAddress(t *testing.T) {
 }
 
 func pcpMapReq(protoNum byte, intPort, extPort uint16, extIP netip.Addr, headerIP netip.Addr, lifetime uint32, opts ...[]byte) []byte {
-	buf := make([]byte, 64)
+	// RFC 6887 wire shape: 24-byte header (lifetime in the header) +
+	// 36-byte MAP payload; options follow the payload.
+	buf := make([]byte, 60)
 	buf[0] = 2
 	buf[1] = 2
 	buf[4] = byte(lifetime >> 24)
@@ -237,10 +239,6 @@ func pcpMapReq(protoNum byte, intPort, extPort uint16, extIP netip.Addr, headerI
 		e := extIP.As16()
 		copy(p[20:36], e[:])
 	}
-	p[36] = byte(lifetime >> 24)
-	p[37] = byte(lifetime >> 16)
-	p[38] = byte(lifetime >> 8)
-	p[39] = byte(lifetime)
 	for _, o := range opts {
 		buf = append(buf, o...)
 	}

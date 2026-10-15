@@ -47,15 +47,28 @@ const (
 	PCPOptPortSetOption = 128 // RFC 7753
 )
 
-// PCPMinRequest is the fixed 24-byte PCP header.
+// PCPMinRequest is the fixed 24-byte PCP request header
+// (RFC 6887 section 7: version, opcode, reserved, requested
+// lifetime, 16-byte client address).
 const PCPMinRequest = 24
+
+// PCPResponseHeaderSize is the response header: the request header
+// with the requested-lifetime field followed by the 4-byte epoch, so
+// the client address starts at byte 12. The response opcode carries
+// the R bit (0x80) set per RFC 6887 section 7.
+const PCPResponseHeaderSize = 28
+
+// PCPOpcodeResponseBit distinguishes responses from requests.
+const PCPOpcodeResponseBit = 0x80
 
 // PCPMaxRequest is the RFC 6887 maximum: 1100 octets.
 const PCPMaxRequest = 1100
 
-// PCPMapPayloadSize is the fixed MAP opcode payload size:
-// 12 nonce + 4 protocol/reserved + 2+2 ports + 16 address + 4 lifetime.
-const PCPMapPayloadSize = 40
+// PCPMapPayloadSize is the fixed MAP opcode payload size
+// (RFC 6887 section 11.1): 12 nonce + 1 protocol + 3 reserved +
+// 2+2 ports + 16 external address. There is NO lifetime in the MAP
+// payload — the lifetime lives in the fixed header.
+const PCPMapPayloadSize = 36
 
 // PCPRequest is one decoded PCP request.
 type PCPRequest struct {
@@ -129,6 +142,7 @@ func ParsePCPRequest(buf []byte) (PCPRequest, error) {
 	}
 	req.LifetimeSec = binary.BigEndian.Uint32(buf[4:8])
 	ip, ok := netip.AddrFromSlice(buf[8:24])
+	_ = ok
 	if !ok {
 		return PCPRequest{}, errors.New("pcp: malformed client address")
 	}
@@ -143,6 +157,10 @@ func ParsePCPRequest(buf []byte) (PCPRequest, error) {
 		if len(buf) < PCPMinRequest+PCPMapPayloadSize {
 			return PCPRequest{}, errors.New("pcp: truncated MAP payload")
 		}
+		// RFC 6887 section 11.1: nonce (12) + protocol (1) +
+		// reserved (3) + internal port (2) + external port (2) +
+		// external IP (16) = 36 bytes. The lifetime is NOT part of
+		// the MAP payload; it stays in the fixed header read above.
 		p := buf[PCPMinRequest:]
 		copy(req.MapNonce[:], p[0:12])
 		req.ProtocolNum = p[12]
@@ -151,7 +169,6 @@ func ParsePCPRequest(buf []byte) (PCPRequest, error) {
 		if ext, ok := netip.AddrFromSlice(p[20:36]); ok {
 			req.ExtIP = ext.Unmap()
 		}
-		req.LifetimeSec = binary.BigEndian.Uint32(p[36:40])
 		rest := p[PCPMapPayloadSize:]
 		opts, err := parsePCPOptions(rest)
 		if err != nil {
@@ -204,45 +221,50 @@ type PCPResponse struct {
 	ExtIP        netip.Addr
 }
 
-// Encode serialises the response for ANNOUNCE or MAP.
+// Encode serialises the response for ANNOUNCE or MAP exactly per
+// RFC 6887 section 7/11.1: the response opcode carries the R bit,
+// the 28-byte response header holds lifetime+epoch and the full
+// 16-byte client address, and the MAP payload (36 bytes) follows at
+// byte 28 with no lifetime field. ANNOUNCE responses are header-only.
 func (r PCPResponse) Encode() []byte {
-	out := make([]byte, PCPMinRequest+PCPMapPayloadSize)
+	if r.Op == PCPOpAnnounce {
+		out := make([]byte, PCPResponseHeaderSize)
+		encodePCPResponseHeader(out, r)
+		return out
+	}
+	out := make([]byte, PCPResponseHeaderSize+PCPMapPayloadSize)
+	encodePCPResponseHeader(out, r)
+	p := out[PCPResponseHeaderSize:]
+	copy(p[0:12], r.MapNonce[:])
+	p[12] = r.ProtocolNum
+	// p[13:16] stay zero (reserved).
+	binary.BigEndian.PutUint16(p[16:18], r.InternalPort)
+	binary.BigEndian.PutUint16(p[18:20], r.ExternalPort)
+	if r.ExtIP.Is4() {
+		e4 := r.ExtIP.As4()
+		copy(p[20:24], e4[:])
+		// p[24:36] stay zero (IPv4-mapped convention, matching the
+		// client-address encoding).
+	} else if r.ExtIP.IsValid() && !r.ExtIP.IsUnspecified() {
+		e16 := r.ExtIP.As16()
+		copy(p[20:36], e16[:])
+	}
+	return out
+}
+
+func encodePCPResponseHeader(out []byte, r PCPResponse) {
 	out[0] = PCPVersion
-	out[1] = r.Op
+	out[1] = r.Op | PCPOpcodeResponseBit
 	out[2] = 0 // reserved
 	out[3] = r.ResultCode
 	binary.BigEndian.PutUint32(out[4:8], r.LifetimeSec)
 	binary.BigEndian.PutUint32(out[8:12], r.EpochSec)
 	if r.InternalIP.Is4() {
-		{
-			a4 := r.InternalIP.As4()
-			copy(out[12:16], a4[:])
-		}
-		// remaining 12 bytes are zero (IPv4-mapped form)
+		a4 := r.InternalIP.As4()
+		copy(out[12:16], a4[:])
+		// out[16:28] stay zero (IPv4-mapped form).
 	} else if r.InternalIP.IsValid() {
-		{
-			a16 := r.InternalIP.As16()
-			copy(out[12:28], a16[:])
-		}
+		a16 := r.InternalIP.As16()
+		copy(out[12:28], a16[:])
 	}
-	if r.Op != PCPOpAnnounce {
-		p := out[PCPMinRequest:]
-		copy(p[0:12], r.MapNonce[:])
-		p[12] = r.ProtocolNum
-		binary.BigEndian.PutUint16(p[16:18], r.InternalPort)
-		binary.BigEndian.PutUint16(p[18:20], r.ExternalPort)
-		if r.ExtIP.Is4() {
-			{
-				e4 := r.ExtIP.As4()
-				copy(p[20:24], e4[:])
-			}
-		} else if r.ExtIP.IsValid() {
-			{
-				e16 := r.ExtIP.As16()
-				copy(p[20:36], e16[:])
-			}
-		}
-		binary.BigEndian.PutUint32(p[36:40], r.LifetimeSec)
-	}
-	return out
 }
