@@ -224,13 +224,14 @@ type RestoreApplier interface {
 	UpsertSubscription(Subscription) error
 }
 
-// Restore applies every non-conflict entry. Conflicting entries are
-// skipped (the operator resolves them explicitly); the function
-// reports what it applied and skipped. It never deletes live
-// objects that are absent from the backup.
+// Restore applies every non-conflict entry. Entries that cannot be
+// validated — typically credential-less users from a default
+// (secret-free) export, which must be re-bound through the vault —
+// are skipped with a count, never half-applied. It never deletes
+// live objects that are absent from the backup.
 func Restore(b Backup, apply RestoreApplier) (applied, skipped int, err error) {
-	if err := ValidateBackup(b); err != nil {
-		return 0, 0, err
+	if b.Version != BackupVersion {
+		return 0, 0, fmt.Errorf("backup: version %d is not supported (want %d)", b.Version, BackupVersion)
 	}
 	for _, s := range b.Servers {
 		if err := apply.UpsertServer(s); err != nil {
@@ -239,6 +240,11 @@ func Restore(b Backup, apply RestoreApplier) (applied, skipped int, err error) {
 		applied++
 	}
 	for _, u := range b.Users {
+		if err := u.Validate(); err != nil {
+			// Credential-less draft from a secret-free export.
+			skipped++
+			continue
+		}
 		if err := apply.UpsertUser(u); err != nil {
 			return applied, skipped, fmt.Errorf("backup: restore user %s: %w", u.ID, err)
 		}

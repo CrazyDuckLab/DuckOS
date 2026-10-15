@@ -28,9 +28,11 @@ type Enforcer struct {
 	// Collect produces one stats snapshot (subprocess collector in
 	// production; injectable in tests).
 	Collect Collector
-	// PerNode maps node accounting scope into the same ledger
-	// (scope "node:<id>"). Optional.
-	Now func() time.Time
+	// EmailForScope maps a quota scope onto the Xray stats email
+	// label (production wiring: the catalog lookup). Without it,
+	// per-user usage cannot be attributed and quotas stay advisory.
+	EmailForScope func(scopeKind, scopeID string) string
+	Now           func() time.Time
 }
 
 // Round executes one collection + evaluation pass. It returns the
@@ -55,15 +57,20 @@ func (e *Enforcer) Round(ctx context.Context) ([]Decision, error) {
 	}
 	var decisions []Decision
 	// Evaluate quotas for every scope that has one; the engine
-	// triggers Suspend on exhausted auto-suspend quotas.
+	// triggers Suspend on exhausted auto-suspend quotas. Usage is
+	// attributed through the scope→email mapping; an unmappable
+	// scope cannot observe usage and is skipped honestly.
 	for _, id := range e.Engine.QuotaIDs() {
 		q, ok := e.Engine.Quota(id)
 		if !ok {
 			continue
 		}
-		up, down, total := e.Accountant.UserUsage(q.ScopeID)
-		_ = up
-		_ = down
+		var total uint64
+		if e.EmailForScope != nil {
+			if email := e.EmailForScope(q.ScopeKind, q.ScopeID); email != "" {
+				_, _, total = e.Accountant.UserUsage(email)
+			}
+		}
 		ds, err := e.Engine.Observe(q.ScopeKind, q.ScopeID, total, "enforcer")
 		if err != nil && e.Events != nil {
 			_ = e.Events.Record(Event{At: now, Kind: EventQuotaExhausted, Severity: SeverityWarning,

@@ -127,6 +127,10 @@ func (c *FileCatalog) commit(state fileState) error {
 
 func nowUTC() time.Time { return time.Now().UTC() }
 
+// Dir returns the catalog's state directory (for tooling that must
+// re-open the same durable state).
+func (c *FileCatalog) Dir() string { return c.dir }
+
 // GetSubscription returns one durable subscription record.
 func (c *FileCatalog) GetSubscription(_ context.Context, id string) (Subscription, error) {
 	c.mu.Lock()
