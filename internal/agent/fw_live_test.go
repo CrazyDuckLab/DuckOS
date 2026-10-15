@@ -277,7 +277,11 @@ func TestLiveSafeApplyLifecycle(t *testing.T) {
 		t.Fatalf("controller: %v", err)
 	}
 	w := safeapply.NewWorker(ctl)
-	if _, err := w.SubmitRequest("", "", liveCandidate(t, liveRule("timeout-rule", "")), "test", "timeout", 2*time.Second); err != nil {
+	snap, err := ctl.Status()
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if _, err := w.SubmitRequest(snap.Current.ID, "", liveCandidate(t, liveRule("timeout-rule", "")), "test", "timeout", 2*time.Second); err != nil {
 		t.Fatalf("submit: %v", err)
 	}
 	waitKernelRule(t, "timeout-rule")
