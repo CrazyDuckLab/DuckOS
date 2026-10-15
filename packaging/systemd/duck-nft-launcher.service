@@ -1,0 +1,59 @@
+[Unit]
+Description=DuckOS nftables privileged launcher daemon (internal TEST build)
+Documentation=file:/opt/duckos/current/BUILD-INFO.json
+# BETA.3 privilege-boundary remediation: duck-agent keeps
+# CapabilityBoundingSet= empty and NoNewPrivileges=yes (unchanged
+# security invariant). This unit is the single privilege holder for
+# the DuckOS-owned nftables operations:
+#
+#   inet duckos       (network Safe Apply firewall)
+#   inet duckos_fw    (typed FORWARD rules)
+#   inet duckos_upnp  (UPnP / NAT-PMP / PCP mappings)
+#
+# CAP_NET_ADMIN is the ONLY capability required for nftables netlink
+# operations. No other cap may be added without an independent review:
+# the launcher accepts only allowlisted batches for the three owned
+# tables above (see internal/nftlaunch and cmd/duck-nft-launcher) and
+# never executes arbitrary nft scripts or shell commands.
+After=syslog.target network-online.target
+After=duck-network-recover.service
+After=duck-agent.service
+Wants=duck-agent.service
+
+[Service]
+Type=simple
+# Same single-owner RuntimeDirectory model as duck-wg-launcher:
+# /run/duckos-agent belongs to duck-agent.service; this unit only
+# binds its socket into the existing dir (After=duck-agent.service).
+ExecStart=/opt/duckos/current/bin/duck-nft-launcher --listen=/run/duckos-agent/nft-launcher.sock --nft=/usr/sbin/nft
+Restart=on-failure
+RestartSec=2s
+User=root
+Group=duckos
+RuntimeDirectory=
+ReadWritePaths=/run/duckos-agent
+
+# Hardening: CAP_NET_ADMIN and nothing else. NoNewPrivileges stays
+# off only because the launcher must hold ambient CAP_NET_ADMIN for
+# its own exec of nft(8); it never elevates beyond that set.
+CapabilityBoundingSet=CAP_NET_ADMIN
+AmbientCapabilities=CAP_NET_ADMIN
+NoNewPrivileges=no
+
+LockPersonality=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+PrivateTmp=true
+PrivateDevices=false
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectSystem=strict
+ProtectHome=true
+SystemCallArchitectures=native
+MemoryMax=128M
+TasksMax=32
+LimitCORE=0
+
+[Install]
+WantedBy=multi-user.target

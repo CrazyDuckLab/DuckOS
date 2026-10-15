@@ -240,7 +240,7 @@ valid_path() {
   [[ "$candidate" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] || return 1
   case "/$candidate/" in *'/../'*|*'/./'*|*'//'*) return 1 ;; esac
   case "$candidate" in
-    VERSION|BUILD-INFO.json|LICENSE|COPYRIGHT.md|install.sh|bin/duck-api|bin/duck-agent|bin/duck-updater|bin/duck-restore|bin/duck-frr-launcher|bin/duck-wg-launcher|systemd/duck-restore.service|systemd/duck-updater.service|systemd/duck-api.service|systemd/duck-agent.service|systemd/duck-dnsmasq.service|systemd/duck-network-recover.service|systemd/duck-frr-launcher.service|systemd/duck-wg-launcher.service) return 0 ;;
+    VERSION|BUILD-INFO.json|LICENSE|COPYRIGHT.md|install.sh|bin/duck-api|bin/duck-agent|bin/duck-updater|bin/duck-restore|bin/duck-frr-launcher|bin/duck-wg-launcher|bin/duck-nft-launcher|systemd/duck-restore.service|systemd/duck-updater.service|systemd/duck-api.service|systemd/duck-agent.service|systemd/duck-dnsmasq.service|systemd/duck-network-recover.service|systemd/duck-frr-launcher.service|systemd/duck-wg-launcher.service|systemd/duck-nft-launcher.service) return 0 ;;
     web/*) [[ "$candidate" != */ ]] ;;
     xray-core/*) [[ "$candidate" != */ ]] ;;
     *) return 1 ;;
@@ -876,6 +876,19 @@ install -o root -g root -m 0644 "$release/systemd/duck-frr-launcher.service" /et
 # talks to the launcher over
 # /run/duckos-agent/wg-launcher.sock.
 install -o root -g root -m 0644 "$release/systemd/duck-wg-launcher.service" /etc/systemd/system/duck-wg-launcher.service
+
+# BETA.3 privilege-boundary remediation: install the dedicated
+# duck-nft-launcher privileged service. The launcher holds
+# CAP_NET_ADMIN only and is the single privilege holder for the
+# DuckOS-owned nftables tables (inet duckos, inet duckos_fw,
+# inet duckos_upnp). The zero-capability agent talks to it over
+# /run/duckos-agent/nft-launcher.sock; the launcher enforces the
+# table-ownership allowlist before any nft execution (see
+# packaging/systemd/duck-nft-launcher.service).
+# Like the WG launcher, the binary lives only in the release tree
+# (/opt/duckos/current/bin/duck-nft-launcher, manifest-verified) so the
+# executed path stays inside the integrity-checked payload.
+install -o root -g root -m 0644 "$release/systemd/duck-nft-launcher.service" /etc/systemd/system/duck-nft-launcher.service
 install -d -o root -g root -m 0700 /var/lib/duckos-restore /var/lib/duckos/restore-source /var/lib/duckos/restore-live
 install -o root -g root -m 0644 "$release/systemd/duck-restore.service" /etc/systemd/system/duck-restore.service
 install -d -o root -g root -m 0700 /var/lib/duckos-updater
@@ -935,7 +948,7 @@ else
   systemctl start systemd-networkd.service >/dev/null 2>&1 || printf 'Could not start systemd-networkd; networkd inventory will be unavailable until next boot.\n' >&2
 fi
 agent_attempted=true
-systemctl start duck-restore.service duck-frr-launcher.service duck-wg-launcher.service duck-agent.service
+systemctl start duck-restore.service duck-frr-launcher.service duck-wg-launcher.service duck-nft-launcher.service duck-agent.service
 api_attempted=true
 systemctl start duck-api.service
 
@@ -953,7 +966,7 @@ done
 unset token
 $ready || fail 'Authenticated Agent-backed readiness/overview did not pass before the deadline.'
 enable_attempted=true
-systemctl enable duck-agent.service duck-api.service duck-restore.service duck-frr-launcher.service duck-wg-launcher.service
+systemctl enable duck-agent.service duck-api.service duck-restore.service duck-frr-launcher.service duck-wg-launcher.service duck-nft-launcher.service
 printf 'ready %s\n' "$version" > /var/lib/duckos/install-status
 trap - EXIT
 printf 'Installed %s as an internal TEST build. Authenticated readiness and overview passed.\n' "$version"
