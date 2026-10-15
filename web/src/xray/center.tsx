@@ -48,6 +48,10 @@ type Dict = {
   errMatrix: string;
   errSubmit: string;
   helpTitle: string;
+  sectionStats: string;
+  statsStale: string;
+  statsEmpty: string;
+  diagnostics: string;
   users: string;
 };
 
@@ -81,6 +85,10 @@ const en: Dict = {
   errPort: "Port must be 1..65535.",
   errMatrix: "This protocol/transport/security combination is not supported.",
   errSubmit: "The API rejected the request.",
+  sectionStats: "Statistics",
+  statsStale: "Statistics are stale: the last collection failed.",
+  statsEmpty: "No traffic has been observed yet.",
+  diagnostics: "Diagnostics",
   helpTitle: "What is this?",
   users: "clients",
 };
@@ -117,6 +125,10 @@ const ru: Dict = {
   errMatrix: "Эта комбинация протокол/транспорт/защита не поддерживается.",
   errSubmit: "API отклонил запрос.",
   helpTitle: "Что это?",
+  sectionStats: "Статистика",
+  statsStale: "Статистика устарела: последняя сборка не удалась.",
+  statsEmpty: "Трафик пока не наблюдался.",
+  diagnostics: "Диагностика",
   users: "клиентов",
 };
 
@@ -152,6 +164,10 @@ const de: Dict = {
   errMatrix:
     "Diese Protokoll-/Transport-/Sicherheitskombination wird nicht unterstützt.",
   errSubmit: "Die API hat die Anfrage abgelehnt.",
+  sectionStats: "Statistik",
+  statsStale: "Statistik ist veraltet: die letzte Abfrage ist fehlgeschlagen.",
+  statsEmpty: "Noch kein Traffic beobachtet.",
+  diagnostics: "Diagnose",
   helpTitle: "Was ist das?",
   users: "Clients",
 };
@@ -187,6 +203,10 @@ const es: Dict = {
   errMatrix:
     "Esta combinación de protocolo/transporte/seguridad no está soportada.",
   errSubmit: "La API rechazó la solicitud.",
+  sectionStats: "Estadísticas",
+  statsStale: "Las estadísticas están obsoletas: la última recogida falló.",
+  statsEmpty: "Aún no se ha observado tráfico.",
+  diagnostics: "Diagnóstico",
   helpTitle: "¿Qué es esto?",
   users: "clientes",
 };
@@ -723,6 +743,11 @@ export function XrayCenterPage({
         )}
       </section>
 
+      <section aria-labelledby="xray-stats-h">
+        <h2 id="xray-stats-h">{d.sectionStats}</h2>
+        <StatsPanel client={client} locale={resolvedLocale} />
+      </section>
+
       <section aria-labelledby="xray-subs-h">
         <h2 id="xray-subs-h">{d.sectionSubscriptions}</h2>
         <Help id="sub" locale={resolvedLocale} />
@@ -809,5 +834,75 @@ function UserList({
         ))}
       </tbody>
     </table>
+  );
+}
+
+/* — Statistics + diagnostics panel (measured data only) — */
+
+type StatPayload = {
+  stale: boolean;
+  collectedAt?: string;
+  ledger?: Record<string, number>;
+  note?: string;
+};
+
+function StatsPanel({ client, locale }: { client: APIClient; locale: Locale }) {
+  const d = dicts[locale];
+  const [stats, setStats] = useState<StatPayload | null>(null);
+  const [diags, setDiags] = useState<Array<{
+    code: string;
+    severity: string;
+    summary: string;
+    remediation: string;
+  }> | null>(null);
+  useEffect(() => {
+    client.fetchXrayCenterStats().then((r) => {
+      if (r.ok) setStats(r.data);
+    });
+    client.fetchXrayDiagnostics("").then((r) => {
+      if (r.ok) setDiags(r.data);
+    });
+  }, [client]);
+  return (
+    <div>
+      {!stats && <StatePanel state="loading" />}
+      {stats && stats.stale && (
+        <p className="xray-error" role="alert">
+          {d.statsStale}
+        </p>
+      )}
+      {stats &&
+        !stats.stale &&
+        Object.keys(stats.ledger ?? {}).length === 0 && (
+          <p className="xray-empty">{d.statsEmpty}</p>
+        )}
+      {stats && !stats.stale && Object.keys(stats.ledger ?? {}).length > 0 && (
+        <table className="xray-table">
+          <tbody>
+            {Object.entries(stats.ledger ?? {}).map(([k, v]) => (
+              <tr key={k}>
+                <td>{k}</td>
+                <td>{v.toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {diags && diags.length > 0 && (
+        <div>
+          <h3>{d.diagnostics}</h3>
+          {diags.map((diag) => (
+            <p
+              key={diag.code}
+              className={
+                diag.severity === "critical" ? "xray-error" : undefined
+              }
+            >
+              <strong>{diag.code}</strong>: {diag.summary} — {diag.remediation}
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

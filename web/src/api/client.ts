@@ -689,6 +689,29 @@ export class APIClient {
       },
     );
   }
+  fetchXrayCenterStats(options: FetchOptions = {}) {
+    return this.fetch<{
+      stale: boolean;
+      collectedAt?: string;
+      ledger?: Record<string, number>;
+      note?: string;
+    }>(`${APIClient.ENDPOINTS.xray}/center/stats`, null, options);
+  }
+  fetchXrayDiagnostics(subject: string, options: FetchOptions = {}) {
+    return this.fetch<
+      Array<{
+        code: string;
+        severity: string;
+        summary: string;
+        remediation: string;
+        evidence?: string[];
+      }>
+    >(
+      `${APIClient.ENDPOINTS.xray}/center/diagnostics?subject=${encodeURIComponent(subject)}`,
+      null,
+      options,
+    );
+  }
   xrayDeleteSubscription(subId: string, options: FetchOptions = {}) {
     return this.fetch<unknown>(
       `${APIClient.ENDPOINTS.xray}/subscriptions/${encodeURIComponent(subId)}`,

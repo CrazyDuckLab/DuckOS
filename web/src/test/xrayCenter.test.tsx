@@ -24,6 +24,10 @@ function fakeClient(servers: unknown[] = []) {
       } as FetchResult<unknown[]>),
     fetchXrayUsers: () =>
       Promise.resolve({ ok: true, data: [], age: 0 } as FetchResult<unknown[]>),
+    fetchXrayCenterStats: () =>
+      Promise.resolve({ ok: true, data: { stale: false, ledger: {} }, age: 0 } as FetchResult<{ stale: boolean; ledger?: Record<string, number> }>),
+    fetchXrayDiagnostics: () =>
+      Promise.resolve({ ok: true, data: [], age: 0 } as FetchResult<Array<{ code: string; severity: string; summary: string; remediation: string }>>),
     xrayCreateServer: vi.fn(() => Promise.resolve({ ok: true })),
     xrayDeleteServer: (id: string) => {
       deleted.push(id);
