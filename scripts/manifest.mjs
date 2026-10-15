@@ -3,7 +3,7 @@ import { readdir, readFile, writeFile, lstat } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 const [dir, version, commit, dirty, arch, epoch] = process.argv.slice(2);
 if (!dir || !/^[a-f0-9]{40}$/.test(commit) || !['amd64','arm64','armv7'].includes(arch)) throw new Error('Invalid build metadata');
-await writeFile(join(dir, 'BUILD-INFO.json'), JSON.stringify({ version, commit, dirty: dirty === 'true', target: `linux/${arch}`, goVersion: 'go1.27.1', nodeVersion: process.version, sourceDateEpoch: Number(epoch), kind: 'internal-development' }, null, 2) + '\n');
+await writeFile(join(dir, 'BUILD-INFO.json'), JSON.stringify({ version, commit, dirty: dirty === 'true', target: `linux/${arch}`, goVersion: 'go1.27.1', nodeVersion: process.version, sourceDateEpoch: Number(epoch), kind: version.startsWith('v') ? 'prerelease' : 'internal-development' }, null, 2) + '\n');
 async function inventory(path) {
   const result = [];
   for (const name of (await readdir(path)).sort()) {

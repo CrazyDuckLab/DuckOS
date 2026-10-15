@@ -60,8 +60,10 @@ out; its previous address was not substituted. No management interface, SSH,
 default route, installed services, operating system or existing worktree was
 reconfigured. No VM was created, rebooted or reinstalled.
 
-H08/DV07 systemd witnesses refuse to replace an existing installation. Their
-installer, unit, updater and witness source paths are unchanged from beta.2.
+H08/DV07 systemd witnesses refuse to replace an existing installation. The unit, updater and witness source paths are unchanged from beta.2.
+The independent audit changed installer artifact validation to accept clean
+prerelease metadata and require DuckOS license files; that parser is covered
+by synthetic packaging tests, not a fresh host installation.
 Historical beta.2 qualification reports are relevant context, but are not
 independent raw execution evidence for this candidate. No new fresh-host pass,
 power-loss pass or physical ARM qualification is claimed.

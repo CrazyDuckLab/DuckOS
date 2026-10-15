@@ -33,6 +33,8 @@ async function fixture(t) {
     .replace('8255dd939c34cf966cc91517b6324dd3c8d0bcf49ffac8beca049a38c46845ed', xraySha);
   const files = new Map([
     ['VERSION', '1.0.0-dev.012345abcdef\n'],
+    ['LICENSE', 'Synthetic GPL license fixture\n'],
+    ['COPYRIGHT.md', 'Synthetic copyright fixture\n'],
     ['BUILD-INFO.json', JSON.stringify({ version: '1.0.0-dev.012345abcdef', commit: '012345abcdef0000000000000000000000000000', dirty: false, target: 'linux/amd64', goVersion: 'go1.27.1', nodeVersion: 'v24.20.0', sourceDateEpoch: 1788796800, kind: 'internal-development' }, null, 2) + '\n'],
     ['install.sh', installerSource],
     ['bin/duck-agent', elf],
@@ -221,10 +223,10 @@ test('build metadata rejects malformed JSON, mismatched revisions and dirty stat
   const original = JSON.parse(await fs.readFile(metadataPath, 'utf8'));
   await fs.writeFile(metadataPath, '{ "version": invalid }\n');
   await f.manifest();
-  rejected(verify(f.artifact), /canonical internal-build metadata format/);
+  rejected(verify(f.artifact), /canonical build metadata format/);
   await fs.writeFile(metadataPath, JSON.stringify({ ...original, commit: 'f'.repeat(40) }, null, 2) + '\n');
   await f.manifest();
-  rejected(verify(f.artifact), /version or commit disagrees/);
+  rejected(verify(f.artifact), /Development identity disagrees with source commit/);
   await fs.writeFile(metadataPath, JSON.stringify({ ...original, dirty: true }, null, 2) + '\n');
   await f.manifest();
   rejected(verify(f.artifact), /dirty marker disagrees/);
@@ -234,7 +236,7 @@ test('public release labels and oversized sparse files are rejected', async (t) 
   const f = await fixture(t);
   await fs.writeFile(path.join(f.artifact, 'VERSION'), '1.0.0\n');
   await f.manifest();
-  rejected(verify(f.artifact), /Only internal/);
+  rejected(verify(f.artifact), /Build metadata version disagrees/);
   await fs.truncate(path.join(f.artifact, 'bin/duck-agent'), 268435457);
   rejected(verify(f.artifact), /256 MiB size limit/);
 });
@@ -456,4 +458,31 @@ test('macOS Finder / AppleDouble metadata is excluded from the manifest', async 
   assert.match(sums, /  bin\/duck-agent\n/);
   assert.doesNotMatch(sums, /\._/);
   assert.doesNotMatch(sums, /\.DS_Store/);
+});
+
+
+test('prerelease identity accepted and dirty/malformed release identity refused', async (t) => {
+  const f = await fixture(t);
+  const metaPath = path.join(f.artifact, 'BUILD-INFO.json');
+  const metadata = JSON.parse(await fs.readFile(metaPath, 'utf8'));
+  metadata.version = 'v0.1.0-beta.3'; metadata.kind = 'prerelease';
+  await fs.writeFile(path.join(f.artifact, 'VERSION'), metadata.version + '\n');
+  await fs.writeFile(metaPath, JSON.stringify(metadata, null, 2) + '\n');
+  await f.manifest();
+  const verify = () => spawnSync('bash', [path.join(f.artifact,'install.sh'),'--artifact',f.artifact,'--verify-artifact'], {encoding:'utf8'});
+  assert.equal(verify().status, 0);
+  metadata.dirty = true;
+  await fs.writeFile(metaPath, JSON.stringify(metadata, null, 2) + '\n'); await f.manifest();
+  assert.notEqual(verify().status, 0);
+  metadata.dirty = false; metadata.version = 'v0.1.0-beta.03';
+  await fs.writeFile(path.join(f.artifact, 'VERSION'), metadata.version + '\n');
+  await fs.writeFile(metaPath, JSON.stringify(metadata, null, 2) + '\n'); await f.manifest();
+  assert.notEqual(verify().status, 0);
+});
+
+
+test('DuckOS license files are mandatory in the payload', async (t) => {
+ const f=await fixture(t);
+ await fs.rm(path.join(f.artifact,'LICENSE')); f.files.delete('LICENSE'); await f.manifest();
+ rejected(verify(f.artifact), /Required artifact file is missing: LICENSE/);
 });

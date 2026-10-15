@@ -23,7 +23,7 @@ if [[ -z "$RELEASE" ]]; then
 	exit 0
 fi
 
-if [[ ! "$RELEASE" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+if [[ ${#RELEASE} -gt 79 || ! "$RELEASE" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
 	printf 'release version %q is not a valid semver tag\n' "$RELEASE" >&2
 	exit 1
 fi

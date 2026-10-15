@@ -240,7 +240,7 @@ valid_path() {
   [[ "$candidate" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] || return 1
   case "/$candidate/" in *'/../'*|*'/./'*|*'//'*) return 1 ;; esac
   case "$candidate" in
-    VERSION|BUILD-INFO.json|install.sh|bin/duck-api|bin/duck-agent|bin/duck-updater|bin/duck-restore|bin/duck-frr-launcher|bin/duck-wg-launcher|systemd/duck-restore.service|systemd/duck-updater.service|systemd/duck-api.service|systemd/duck-agent.service|systemd/duck-dnsmasq.service|systemd/duck-network-recover.service|systemd/duck-frr-launcher.service|systemd/duck-wg-launcher.service) return 0 ;;
+    VERSION|BUILD-INFO.json|LICENSE|COPYRIGHT.md|install.sh|bin/duck-api|bin/duck-agent|bin/duck-updater|bin/duck-restore|bin/duck-frr-launcher|bin/duck-wg-launcher|systemd/duck-restore.service|systemd/duck-updater.service|systemd/duck-api.service|systemd/duck-agent.service|systemd/duck-dnsmasq.service|systemd/duck-network-recover.service|systemd/duck-frr-launcher.service|systemd/duck-wg-launcher.service) return 0 ;;
     web/*) [[ "$candidate" != */ ]] ;;
     xray-core/*) [[ "$candidate" != */ ]] ;;
     *) return 1 ;;
@@ -304,35 +304,43 @@ verify_artifact() {
     else fail 'Special files are not allowed in artifacts.'; fi
   done < <(find "$root" -mindepth 1 -print0)
   [[ $count -eq $((${#manifest_paths[@]} + 1)) ]] || fail 'Artifact inventory mismatch.'
-  for relative in VERSION BUILD-INFO.json install.sh bin/duck-api bin/duck-agent bin/duck-updater bin/duck-restore systemd/duck-restore.service systemd/duck-updater.service systemd/duck-api.service systemd/duck-agent.service systemd/duck-dnsmasq.service systemd/duck-network-recover.service web/index.html xray-core/XRAY_CORE_VERSION xray-core/XRAY_CORE_LICENSE xray-core/XRAY_CORE_SHA256SUMS; do
+  for relative in VERSION BUILD-INFO.json LICENSE COPYRIGHT.md install.sh bin/duck-api bin/duck-agent bin/duck-updater bin/duck-restore systemd/duck-restore.service systemd/duck-updater.service systemd/duck-api.service systemd/duck-agent.service systemd/duck-dnsmasq.service systemd/duck-network-recover.service web/index.html xray-core/XRAY_CORE_VERSION xray-core/XRAY_CORE_LICENSE xray-core/XRAY_CORE_SHA256SUMS; do
     has_path "$relative" || fail "Required artifact file is missing: $relative"
   done
   [[ $(wc -c < "$root/VERSION") -le 80 ]] || fail 'VERSION is too long.'
   version=$(< "$root/VERSION")
-  [[ "$version" =~ ^1\.0\.0-dev\.[0-9a-f]{12}(\.dirty)?$ ]] || fail 'Only internal 1.0.0-dev.<12sha>[.dirty] artifacts are supported.'
   [[ $(wc -c < "$root/BUILD-INFO.json") -le 4096 ]] || fail 'BUILD-INFO.json is too large.'
   metadata=$(< "$root/BUILD-INFO.json")
-  # Accept only the canonical JSON emitted by scripts/manifest.mjs. A closed
-  # grammar avoids adding a general JSON interpreter to the Debian runtime.
   metadata_pattern='^\{
-  "version": "(1\.0\.0-dev\.[0-9a-f]{12}(\.dirty)?)",
+  "version": "([A-Za-z0-9.-]+)",
   "commit": "([0-9a-f]{40})",
   "dirty": (true|false),
   "target": "(linux/(amd64|arm64|armv7))",
   "goVersion": "go[0-9]+\.[0-9]+\.[0-9]+",
   "nodeVersion": "v[0-9]+\.[0-9]+\.[0-9]+",
   "sourceDateEpoch": [0-9]+,
-  "kind": "internal-development"
+  "kind": "(internal-development|prerelease)"
 \}$'
-  [[ "$metadata" =~ $metadata_pattern ]] || fail 'BUILD-INFO.json must match the canonical internal-build metadata format.'
-  [[ "${BASH_REMATCH[1]}" == "$version" && "${BASH_REMATCH[3]:0:12}" == "${version:10:12}" ]] || fail 'Build metadata version or commit disagrees with VERSION.'
-  if [[ "$version" == *.dirty ]]; then
-    [[ "${BASH_REMATCH[4]}" == true ]] || fail 'Build metadata dirty marker disagrees with VERSION.'
+  [[ "$metadata" =~ $metadata_pattern ]] || fail 'BUILD-INFO.json must match the canonical build metadata format.'
+  metadata_version=${BASH_REMATCH[1]}
+  metadata_commit=${BASH_REMATCH[2]}
+  metadata_dirty=${BASH_REMATCH[3]}
+  metadata_target=${BASH_REMATCH[4]}
+  metadata_arch=${BASH_REMATCH[5]}
+  metadata_kind=${BASH_REMATCH[6]}
+  [[ "$metadata_version" == "$version" ]] || fail 'Build metadata version disagrees with VERSION.'
+  if [[ "$version" =~ ^1\.0\.0-dev\.([0-9a-f]{12})(\.dirty)?$ ]]; then
+    [[ "${metadata_commit:0:12}" == "${BASH_REMATCH[1]}" && "$metadata_kind" == internal-development ]] || fail 'Development identity disagrees with source commit or kind.'
+    if [[ "$version" == *.dirty ]]; then expected_dirty=true; else expected_dirty=false; fi
+    [[ "$metadata_dirty" == "$expected_dirty" ]] || fail 'Build metadata dirty marker disagrees with VERSION.'
   else
-    [[ "${BASH_REMATCH[4]}" == false ]] || fail 'Build metadata dirty marker disagrees with VERSION.'
+    [[ "$version" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*$ ]] || fail 'Unsupported release version.'
+    IFS=. read -r -a prerelease_parts <<< "${version#*-}"
+    for part in "${prerelease_parts[@]}"; do
+      [[ ! "$part" =~ ^0[0-9]+$ ]] || fail 'Numeric prerelease identifier has a leading zero.'
+    done
+    [[ "$metadata_dirty" == false && "$metadata_kind" == prerelease ]] || fail 'Release metadata must be clean and marked prerelease.'
   fi
-  metadata_target="${BASH_REMATCH[5]}"
-  metadata_arch="${BASH_REMATCH[6]}"
   case "$metadata_target" in
     linux/amd64) expected_elf_class='02'; expected_elf_machine='3e00'; arch_label='amd64 (ELF64 EM_X86_64)' ;;
     linux/arm64) expected_elf_class='02'; expected_elf_machine='b700'; arch_label='arm64 (ELF64 EM_AARCH64)' ;;
