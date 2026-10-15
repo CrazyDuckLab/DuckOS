@@ -117,6 +117,14 @@ prior local output is preserved under `dist/.previous-*` for inspection.
 The same clean commit/toolchain produces deterministic payload bytes; archive
 timestamp normalization and signed release provenance remain future work.
 
+Official release builds stamp a public identity via
+`DUCKOS_RELEASE_VERSION` (see `scripts/version.sh`): the value must be a
+semver tag (`vMAJOR.MINOR.PATCH[-PRERELEASE]`, e.g. `v0.1.0-beta.3`), the
+working tree must be clean, and a git tag of that name must exist and point
+at exactly the source commit being built — a mismatched or missing tag fails
+the build, so a release version can never describe sources it was not
+produced from. Development builds are unchanged when the variable is unset.
+
 The API can run on Mac against an absent Agent to verify liveness and failure
 UX; the Linux Agent refuses non-Linux execution. Tests use explicitly synthetic
 fixtures only where isolating a component. A live Linux-state dashboard is

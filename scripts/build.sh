@@ -7,8 +7,7 @@ npm --prefix web run build
 COMMIT=$(git rev-parse HEAD)
 DIRTY=false
 [[ -z $(git status --porcelain --untracked-files=normal) ]] || DIRTY=true
-VERSION="1.0.0-dev.${COMMIT:0:12}"
-[[ "$DIRTY" == false ]] || VERSION="$VERSION.dirty"
+VERSION=$(bash "$(dirname -- "$0")/version.sh" "$COMMIT" "$DIRTY")
 SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)
 export SOURCE_DATE_EPOCH
 mkdir -p dist
