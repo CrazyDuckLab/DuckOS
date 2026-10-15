@@ -880,13 +880,14 @@ const TUNNELS: PageMeta[] = [
   },
   {
     id: "P050",
-    name: "Xray Users / Profiles",
+    name: "Xray Center",
     route: "/tunnels/xray/profiles",
     section: "tunnels",
     icon: "xrayProfiles",
-    question: "Which Xray users are configured, and what is their quota?",
-    implemented: false,
-    features: "user list; quota; export",
+    question: "Manage Xray servers, clients and subscriptions?",
+    implemented: true,
+    features:
+      "server create/delete; client create/delete; subscription create/delete; capability matrix; offline help",
     packages: "agent xray",
     columns: "User; quota; used",
     filters: "user",

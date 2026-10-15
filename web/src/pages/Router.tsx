@@ -45,6 +45,7 @@ import {
 import { NetworksLivePage, ClientsPage } from "../configurators/lan";
 import { DnsResolverPage, DhcpLeasesPage } from "../configurators/dns";
 import { FirewallRulesPage } from "../configurators/firewall";
+import { XrayCenterPage } from "../xray/center";
 import {
   WireguardServersPage,
   WireguardPeersPage,
@@ -411,6 +412,7 @@ export function PagesRouter({ route, navigate, bundle, client }: PageContext) {
     case "P049":
       return <XrayServersPage page={page} bundle={bundle} client={client} />;
     case "P050":
+      return <XrayCenterPage page={page} bundle={bundle} client={client} />;
     case "P052":
       return (
         <TunnelSubareaStub

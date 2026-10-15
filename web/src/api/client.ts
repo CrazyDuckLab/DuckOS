@@ -339,9 +339,10 @@ export class APIClient {
       options,
     );
   }
-  fetchXrayUsers(options: FetchOptions = {}) {
+  fetchXrayUsers(serverId?: string, options: FetchOptions = {}) {
+    const query = serverId ? `?server=${encodeURIComponent(serverId)}` : "";
     return this.fetch<XrayUserView[]>(
-      `${APIClient.ENDPOINTS.xray}/users`,
+      `${APIClient.ENDPOINTS.xray}/users${query}`,
       null,
       options,
     );
@@ -635,8 +636,14 @@ export class APIClient {
       protocol === "vless" && (transport === "tcp" || transport === "xhttp")
     );
   }
-  static xrayFlowAllowed(protocol: string, transport: string, security: string): boolean {
-    return protocol === "vless" && transport === "tcp" && security === "reality";
+  static xrayFlowAllowed(
+    protocol: string,
+    transport: string,
+    security: string,
+  ): boolean {
+    return (
+      protocol === "vless" && transport === "tcp" && security === "reality"
+    );
   }
   static readonly XRAY_SS_METHODS = [
     "aes-128-gcm",
@@ -646,7 +653,11 @@ export class APIClient {
     "2022-blake3-aes-256-gcm",
     "2022-blake3-chacha20-poly1305",
   ] as const;
-  xrayUpdateServer(serverId: string, server: unknown, options: FetchOptions = {}) {
+  xrayUpdateServer(
+    serverId: string,
+    server: unknown,
+    options: FetchOptions = {},
+  ) {
     return this.fetch<unknown>(
       `${APIClient.ENDPOINTS.xray}/servers/${encodeURIComponent(serverId)}`,
       null,
@@ -668,11 +679,15 @@ export class APIClient {
     );
   }
   xrayCreateSubscription(sub: unknown, options: FetchOptions = {}) {
-    return this.fetch<unknown>(`${APIClient.ENDPOINTS.xray}/subscriptions`, null, {
-      ...options,
-      method: "POST",
-      body: sub,
-    });
+    return this.fetch<unknown>(
+      `${APIClient.ENDPOINTS.xray}/subscriptions`,
+      null,
+      {
+        ...options,
+        method: "POST",
+        body: sub,
+      },
+    );
   }
   xrayDeleteSubscription(subId: string, options: FetchOptions = {}) {
     return this.fetch<unknown>(
