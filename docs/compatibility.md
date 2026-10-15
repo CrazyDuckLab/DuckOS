@@ -1,5 +1,10 @@
 # DuckOS beta.2 compatibility
 
+> **Beta.3 candidate remains blocked.** Debian AMD64 component tests and ARM
+> builds do not prove operation under the installed Agent service constraints.
+> No new fresh-host, ARM hardware, reboot or power-loss qualification is claimed.
+> See [independent audit](qualification-beta3-final.md).
+
 DuckOS beta.2 installs on Debian 13 with systemd. It is **fresh-install-only**;
 there is no qualified beta.1 → beta.2 in-place upgrade.
 

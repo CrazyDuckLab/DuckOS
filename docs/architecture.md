@@ -1,5 +1,12 @@
 # DuckOS architecture
 
+> **Beta.3 implementation gap:** the new firewall and mapping adapters invoke
+> nftables directly while duck-agent retains zero capabilities and
+> NoNewPrivileges=yes. Privileged root component tests do not close this gap.
+> A bounded privileged execution design and installed-boundary qualification
+> are required; do not broaden Agent capabilities. See
+> [independent audit](qualification-beta3-final.md).
+
 Status: target architecture; current implementation snapshot is recorded in the source tree (`internal/`) and ADRs in `docs/adr/`
 
 The handoff snapshot and subsequent ADRs supersede historical future-tense status

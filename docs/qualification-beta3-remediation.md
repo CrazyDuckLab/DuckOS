@@ -51,12 +51,11 @@ Additional remediation on the same branch:
 Executed on the existing laboratory VMs after they returned:
 
 - duck-beta-01 — Debian 13.7, kernel 6.12.107+deb13-amd64, amd64, nftables
-  1.1.3, Go 1.27.1; eth0 172.18.4.82/16 via 172.18.1.254 (DHCP); DuckOS
+  1.1.3, Go 1.27.1; externally managed eth0 (DHCP); DuckOS
   beta.2 install running (duck-agent/duck-api/launchers active). Baseline
   captured before any test; eth0, default route, SSH and host nftables
   ruleset unchanged after every phase (host `nft list tables` stayed empty).
-- duck-dev-01 — Debian 13.6, kernel 6.12.107+deb13-amd64, amd64; eth0
-  172.18.4.159/16; used as secondary verifier for the core suites.
+- duck-dev-01 — Debian 13.6, kernel 6.12.107+deb13-amd64, amd64; externally managed eth0; used as secondary verifier for the core suites.
 
 Source transferred via `git archive` of the branch HEAD; no VM reboot, no
 reinstall, no host networking changes; all nftables qualification ran
@@ -120,10 +119,17 @@ Artifacts rebuilt at final HEAD `9b82fafefcdc`
 - NAT-PMP loopback UDP on both VMs — environmental, pre-existing.
 - ARM64/ARMv7 remain artifact-verified only (no live hardware in scope).
 
-## 4. Release readiness
+## 4. Historical remediation assessment (superseded)
 
 Code blockers A–D are fixed and live-qualified on Debian 13 with real
 nftables 1.1.3, including safeapply confirm/rollback/crash-recovery and
 cross-table coexistence. Remaining before release: independent Codex audit
 of `fix/beta3-release-blockers`; witness-class tests on a bare host and
 the NAT-PMP loopback anomaly are environment items, not code blockers.
+
+## Independent audit correction
+
+The final independent audit found protocol wire defects and the installed
+Agent-to-nftables privilege gap. The earlier classification of NAT-PMP as an
+"environmental" issue and the assertion that only environment items remained
+were incorrect. See [independent audit](qualification-beta3-final.md).

@@ -1,5 +1,10 @@
 # DuckOS security model
 
+> **Beta.3 release gate:** zero-capability Agent execution of nftables fails.
+> The new adapters must not be described as production-qualified. A bounded,
+> authenticated privileged mechanism requires its own review and failure/recovery
+> tests before release. See [independent audit](qualification-beta3-final.md).
+
 Status: living threat model; partial identity/observation implementation
 Related decision: [ADR-0002](adr/0002-agent-privilege-boundary.md)
 Requirements source: [`product-spec-1.0.md`](product-spec-1.0.md)

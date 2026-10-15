@@ -1,3 +1,26 @@
+# DuckOS v0.1.0-beta.3 — unpublished network-core candidate
+
+**PUBLICATION BLOCKED.** These are candidate notes, not a release announcement.
+The current public release remains beta.2.
+
+The candidate adds protocol frontend sources (UPnP IGD/SSDP, NAT-PMP and a PCP
+subset), typed forward firewall rules with a durable confirmation journal,
+WAN DHCP/static IPv4 composition, and DHCP lease observation. Existing
+LAN/DHCP/DNS configuration, WireGuard, Xray and FRR foundations remain.
+Implemented source, privileged Linux component tests, installed service
+qualification and hardware qualification are separate evidence levels.
+
+Independent investigation corrected NAT-PMP wire offsets, public-address opcode,
+short-packet safety, source-port handling, deletion and error responses. The
+previous loopback timeout was a test design issue masking genuine protocol bugs.
+The installed Agent-to-nftables privilege gap still blocks release.
+
+UI Next, Xray Center, Subscription Center, Stealth Admin, Core/Complete profiles
+and the separate unmerged PPPoE/L2TP branch are excluded. No power-loss or new
+fresh-host qualification is claimed. See [independent audit](qualification-beta3-final.md).
+
+---
+
 # DuckOS v0.1.0-beta.2
 
 DuckOS beta.2 expands the public platform builds and strengthens the local

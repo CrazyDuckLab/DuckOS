@@ -1,5 +1,10 @@
 # Install DuckOS v0.1.0-beta.2
 
+> **Beta.3 candidate is not an installable qualified release.** Do not use
+> development payloads to replace an installed evaluation router. The new nftables
+> adapters have not passed the zero-capability Agent boundary. See
+> [final candidate audit](qualification-beta3-final.md).
+
 **Beta software. FRESH-INSTALL-ONLY. No qualified beta.1 → beta.2 in-place upgrade.**
 Use a fresh Debian 13 host with systemd, an isolated test network, and an
 out-of-band console. Do not remove an existing installation to bypass preflight.

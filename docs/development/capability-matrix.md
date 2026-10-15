@@ -1,5 +1,9 @@
 # DuckOS Capability Matrix — beta.3 / beta.4 planning baseline
 
+> **Beta.3 release gate: BLOCKED.** Kernel tests below describe component
+> qualification from a privileged test process, not the installed zero-capability
+> Agent. See [independent final audit](../qualification-beta3-final.md).
+
 Status: living document, updated per subsystem during beta.3/beta.4 development.
 Baseline: `main` @ `3388271` (beta.2 release `feee7c0` + GitHub presentation commits).
 

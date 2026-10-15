@@ -1,5 +1,10 @@
 # DuckOS v0.1.0-beta.2 limitations
 
+> **Beta.3 network core is unpublished.** Direct nftables adapters cannot
+> operate under the installed Agent empty capability bounding set. NAT-PMP wire
+> fixes have isolated Linux socket evidence; they do not qualify the complete
+> Agent-to-kernel mapping path. See [independent audit](qualification-beta3-final.md).
+
 **Beta software. Fresh installation required. No qualified beta.1 → beta.2
 in-place upgrade.** Use an isolated network and preserve console access.
 

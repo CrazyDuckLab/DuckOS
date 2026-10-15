@@ -32,6 +32,11 @@
 > artifact verification, without the equivalent live matrix. Use an isolated
 > evaluation network and console access. No qualified beta.1 → beta.2 upgrade.
 
+> **Beta.3 network-core candidate: publication blocked.** Protocol and firewall
+> component tests do not establish operation under the installed Agent privilege
+> boundary. See the [independent release audit](docs/qualification-beta3-final.md).
+> The current published release remains beta.2.
+
 ## Networking you can inspect
 
 DuckOS brings configuration, diagnostics and recovery into one local control

@@ -1,5 +1,9 @@
 # DuckOS security policy
 
+> The unpublished beta.3 candidate is blocked by the Agent-to-nftables privilege
+> boundary. No extra capabilities have been granted to the Agent. See
+> [independent candidate audit](docs/qualification-beta3-final.md).
+
 This page covers the supported versions of DuckOS, the current
 implementation-level security model at a high level, and how to
 report a vulnerability. The detailed trust boundaries, threat model,
