@@ -123,7 +123,8 @@ func isPortStr(s string) bool {
 
 // Conflict describes a policy-pair contradiction.
 type Conflict struct {
-	A, B   string `json:"a"`
+	A      string `json:"a"`
+	B      string `json:"b"`
 	Reason string `json:"reason"`
 	// Severity: error blocks compilation; warning does not.
 	Severity string `json:"severity"`
