@@ -281,11 +281,13 @@ func TestLiveSafeApplyLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("status: %v", err)
 	}
-	if _, err := w.SubmitRequest(snap.Current.ID, "", liveCandidate(t, liveRule("timeout-rule", "")), "test", "timeout", 2*time.Second); err != nil {
+	// The admission contract requires a window of at least two
+	// minutes; the rollback is expected just after it expires.
+	if _, err := w.SubmitRequest(snap.Current.ID, "", liveCandidate(t, liveRule("timeout-rule", "")), "test", "timeout", 2*time.Minute+5*time.Second); err != nil {
 		t.Fatalf("submit: %v", err)
 	}
 	waitKernelRule(t, "timeout-rule")
-	deadline = time.Now().Add(10 * time.Second)
+	deadline = time.Now().Add(4 * time.Minute)
 	for {
 		snap, err := ctl.Status()
 		if err == nil && snap.Pending == nil {
@@ -294,7 +296,7 @@ func TestLiveSafeApplyLifecycle(t *testing.T) {
 		if time.Now().After(deadline) {
 			t.Fatalf("confirm timeout never rolled the change back: %v", err)
 		}
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 	}
 	waitKernelWithoutRule(t, "timeout-rule")
 	ctl.Close()
