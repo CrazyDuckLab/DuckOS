@@ -33,12 +33,15 @@ Group=duckos
 RuntimeDirectory=
 ReadWritePaths=/run/duckos-agent
 
-# Hardening: CAP_NET_ADMIN and nothing else. NoNewPrivileges stays
-# off only because the launcher must hold ambient CAP_NET_ADMIN for
-# its own exec of nft(8); it never elevates beyond that set.
+# Hardening: CAP_NET_ADMIN and nothing else. NoNewPrivileges=yes is
+# COMPATIBLE with the launcher's execution path: ambient capabilities
+# (pA) are inherited across execve even with NNP set — NNP only bars
+# NEW privilege from setuid/file-cap bits, which nft(8) does not need
+# (verified on Debian 13 / systemd 257: the launcher execs nft with
+# CapEff=CAP_NET_ADMIN and performs real netlink operations).
 CapabilityBoundingSet=CAP_NET_ADMIN
 AmbientCapabilities=CAP_NET_ADMIN
-NoNewPrivileges=no
+NoNewPrivileges=yes
 
 LockPersonality=true
 RestrictRealtime=true
