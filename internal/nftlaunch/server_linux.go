@@ -23,6 +23,7 @@ package nftlaunch
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -38,6 +39,73 @@ import (
 // ServerExecTimeout bounds one nft invocation. The launcher is the
 // only clock that matters here; the client's deadline is a courtesy.
 const ServerExecTimeout = 15 * time.Second
+
+// F8 resource bounds. The launcher is a long-lived root daemon: a
+// request flood or a pile of slow connections must degrade into
+// clean, bounded 503 rejections — never into unbounded memory or
+// unbounded goroutines.
+const (
+	// MaxConcurrentConns caps live connections. Excess connections
+	// are answered 503 overloaded and closed immediately.
+	MaxConcurrentConns = 16
+	// MaxConcurrentExecs caps nft processes at once; everything
+	// beyond waits on the exec gate (batches are atomic transactions,
+	// so parallelism buys nothing).
+	MaxConcurrentExecs = 2
+	// MaxQueuedBytes caps the aggregate request bytes admitted but
+	// not yet executed. Beyond it, new requests get 503.
+	MaxQueuedBytes = 4 << 20
+	// ConnHeaderTimeout bounds the time to receive a full request
+	// frame after connect; it prevents slow-loris style socket
+	// holding.
+	ConnHeaderTimeout = 5 * time.Second
+)
+
+// limitors is the shared admission state for one launcher instance.
+type limitors struct {
+	conns  chan struct{} // MaxConcurrentConns tokens
+	execs  chan struct{} // MaxConcurrentExecs tokens
+	queued int64         // aggregate admitted request bytes
+	mu     sync.Mutex
+}
+
+func newLimitors() *limitors {
+	return &limitors{
+		conns: make(chan struct{}, MaxConcurrentConns),
+		execs: make(chan struct{}, MaxConcurrentExecs),
+	}
+}
+
+// admitConn takes a connection slot; false means the launcher is at
+// capacity and the connection must be shed.
+func (l *limitors) admitConn() bool {
+	select {
+	case l.conns <- struct{}{}:
+		return true
+	default:
+		return false
+	}
+}
+
+func (l *limitors) releaseConn() { <-l.conns }
+
+// admitBytes accounts a request's payload against the aggregate
+// queue bound; false means overloaded.
+func (l *limitors) admitBytes(n int) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.queued+int64(n) > MaxQueuedBytes {
+		return false
+	}
+	l.queued += int64(n)
+	return true
+}
+
+func (l *limitors) releaseBytes(n int) {
+	l.mu.Lock()
+	l.queued -= int64(n)
+	l.mu.Unlock()
+}
 
 // Serve listens, sets the 0660 socket mode and serves until the
 // listener closes. It is the production entry point and the test
@@ -68,6 +136,7 @@ func Serve(listen, nftPath string, agentUID uint32) error {
 // a temp socket; production goes through Serve.
 func ServeListener(ln net.Listener, nftPath string, agentUID uint32) error {
 	var mu sync.Mutex // serialises nft execs: batches are atomic transactions
+	lim := newLimitors()
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -78,7 +147,7 @@ func ServeListener(ln net.Listener, nftPath string, agentUID uint32) error {
 		}
 		go func(c net.Conn) {
 			defer c.Close()
-			HandleConn(c, &mu, nftPath, agentUID)
+			HandleConn(c, &mu, lim, nftPath, agentUID)
 		}(conn)
 	}
 }
@@ -86,8 +155,16 @@ func ServeListener(ln net.Listener, nftPath string, agentUID uint32) error {
 // HandleConn authenticates the peer, then serves exactly one framed
 // request per connection. One request per connection keeps the state
 // machine trivial and the denial path total.
-func HandleConn(conn net.Conn, mu *sync.Mutex, nftPath string, wantUID uint32) {
-	_ = conn.SetDeadline(time.Now().Add(ExecTimeout + 5*time.Second))
+func HandleConn(conn net.Conn, mu *sync.Mutex, lim *limitors, nftPath string, wantUID uint32) {
+	// The deadline starts at admission: connect, authentication,
+	// request frame and execution all share one bounded budget, so a
+	// stalled peer can never occupy a slot indefinitely.
+	_ = conn.SetDeadline(time.Now().Add(ConnHeaderTimeout + ServerExecTimeout))
+	if !lim.admitConn() {
+		writeResp(conn, Response{Status: 503, Code: "overloaded", Message: "launcher is at its connection limit; retry later"})
+		return
+	}
+	defer lim.releaseConn()
 	if err := assertPeerCred(conn, wantUID); err != nil {
 		writeResp(conn, Response{Status: 401, Code: "unauthorized", Message: "peer is not the DuckOS agent"})
 		return
@@ -97,18 +174,36 @@ func HandleConn(conn net.Conn, mu *sync.Mutex, nftPath string, wantUID uint32) {
 		writeResp(conn, Response{Status: 400, Code: "invalid_request", Message: "request frame is malformed or oversized"})
 		return
 	}
-	writeResp(conn, ServeRequest(mu, nftPath, &req))
+	if n := len(req.Batch); n > 0 {
+		if !lim.admitBytes(n) {
+			writeResp(conn, Response{Status: 503, Code: "overloaded", Message: "launcher queue is full; retry later"})
+			return
+		}
+		defer lim.releaseBytes(n)
+	}
+	writeResp(conn, ServeRequest(mu, lim, nftPath, &req))
 }
 
 // ServeRequest dispatches one authenticated request. Unknown ops are
 // rejected without touching nft.
-func ServeRequest(mu *sync.Mutex, nftPath string, req *Request) Response {
+func ServeRequest(mu *sync.Mutex, lim *limitors, nftPath string, req *Request) Response {
 	switch req.Op {
 	case OpPing:
 		return Response{Status: 200, Code: "ok"}
-	case OpListTables, OpListRuleset:
-		out, err := runNFT(mu, nftPath, listArgs(req.Op), nil, false)
-		return readResp(out, err)
+	case OpListRuleset:
+		// F7: the ruleset listing is filtered SERVER-SIDE down to the
+		// DuckOS-owned tables before it crosses the IPC boundary, so a
+		// global nft operation never leaks foreign objects to the
+		// zero-capability agent.
+		out, err := runNFT(mu, nftPath, []string{"--json", "list", "ruleset"}, nil, false)
+		if err != nil {
+			return readResp(nil, err)
+		}
+		filtered, ferr := filterOwnedRuleset(out)
+		if ferr != nil {
+			return Response{Status: 500, Code: "nft_failed", Message: ferr.Error()}
+		}
+		return readResp(filtered, nil)
 	case OpListTable:
 		if err := ValidateReadTarget(req.Family, req.Table); err != nil {
 			return Response{Status: 403, Code: "not_owned", Message: err.Error()}
@@ -118,6 +213,16 @@ func ServeRequest(mu *sync.Mutex, nftPath string, req *Request) Response {
 	case OpCheck, OpApply:
 		if err := ValidateBatch(req.Batch); err != nil {
 			return Response{Status: 403, Code: "batch_rejected", Message: err.Error()}
+		}
+		// Bounded execution gate: at most MaxConcurrentExecs nft
+		// processes; everything beyond waits (validation already
+		// passed, the kernel mutation is still pending), and the
+		// connection deadline bounds that wait.
+		select {
+		case lim.execs <- struct{}{}:
+			defer func() { <-lim.execs }()
+		case <-time.After(ServerExecTimeout):
+			return Response{Status: 503, Code: "overloaded", Message: "launcher execution queue is saturated; retry later"}
 		}
 		// JSON input parses only under nft --json; text batches stay
 		// in the default mode.
@@ -141,11 +246,49 @@ func ServeRequest(mu *sync.Mutex, nftPath string, req *Request) Response {
 	}
 }
 
-func listArgs(op Op) []string {
-	if op == OpListRuleset {
-		return []string{"--json", "list", "ruleset"}
+// filterOwnedRuleset keeps only entries whose object belongs to a
+// DuckOS-owned family/table; metainfo entries are preserved (nft's
+// JSON schema carries version info there).
+func filterOwnedRuleset(out []byte) ([]byte, error) {
+	var doc struct {
+		NFTables []map[string]json.RawMessage `json:"nftables"`
 	}
-	return []string{"--json", "list", "tables"}
+	if err := json.Unmarshal(out, &doc); err != nil || doc.NFTables == nil {
+		return nil, errors.New("nft ruleset output is not a valid nft JSON document")
+	}
+	kept := make([]map[string]json.RawMessage, 0, len(doc.NFTables))
+	for _, entry := range doc.NFTables {
+		if len(entry) != 1 {
+			return nil, errors.New("ambiguous nft ruleset entry")
+		}
+		for kind, raw := range entry {
+			if kind == "metainfo" {
+				kept = append(kept, entry)
+				break
+			}
+			var obj struct {
+				Family string `json:"family"`
+				Table  string `json:"table"`
+				Name   string `json:"name"`
+			}
+			if json.Unmarshal(raw, &obj) != nil {
+				return nil, errors.New("unparsable nft ruleset entry")
+			}
+			table := obj.Table
+			if table == "" {
+				table = obj.Name
+			}
+			if ValidateReadTarget(obj.Family, table) == nil {
+				kept = append(kept, entry)
+			}
+			break
+		}
+	}
+	body, err := json.Marshal(map[string]any{"nftables": kept})
+	if err != nil {
+		return nil, err
+	}
+	return body, nil
 }
 
 // runNFT execs nft with fixed argv (never caller-supplied beyond the

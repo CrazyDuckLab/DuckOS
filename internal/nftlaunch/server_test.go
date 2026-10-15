@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -216,9 +217,6 @@ func TestLauncherClientRoundTrip(t *testing.T) {
 	if _, err := c.ListRulesetJSON(); err != nil {
 		t.Fatalf("ruleset read: %v", err)
 	}
-	if _, err := c.ListTablesJSON(); err != nil {
-		t.Fatalf("tables read: %v", err)
-	}
 	// Unreachable launcher is a clean error, never a silent success.
 	dead := NewClient()
 	dead.SetSocketFn(func() string { return filepath.Join(t.TempDir(), "missing.sock") })
@@ -240,5 +238,114 @@ func TestNoWorldWritableSocket(t *testing.T) {
 	}
 	if strings.Contains(string(data), "AmbientCapabilities=CAP_NET_ADMIN ") {
 		t.Fatal("unit ambient set must contain exactly one capability")
+	}
+}
+
+// TestF8OverloadShedsAndRecovers: a connection flood must degrade
+// into clean 503 rejections while the launcher stays operational and
+// fully recovers once the flood drains. Run against the in-process
+// launcher with a stub nft so no kernel is touched.
+func TestF8OverloadShedsAndRecovers(t *testing.T) {
+	// A slow fake nft keeps execution slots busy so the flood actually
+	// contends for the bounded connection/exec budget.
+	slowDir := t.TempDir()
+	slow := filepath.Join(slowDir, "slow-nft")
+	if err := os.WriteFile(slow, []byte("#!/bin/sh\nsleep 1\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sock := startTestLauncherSimple(t, slow, uint32(os.Getuid()))
+	batch := []byte(ownedApplyBatch)
+	flood := MaxConcurrentConns + 8
+	type result struct {
+		status int
+		err    error
+	}
+	results := make(chan result, flood)
+	var wg sync.WaitGroup
+	for i := 0; i < flood; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			conn, err := net.DialTimeout("unix", sock, 5*time.Second)
+			if err != nil {
+				results <- result{status: -1, err: err}
+				return
+			}
+			defer conn.Close()
+			_ = conn.SetDeadline(time.Now().Add(30 * time.Second))
+			if err := EncodeFrame(conn, Request{Op: OpApply, Batch: batch}); err != nil {
+				results <- result{status: -1, err: err}
+				return
+			}
+			var resp Response
+			if err := DecodeFrame(conn, &resp); err != nil {
+				results <- result{status: -1, err: err}
+				return
+			}
+			results <- result{status: resp.Status}
+		}()
+	}
+	wg.Wait()
+	close(results)
+	overloaded, served, failed := 0, 0, 0
+	for r := range results {
+		switch r.status {
+		case 200:
+			served++
+		case 503:
+			overloaded++
+		default:
+			failed++
+			t.Logf("hard failure: %v", r.err)
+		}
+	}
+	if served == 0 {
+		t.Fatalf("flood must still serve some requests: served=%d shed=%d failed=%d", served, overloaded, failed)
+	}
+	if failed > 0 {
+		t.Fatalf("shedding must be clean 503s, got %d hard failures", failed)
+	}
+	// Recovery: after the flood, an ordinary request must succeed.
+	time.Sleep(200 * time.Millisecond)
+	resp := dialAndSend(t, sock, Request{Op: OpPing})
+	if resp.Status != 200 {
+		t.Fatalf("launcher did not recover after flood: %+v", resp)
+	}
+}
+
+// TestF8SlowHeaderCannotHoldSlots: connections that never send a
+// request are dropped by the header deadline, keeping slots available.
+func TestF8SlowHeaderCannotHoldSlots(t *testing.T) {
+	bin, _ := (&fakeNFT{}).script(t)
+	sock := startTestLauncherSimple(t, bin, uint32(os.Getuid()))
+	silent := make([]net.Conn, 0, MaxConcurrentConns)
+	for i := 0; i < MaxConcurrentConns; i++ {
+		conn, err := net.DialTimeout("unix", sock, time.Second)
+		if err != nil {
+			t.Fatalf("dial %d: %v", i, err)
+		}
+		silent = append(silent, conn)
+	}
+	// While the silent connections hold slots, a NEW connection must
+	// still be answered (503 overload, not a hang), thanks to the
+	// header deadline and the shed path.
+	conn, err := net.DialTimeout("unix", sock, time.Second)
+	if err != nil {
+		t.Fatalf("overflow dial: %v", err)
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(ConnHeaderTimeout + 2*time.Second))
+	if err := EncodeFrame(conn, Request{Op: OpPing}); err != nil {
+		t.Fatal(err)
+	}
+	var resp Response
+	if err := DecodeFrame(conn, &resp); err != nil {
+		t.Fatalf("overflow connection must be answered, not hung: %v", err)
+	}
+	for _, c := range silent {
+		c.Close()
+	}
+	if resp.Status != 200 && resp.Status != 503 {
+		t.Fatalf("unexpected status %d", resp.Status)
 	}
 }

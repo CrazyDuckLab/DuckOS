@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/CrazyDuckLab/DuckOS/internal/nftlaunch"
 )
 
 // ExternalIPString exposes the internal host for batch assertions.
@@ -120,8 +122,14 @@ func TestRenewalReplacesInsteadOfDuplicating(t *testing.T) {
 
 func TestFailedNftLeavesActiveUntouched(t *testing.T) {
 	dir := t.TempDir()
-	// /bin/false exists on Linux and always exits non-zero.
-	b := &NftablesBackend{binPath: "/bin/false", stagingDir: dir}
+	// The backend mutates exclusively through the privileged
+	// launcher; a dead socket makes every Apply fail deterministically
+	// regardless of the host environment (F5 made availability
+	// dynamic, so the failure path must be forced, not hoped for).
+	prevSocket := nftlaunch.SocketPath
+	nftlaunch.SocketPath = func() string { return filepath.Join(t.TempDir(), "absent.sock") }
+	t.Cleanup(func() { nftlaunch.SocketPath = prevSocket })
+	b := &NftablesBackend{binPath: "unused", stagingDir: dir}
 	a := mappingA()
 	if err := b.Add(a); err == nil {
 		t.Fatal("expected nft failure")

@@ -63,15 +63,14 @@ func TestFirewallApplyChecksAndReadsRealOperationBoundary(t *testing.T) {
 			if !strings.HasPrefix(string(input), "destroy table inet duckos\n") {
 				t.Fatal("not a complete owned batch")
 			}
-		case "--json list tables":
-			if active {
-				return []byte(`{"nftables":[{"table":{"family":"inet","name":"duckos"}}]}`), nil
+		case "--json list table inet duckos":
+			if !active {
+				// The launcher relays nft's absent-table error verbatim.
+				return nil, errors.New("nft failed: exit status 1: No such file or directory")
 			}
-			return []byte(`{"nftables":[]}`), nil
+			return []byte(syntheticNFTTable), nil
 		case "--file -":
 			active = true
-		case "--json list table inet duckos":
-			return []byte(syntheticNFTTable), nil
 		default:
 			t.Fatal("unexpected operation", operation)
 		}
@@ -81,7 +80,7 @@ func TestFirewallApplyChecksAndReadsRealOperationBoundary(t *testing.T) {
 	if err != nil || len(s.Objects) == 0 {
 		t.Fatal("apply failed", err)
 	}
-	if strings.Join(calls, ";") != "--check --file -;--json list tables;--file -;--json list tables;--json list table inet duckos" {
+	if strings.Join(calls, ";") != "--check --file -;--json list table inet duckos;--file -;--json list table inet duckos" {
 		t.Fatal("unsafe command ordering", calls)
 	}
 	if err = h.Verify(context.Background(), s); err != nil {
@@ -128,8 +127,6 @@ func TestFirewallRestoreVerifiesKernelReadback(t *testing.T) {
 			if !json.Valid(input) {
 				t.Fatal("invalid restore JSON")
 			}
-		case "--json list tables":
-			return []byte(`{"nftables":[{"table":{"family":"inet","name":"duckos"}}]}`), nil
 		case "--json list table inet duckos":
 			return []byte(syntheticNFTTable), nil
 		default:
@@ -140,7 +137,7 @@ func TestFirewallRestoreVerifiesKernelReadback(t *testing.T) {
 	if err = h.Restore(context.Background(), s); err != nil {
 		t.Fatal(err)
 	}
-	if len(calls) != 4 || calls[0] != "--json --check --file -" || calls[1] != "--json --file -" {
+	if len(calls) != 3 || calls[0] != "--json --check --file -" || calls[1] != "--json --file -" {
 		t.Fatal("restore skipped checks", calls)
 	}
 }

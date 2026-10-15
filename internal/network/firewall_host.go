@@ -7,6 +7,7 @@ import (
 	"os"
 	"runtime"
 	"slices"
+	"strings"
 
 	"github.com/CrazyDuckLab/DuckOS/internal/nftlaunch"
 )
@@ -26,48 +27,20 @@ func NewFirewallHost() (*FirewallHost, error) {
 	return &FirewallHost{run: runNFT}, nil
 }
 
+// Capture reads the owned inet/duckos table only (F7): there is no
+// global table inventory anywhere on the capture path. The absent
+// table is the canonical empty state; every other read failure is an
+// error, never a silent empty snapshot.
 func (h *FirewallHost) Capture(ctx context.Context) (NFTSnapshot, error) {
-	data, err := h.run(ctx, []string{"--json", "list", "tables"}, nil)
+	data, err := h.run(ctx, []string{"--json", "list", "table", "inet", "duckos"}, nil)
 	if err != nil {
+		if strings.Contains(err.Error(), "No such file") {
+			return NFTSnapshot{Objects: []json.RawMessage{}}, nil
+		}
 		return NFTSnapshot{}, err
 	}
-	var listing struct {
-		NFTables *[]map[string]json.RawMessage `json:"nftables"`
-	}
-	if len(data) > maxNFTSnapshotBytes || json.Unmarshal(data, &listing) != nil || listing.NFTables == nil {
-		return NFTSnapshot{}, errors.New("invalid nft table inventory")
-	}
-	found := false
-	for _, entry := range *listing.NFTables {
-		if len(entry) != 1 {
-			return NFTSnapshot{}, errors.New("ambiguous nft inventory entry")
-		}
-		if _, ok := entry["metainfo"]; ok {
-			continue
-		}
-		var table struct {
-			Family string `json:"family"`
-			Name   string `json:"name"`
-		}
-		if json.Unmarshal(entry["table"], &table) != nil || table.Family == "" || table.Name == "" {
-			return NFTSnapshot{}, errors.New("invalid nft inventory entry")
-		}
-		if table.Family == "inet" && table.Name == "duckos" {
-			if found {
-				return NFTSnapshot{}, errors.New("duplicate nft inventory entry")
-			}
-			found = true
-		}
-	}
-	if !found {
-		return NFTSnapshot{Objects: []json.RawMessage{}}, nil
-	}
-	data, err = h.run(ctx, []string{"--json", "list", "table", "inet", "duckos"}, nil)
-	if err != nil {
-		return NFTSnapshot{}, err
-	}
-	s, err := DecodeNFTSnapshot(data)
-	if err != nil || len(s.Objects) == 0 {
+	s, derr := DecodeNFTSnapshot(data)
+	if derr != nil || len(s.Objects) == 0 {
 		return NFTSnapshot{}, errors.New("owned nft table changed during capture or is unsupported")
 	}
 	return s, nil
@@ -205,8 +178,6 @@ func runNFT(parent context.Context, args []string, input []byte) ([]byte, error)
 	}
 	client := newLauncherClient()
 	switch {
-	case len(args) >= 3 && args[1] == "list" && args[2] == "tables":
-		return client.ListTablesJSON()
 	case len(args) >= 5 && args[1] == "list" && args[2] == "table":
 		return client.ListTableJSON(args[3], args[4])
 	case slices.Contains(args, "--check"):
@@ -243,7 +214,6 @@ var newLauncherClient = func() launcherTransport { return nftlaunch.NewClient() 
 // launcherTransport is the seam the firewall host drives; it mirrors
 // the nftlaunch.Client surface the runNFT dispatch uses.
 type launcherTransport interface {
-	ListTablesJSON() ([]byte, error)
 	ListTableJSON(family, table string) ([]byte, error)
 	Check(batch []byte) error
 	CheckJSON(batch []byte) error

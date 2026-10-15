@@ -68,13 +68,14 @@ type NftablesBackend struct {
 // so the production wiring can surface a clean
 // "backend missing" state instead of pretending success.
 func NewNftablesBackend(stagingDir string) (*NftablesBackend, error) {
-	// BETA.3 remediation: availability is the privileged launcher,
-	// not a local nft binary. The zero-capability agent cannot exec
-	// nft; dialing the launcher socket (which never mutates) proves
-	// the UPnP data-plane can actually be applied.
-	if !(nftlaunch.NewClient()).Available() {
-		return nil, errors.New("upnp: privileged nft launcher is not reachable")
-	}
+	// F5: availability is DYNAMIC. The launcher may start after the
+	// agent (its unit is After=duck-agent.service) or restart
+	// independently, so a one-shot probe at construction time would
+	// permanently disable the UPnP data-plane for a purely transient
+	// condition. The constructor therefore never fails on launcher
+	// unavailability; instead every operation goes through the
+	// launcher client and surfaces a typed unavailable error the
+	// caller can retry.
 	bin := "nft-launcher"
 	if stagingDir == "" {
 		stagingDir = filepath.Join(os.TempDir(), "duckos-upnp")
@@ -245,9 +246,15 @@ func (n *NftablesBackend) apply(rendered []byte) error {
 	}
 	// The launcher validates the batch against the DuckOS ownership
 	// allowlist (inet duckos_upnp only), stages it and runs
-	// `nft --check` + `nft -f` as one atomic transaction.
+	// `nft --check` + `nft -f` as one atomic transaction. If the
+	// launcher is temporarily down the error is typed unavailable so
+	// the runtime refuses the mapping now and retries cleanly later
+	// (F5: no permanent disable).
 	if err := (nftlaunch.NewClient()).Apply(rendered); err != nil {
 		_ = os.Remove(stage)
+		if strings.Contains(err.Error(), "nft launcher is unreachable") {
+			return fmt.Errorf("%w: %v", ErrBackendUnavailable, err)
+		}
 		return fmt.Errorf("upnp: nft -f failed: %w", err)
 	}
 	return nil

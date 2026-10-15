@@ -24,6 +24,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -245,10 +246,19 @@ func NewFirewallRulesService(storePath, stageDir, nftBin string, acc UPnPAccess)
 		return nil, fmt.Errorf("fwrules: open store: %w", err)
 	}
 	adapter := &fwrulesAdapter{nftBin: nftBin, stageDir: stageDir}
-	controller, err := safeapply.Open(store, adapter)
-	if err != nil {
+	// F5: the journal's startup recovery replays a pending rollback
+	// through the privileged launcher. The launcher unit starts after
+	// the agent and may legitimately still be coming up (or may be
+	// restarting), so the open is retried with a bounded backoff
+	// instead of permanently disabling the firewall service on a
+	// transient condition. A pending configuration is never applied
+	// without its recovery checks: retrying Open preserves the
+	// replay-and-verify contract, it only waits for the privilege
+	// holder.
+	controller, openErr := openControllerWithRetry(store, adapter)
+	if openErr != nil {
 		_ = store.Close()
-		return nil, fmt.Errorf("fwrules: open controller: %w", err)
+		return nil, fmt.Errorf("fwrules: open controller: %w", openErr)
 	}
 	return &FirewallRulesService{
 		controller: controller,
@@ -259,6 +269,43 @@ func NewFirewallRulesService(storePath, stageDir, nftBin string, acc UPnPAccess)
 		nftBin:     nftBin,
 		adapter:    adapter,
 	}, nil
+}
+
+// openControllerWithRetry retries safeapply.Open while the launcher
+// becomes reachable. The schedule is 10 tries with a 2s backoff
+// (~20s), which comfortably covers the launcher's normal start and
+// its RestartSec=2s crash restart; genuine recovery failures (bad
+// journal, kernel rejection) keep failing and the service reports
+// the typed error.
+func openControllerWithRetry(store *state.Store, adapter safeapply.Adapter) (*safeapply.Controller, error) {
+	const tries = 10
+	var lastErr error
+	for attempt := 0; attempt < tries; attempt++ {
+		if attempt > 0 {
+			time.Sleep(2 * time.Second)
+		}
+		if !launcherReachable() {
+			lastErr = errors.New("privileged nft launcher is not reachable")
+			continue
+		}
+		controller, err := safeapply.Open(store, adapter)
+		if err == nil {
+			return controller, nil
+		}
+		lastErr = err
+	}
+	if lastErr == nil {
+		lastErr = errors.New("controller open failed")
+	}
+	return nil, lastErr
+}
+
+// launcherReachable probes the launcher without touching nft.
+func launcherReachable() bool {
+	if c, ok := nftClient().(interface{ Available() bool }); ok {
+		return c.Available()
+	}
+	return false
 }
 
 // Close stops the worker/controller (agent shutdown path).

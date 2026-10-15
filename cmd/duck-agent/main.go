@@ -1058,11 +1058,14 @@ func enableUPnPService(access identityAccess) (*agent.UPnPHost, error) {
 		backend = b
 		log.Print("upnp: nftables backend wired through the privileged nft launcher")
 	} else {
+		// NewNftablesBackend no longer fails on a not-yet-ready
+		// launcher (F5): a construction failure here means the
+		// staging directory is unusable, which is permanent.
 		backend = upnp.NewUnavailableBackend(
-			"nft-binary-missing",
+			"nft-backend-unavailable",
 			err.Error(),
 		)
-		log.Printf("upnp: nft binary not available (%v); runtime is wired to UnavailableBackend so the UI shows 'backend unavailable'", err)
+		log.Printf("upnp: nftables staging unavailable (%v); runtime is wired to UnavailableBackend so the UI shows 'backend unavailable'", err)
 	}
 	// Boot restore: seed the backend's trusted-iface list
 	// from the registry's resolved kernel names. The

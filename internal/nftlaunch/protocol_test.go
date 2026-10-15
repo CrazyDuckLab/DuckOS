@@ -7,7 +7,7 @@ import (
 
 // Acceptance: every batch shape the three DuckOS renderers emit must
 // validate. These are the production code paths (fwrules, UPnP,
-// network safeapply + forward guard).
+// network safeapply block form, JSON recovery).
 func TestValidateBatchAcceptsRendererOutput(t *testing.T) {
 	cases := map[string]string{
 		"fwrules non-empty": `# duckos.duckos_fw atomic table replacement
@@ -45,9 +45,7 @@ table inet duckos {
 		"forward guard": `add table inet duckos
 add chain inet duckos duckos_apply_guard { type filter hook forward priority -10; policy drop; }
 `,
-		"flush chain flat": `flush chain inet duckos_fw forward
-`,
-		"delete chain flat": `delete chain inet duckos_upnp prerouting
+		"quoted iface in rule": `add rule inet duckos_fw forward iifname "eth0" accept
 `,
 	}
 	for name, batch := range cases {
@@ -57,46 +55,106 @@ add chain inet duckos duckos_apply_guard { type filter hook forward priority -10
 	}
 }
 
-// Denial: every structurally-owned-bypass attempt must be rejected.
-// Security tests here prove denial of the launcher's batch surface.
-func TestValidateBatchDenials(t *testing.T) {
+// TestF1AuditBypassClasses: adversarial regression tests for the
+// parser-differential class the independent audit exploited. Every
+// case must be DENIED, and the denial must hold even though the
+// batch visually looks like an authorized DuckOS operation.
+func TestF1AuditBypassClasses(t *testing.T) {
 	denials := map[string]string{
-		"flush ruleset":         "flush ruleset\n",
-		"destroy ruleset":       "destroy ruleset\n",
-		"smuggled flush":        "add rule inet duckos_fw forward accept; flush ruleset\n",
-		"foreign table":         "add table inet eviltab\n",
-		"foreign family ip":     "add table ip eviltab\n",
-		"foreign family inet6":  "add table inet6 duckos\n",
-		"rule into foreign tab": "add rule inet eviltab c accept\n",
-		"list in batch":         "list ruleset\n",
-		"include":               "include \"/etc/passwd\"\n",
-		"define":                "define EVIL = 1.2.3.4\n",
-		"monitor":               "monitor rules\n",
-		"reset":                 "reset counters table inet duckos\n",
-		"element injection":     "add element inet duckos_fw myset { 1.2.3.4 }\n",
-		"nested table block":    "table inet duckos { table inet eviltab { } }\n",
-		"unbalanced braces":     "table inet duckos { chain input { accept\n",
-		"empty":                 "",
-		"oversized":             strings.Repeat("add rule inet duckos_fw forward accept\n", MaxStatements+1),
-		"rule starts add":       "table inet duckos_fw { chain c { add rule inet duckos_fw c accept } }\n",
-		"rule starts include":   "table inet duckos_fw { chain c { include \"/x\" } }\n",
-		"variable reference":    "table inet duckos_fw { chain c { $x accept } }\n",
-		"delete chain foreign":  "delete chain inet eviltab c\n",
-		"no family":             "add table duckos_fw\n",
+		// The audit's confirmed bypass family: quotes/comments/braces
+		// interpreted differently from nft, smuggling a foreign-table
+		// command through an authorized-looking statement.
+		"quote hiding table cmd":    `add rule inet duckos_fw forward comment "a" ; add table inet eviltab`,
+		"quote eating brace":        `table inet duckos_fw { chain c { comment "}" } } add table inet eviltab`,
+		"comment eats newline":      `add rule inet duckos_fw forward accept # trailing` + "\ndelete table inet eviltab\n",
+		"unterminated string":       `add rule inet duckos_fw forward comment "open`,
+		"unterminated string EOF":   `add rule inet duckos_fw forward comment "open\n`,
+		"line continuation":         "add rule inet duckos_fw forward accept \\\n; delete table inet eviltab\n",
+		"unsupported escape":        `add rule inet duckos_fw forward comment "a\nb" accept`,
+		"brace imbalance":           "table inet duckos_fw { chain c { accept\n",
+		"nested blocks":             "table inet duckos_fw { chain c { chain d { } } }",
+		"deep nesting":              "table inet duckos_fw { chain c { { } } }",
+		"quoted table name":         `add table inet "duckos_fw"`,
+		"quoted family":             `add table "inet" duckos_fw`,
+		"quoted chain in prefix":    `add rule inet duckos_fw "forward" accept`,
+		"foreign table":             "add table inet eviltab\n",
+		"foreign family":            "add table ip eviltab\n",
+		"rule into foreign table":   "add rule inet eviltab c accept\n",
+		"smuggled flush ruleset":    "add rule inet duckos_fw forward accept; flush ruleset\n",
+		"flush ruleset":             "flush ruleset\n",
+		"destroy ruleset":           "destroy ruleset\n",
+		"include":                   "include \"/etc/passwd\"\n",
+		"define":                    "define EVIL = 1.2.3.4\n",
+		"monitor":                   "monitor rules\n",
+		"reset":                     "reset counters table inet duckos\n",
+		"element injection":         "add element inet duckos_fw myset { 1.2.3.4 }\n",
+		"nested table in block":     "table inet duckos_fw { chain c { table inet eviltab { } } }\n",
+		"rule starts add":           "table inet duckos_fw { chain c { add rule inet duckos_fw c accept } }\n",
+		"rule starts include":       "table inet duckos_fw { chain c { include \"/x\" } }\n",
+		"variable reference":        "table inet duckos_fw { chain c { $x accept } }\n",
+		"delete chain foreign":      "delete chain inet eviltab c\n",
+		"no family":                 "add table duckos_fw\n",
+		"chain def extra words":     "add chain inet duckos_fw c type filter { }\n",
+		"chain def foreign keyword": "add chain inet duckos_fw c { include x }\n",
+		"chain def string":          `add chain inet duckos_fw c { type "filter" }`,
+		"empty block":               "table inet duckos_fw { }",
+		"table block with rule":     "table inet duckos_fw { accept }",
+		"table block extra head":    "table inet duckos_fw x { }",
+		"empty statement semi":      "add table inet duckos_fw ;; delete table inet duckos_fw",
+		"leading semi":              "; add table inet duckos_fw",
+		"empty":                     "",
+		"whitespace only":           "   \n\t  ",
 	}
 	for name, batch := range denials {
 		if err := ValidateBatch([]byte(batch)); err == nil {
-			t.Errorf("%s: must be denied, got accepted", name)
+			t.Errorf("F1 bypass %q: must be denied, got accepted", name)
 		}
 	}
 }
 
-// The oversized-batch case above relies on the statement cap; check
-// the byte cap separately.
-func TestValidateBatchByteCap(t *testing.T) {
-	big := strings.Repeat("add rule inet duckos_fw forward accept\n", 1+MaxBatchBytes/40)
-	if err := ValidateBatch([]byte(big)); err == nil {
+// TestF1OwnedSyntaxStillAccepted pins the exact syntax DuckOS
+// renderers emit so the strict lexer cannot regress into over-denial.
+func TestF1OwnedSyntaxStillAccepted(t *testing.T) {
+	accepted := []string{
+		`add rule inet duckos_fw forward iifname != { "lan0", "wan0" } accept`,
+		`add rule inet duckos_fw forward tcp dport { 22, 443 } accept comment "duckos_fw:web"`,
+		`add rule inet duckos_upnp prerouting tcp dport 8080 dnat ip to 192.168.7.10:80 comment "duckos_upnp:m-1"`,
+		"flush chain inet duckos_fw forward",
+		"flush table inet duckos_fw",
+		"delete chain inet duckos_fw forward",
+	}
+	for _, batch := range accepted {
+		if err := ValidateBatch([]byte(batch)); err != nil {
+			t.Errorf("owned syntax must be accepted: %v: %v", batch, err)
+		}
+	}
+}
+
+// TestF1LexerMatchesNftInertStrings pins the lexical agreement with
+// nft: separators and braces inside quoted strings are inert STRING
+// CONTENT (nft executes one harmless rule with that comment), so the
+// batch is accepted as a single owned rule — while the same content
+// outside a string is a hard denial (see TestF1AuditBypassClasses).
+func TestF1LexerMatchesNftInertStrings(t *testing.T) {
+	accepted := []string{
+		`add rule inet duckos_fw forward comment "x; delete table inet eviltab"`,
+		`add rule inet duckos_fw forward comment "a#b" accept`,
+		`add rule inet duckos_fw forward comment "a\"b; flush ruleset" accept`,
+		`add rule inet duckos_fw forward {bad} accept`,
+	}
+	for _, batch := range accepted {
+		if err := ValidateBatch([]byte(batch)); err != nil {
+			t.Errorf("inert-string owned rule must be accepted: %v: %v", batch, err)
+		}
+	}
+}
+
+func TestValidateBatchByteAndStatementCaps(t *testing.T) {
+	if err := ValidateBatch([]byte(strings.Repeat("add rule inet duckos_fw forward accept\n", 1+MaxBatchBytes/40))); err == nil {
 		t.Fatal("byte-oversized batch must be denied")
+	}
+	if err := ValidateBatch([]byte(strings.Repeat("add rule inet duckos_fw forward accept\n", MaxStatements+1))); err == nil {
+		t.Fatal("statement-oversized batch must be denied")
 	}
 }
 
@@ -113,32 +171,57 @@ func TestValidateReadTarget(t *testing.T) {
 	}
 }
 
-func TestSplitTopSemicolonSeparators(t *testing.T) {
-	stmts, err := splitTop("table inet duckos { chain input { type filter hook input priority filter; policy drop; accept } }")
-	if err != nil {
-		t.Fatalf("chain-body semicolons must split, not fail: %v", err)
+// TestF2JSONStrictness: the JSON wrapper must never authorize a
+// different object than the kernel executes.
+func TestF2JSONStrictness(t *testing.T) {
+	owned := func() string {
+		return `{"nftables":[
+			{"destroy":{"table":{"family":"inet","name":"duckos"}}},
+			{"add":{"table":{"family":"inet","name":"duckos"}}},
+			{"add":{"chain":{"family":"inet","table":"duckos","name":"input","type":"filter","hook":"input","prio":0,"policy":"drop"}}},
+			{"add":{"rule":{"family":"inet","table":"duckos","chain":"input","expr":[{"accept":null}]}}}
+		]}`
 	}
-	if len(stmts) != 1 {
-		t.Fatalf("block must stay one top-level statement, got %d", len(stmts))
+	if err := ValidateJSONBatch([]byte(owned())); err != nil {
+		t.Fatalf("trusted recovery JSON must validate: %v", err)
 	}
-	// A stray top-level `;` still splits into fragments, each of
-	// which must then pass the allowlist (defence in depth is the
-	// fragment validation, not the separator refusal).
-	stmts, err = splitTop("add rule inet duckos_fw forward accept; flush ruleset")
-	if err != nil {
-		t.Fatalf("top-level semicolon must split: %v", err)
+
+	denials := map[string]string{
+		"duplicate key in command": `{"nftables":[{"add":{"table":{"family":"inet","name":"duckos"}},{"delete":{"table":{"family":"inet","name":"filter"}}}]}`,
+		"duplicate key in object":  `{"nftables":[{"add":{"table":{"family":"inet","name":"duckos","name":"filter"}}}]}`,
+		"duplicate nftables key":   `{"nftables":[],"nftables":[]}`,
+		"unknown document key":     `{"nftables":[],"meta":1}`,
+		"trailing content":         `{"nftables":[]} {}`,
+		"unknown verb":             `{"nftables":[{"rename":{"table":{"family":"inet","name":"duckos"}}}]}`,
+		"unknown kind":             `{"nftables":[{"add":{"socket":{"family":"inet","table":"duckos"}}}]}`,
+		"unknown field":            `{"nftables":[{"add":{"table":{"family":"inet","name":"duckos","evil":1}}}]}`,
+		"handle on add":            `{"nftables":[{"add":{"rule":{"family":"inet","table":"duckos","chain":"c","handle":7,"expr":[]}}}]}`,
+		"flush chain json":         `{"nftables":[{"flush":{"chain":{"family":"inet","table":"duckos","name":"c"}}}]}`,
+		"flush ruleset json":       `{"nftables":[{"flush":{"ruleset":{"family":"inet","name":"x"}}}]}`,
+		"two kinds one command":    `{"nftables":[{"add":{"table":{"family":"inet","name":"duckos"},"chain":{"family":"inet","table":"duckos","name":"c"}}}]}`,
+		"foreign family json":      `{"nftables":[{"add":{"table":{"family":"ip","name":"duckos"}}}]}`,
+		"foreign table json":       `{"nftables":[{"add":{"table":{"family":"inet","name":"filter"}}}]}`,
+		"rule into foreign json":   `{"nftables":[{"add":{"rule":{"family":"inet","table":"filter","chain":"c","expr":[]}}}]}`,
+		"missing family":           `{"nftables":[{"add":{"table":{"name":"duckos"}}}]}`,
+		"missing table on rule":    `{"nftables":[{"add":{"rule":{"family":"inet","chain":"c","expr":[]}}}]}`,
+		"kind not object":          `{"nftables":[{"add":{"table":"duckos"}}]}`,
+		"payload not object":       `{"nftables":[{"add":7}]}`,
+		"entry not object":         `{"nftables":[7]}`,
+		"no nftables":              `{"commands":[]}`,
+		"nested dup deep":          `{"nftables":[{"add":{"rule":{"family":"inet","table":"duckos","chain":"c","expr":[{"match":{"op":"==","op":"!="}}]}}}]}`,
+		"array entries":            `{"nftables":[["add"]]}`,
 	}
-	if len(stmts) != 2 {
-		t.Fatalf("expected 2 fragments, got %d", len(stmts))
-	}
-	if err := ValidateBatch([]byte("add rule inet duckos_fw forward accept; flush ruleset\n")); err == nil {
-		t.Fatal("smuggled flush ruleset must be denied by fragment validation")
+	for name, doc := range denials {
+		if err := ValidateJSONBatch([]byte(doc)); err == nil {
+			t.Errorf("F2 bypass %q: must be denied", name)
+		}
 	}
 }
 
-func TestRedactTokens(t *testing.T) {
-	out := redactTokens([]string{"add", "rule", "inet", "duckos_fw", "forward", "secret-hostname", "accept"})
-	if strings.Contains(out, "secret-hostname") {
-		t.Fatalf("payload must be redacted, got %q", out)
+func TestRedactStyleErrors(t *testing.T) {
+	// Error text must never echo a full attacker-controlled payload.
+	err := ValidateBatch([]byte(`add rule inet duckos_fw forward comment "super-secret-hostname-12345" 1`))
+	if err != nil && strings.Contains(err.Error(), "super-secret-hostname") {
+		t.Fatalf("error must not echo the payload: %v", err)
 	}
 }

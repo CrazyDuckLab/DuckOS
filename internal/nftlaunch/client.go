@@ -76,11 +76,6 @@ func (c *Client) ApplyJSON(batch []byte) error {
 	return respErr(resp, err)
 }
 
-// ListTablesJSON returns `nft --json list tables` output.
-func (c *Client) ListTablesJSON() ([]byte, error) {
-	return c.readOp(Request{Op: OpListTables}, ExecTimeout)
-}
-
 // ListTableJSON returns `nft --json list table <family> <table>` for
 // an owned table. The launcher refuses unknown tables with 403, so
 // the error for a foreign table is a denial, not an nft failure.
