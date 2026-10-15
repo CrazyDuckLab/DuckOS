@@ -5,6 +5,7 @@ package frontend
 
 import (
 	"encoding/binary"
+	"fmt"
 	"net/netip"
 	"sync"
 	"testing"
@@ -403,5 +404,23 @@ func TestNATPMPDeletionFailureIsNotAcknowledged(t *testing.T) {
 	r := s.HandleNATPMP(natPMPReq(1, 5000, 0, 0), clientIP(), 49152, lanNet)
 	if binary.BigEndian.Uint16(r.Response[2:4]) == 0 || len(sink.Mappings()) != 1 {
 		t.Fatal("failed deletion acknowledged")
+	}
+}
+
+func TestRateBudgetTableHasHardBound(t *testing.T) {
+	now := time.Now()
+	c := newServerCore(Limits{}, nil, nil, func() time.Time { return now })
+	for i := range 5000 {
+		c.admit(fmt.Sprintf("client-%d", i))
+	}
+	if len(c.budgets) != 4096 {
+		t.Fatalf("budget table grew to %d", len(c.budgets))
+	}
+	if !c.admit("client-0") {
+		t.Fatal("existing client's budget should remain usable")
+	}
+	now = now.Add(time.Minute)
+	if !c.admit("new-client") {
+		t.Fatal("expired budgets must be reclaimed")
 	}
 }

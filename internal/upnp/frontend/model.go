@@ -244,13 +244,17 @@ func (c *serverCore) admit(clientIP string) bool {
 	now := c.nowFn()
 	b := c.budgets[clientIP]
 	if b == nil || now.Sub(b.windowStart) >= time.Minute {
-		if len(c.budgets) > 4096 {
+		if len(c.budgets) >= 4096 {
 			// Bound the budget table: drop expired entries.
 			for k, v := range c.budgets {
 				if now.Sub(v.windowStart) >= time.Minute {
 					delete(c.budgets, k)
 				}
 			}
+		}
+		if b == nil && len(c.budgets) >= 4096 {
+			c.status.RequestsDenied++
+			return false
 		}
 		b = &rateBudget{windowStart: now}
 		c.budgets[clientIP] = b
