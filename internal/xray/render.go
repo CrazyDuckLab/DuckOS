@@ -56,6 +56,7 @@ type RoutingRule struct {
 	IPs         []string `json:"ip,omitempty"`
 	Domains     []string `json:"domain,omitempty"`
 	Port        string   `json:"port,omitempty"`
+	InboundTag  []string `json:"inboundTag,omitempty"`
 }
 
 type DNS struct {
@@ -65,6 +66,43 @@ type DNS struct {
 type Sniffing struct {
 	Enabled      bool     `json:"enabled"`
 	DestOverride []string `json:"destOverride"`
+}
+
+// RenderPoliciesInto compiles routing policies into the config.
+// Rules are appended after any profile-derived rules; a "block"
+// outbound (blackhole) is added when referenced. Rules referencing
+// outbounds that do not exist are a hard error — the renderer never
+// emits routes to nowhere.
+func RenderPoliciesInto(cfg *Config, policies []Policy) error {
+	rules, err := Compile(policies)
+	if err != nil {
+		return err
+	}
+	if len(rules) == 0 {
+		return nil
+	}
+	known := map[string]bool{"direct": true}
+	for _, ob := range cfg.Outbounds {
+		known[ob.Tag] = true
+	}
+	needsBlock := false
+	for _, r := range rules {
+		if !known[r.OutboundTag] {
+			if r.OutboundTag == "block" {
+				needsBlock = true
+				continue
+			}
+			return fmt.Errorf("xray: policy references unknown outbound %q", r.OutboundTag)
+		}
+	}
+	if needsBlock {
+		cfg.Outbounds = append(cfg.Outbounds, Outbound{Tag: "block", Protocol: "blackhole"})
+	}
+	if cfg.Routing == nil {
+		cfg.Routing = &Routing{DomainStrategy: "AsIs"}
+	}
+	cfg.Routing.Rules = append(cfg.Routing.Rules, rules...)
+	return nil
 }
 
 // RenderConfig builds the Xray JSON config for the given objects.
