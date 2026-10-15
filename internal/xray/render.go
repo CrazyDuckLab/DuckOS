@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -284,7 +285,11 @@ func buildProtocolSettings(server Server, users []User) (json.RawMessage, error)
 			if password == "" {
 				password = credentialFor(u)
 			}
-			entry := map[string]any{"password": password}
+			// Xray-core 26.3.27 requires the cipher on every client
+			// entry (verified against the real binary); the
+			// top-level method alone is rejected for multi-user
+			// inbounds.
+			entry := map[string]any{"password": password, "method": server.SSMethod}
 			if u.Email != "" {
 				entry["email"] = u.Email
 			}
@@ -320,6 +325,11 @@ func buildProtocolSettings(server Server, users []User) (json.RawMessage, error)
 	return nil, fmt.Errorf("xray: unsupported protocol %q", server.Protocol)
 }
 
+// StageDir is the directory where the agent materialises vault
+// secrets (cert/key files). Production keeps the default; tests
+// override it to point at their own stage.
+var StageDir = "/var/lib/duckos-agent/xray"
+
 func buildStreamSettings(server Server) (json.RawMessage, error) {
 	settings := map[string]any{}
 	switch server.Security {
@@ -336,8 +346,8 @@ func buildStreamSettings(server Server) (json.RawMessage, error) {
 			"security": "tls",
 			"tlsSettings": map[string]any{
 				"certificates": []map[string]any{{
-					"certificateFile": "/var/lib/duckos-agent/xray/" + server.Name + ".crt",
-					"keyFile":         "/var/lib/duckos-agent/xray/" + server.Name + ".key",
+					"certificateFile": filepath.Join(StageDir, server.Name+".crt"),
+					"keyFile":         filepath.Join(StageDir, server.Name+".key"),
 				}},
 			},
 		}
