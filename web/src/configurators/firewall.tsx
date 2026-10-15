@@ -87,12 +87,16 @@ export function FirewallRulesPage({
     setErr("");
     setStatus("");
     if (!/^[a-z0-9][a-z0-9._:-]{0,63}$/.test(rule.id)) {
-      setErr("Rule id must be lowercase letters, digits, dot, dash, colon or underscore.");
+      setErr(
+        "Rule id must be lowercase letters, digits, dot, dash, colon or underscore.",
+      );
       return;
     }
     try {
       await putFirewallRule(client.token(), rule, new AbortController().signal);
-      setStatus(`Rule ${rule.id} admitted through Safe Apply; it rolls back automatically unless confirmed within the window.`);
+      setStatus(
+        `Rule ${rule.id} admitted through Safe Apply; it rolls back automatically unless confirmed within the window.`,
+      );
       setDraft({ ...EMPTY_RULE });
       await refresh();
     } catch (e) {
@@ -103,7 +107,11 @@ export function FirewallRulesPage({
     setErr("");
     setStatus("");
     try {
-      await deleteFirewallRule(client.token(), id, new AbortController().signal);
+      await deleteFirewallRule(
+        client.token(),
+        id,
+        new AbortController().signal,
+      );
       setStatus(`Deleted rule ${id}.`);
       await refresh();
     } catch (e) {
@@ -160,8 +168,16 @@ export function FirewallRulesPage({
         <div className="card-head">
           <h3>{"Forward rules"}</h3>
           {config?.transaction?.transactionId && (
-            <span className="v1-pill" data-state={config.transaction.phase === "awaiting-confirmation" ? "warn" : "muted"}>
-              tx {config.transaction.transactionId.slice(0, 8)} · {config.transaction.phase}
+            <span
+              className="v1-pill"
+              data-state={
+                config.transaction.phase === "awaiting-confirmation"
+                  ? "warn"
+                  : "muted"
+              }
+            >
+              tx {config.transaction.transactionId.slice(0, 8)} ·{" "}
+              {config.transaction.phase}
             </span>
           )}
         </div>
@@ -198,7 +214,9 @@ export function FirewallRulesPage({
             </div>
           )}
         <p className="v1-mute">
-          {"V1 manages FORWARD rules in the exclusively-owned inet duckos_fw table. Every change applies atomically with verify + rollback; the status below reflects the kernel readback, not just the API response."}
+          {
+            "V1 manages FORWARD rules in the exclusively-owned inet duckos_fw table. Every change applies atomically with verify + rollback; the status below reflects the kernel readback, not just the API response."
+          }
         </p>
         <table className="v1-table">
           <thead>
@@ -244,10 +262,7 @@ export function FirewallRulesPage({
                     </button>
                   </td>
                   <td>
-                    <button
-                      type="button"
-                      onClick={() => void onDelete(r.id)}
-                    >
+                    <button type="button" onClick={() => void onDelete(r.id)}>
                       delete
                     </button>
                   </td>
@@ -262,26 +277,32 @@ export function FirewallRulesPage({
         <div className="card-head">
           <h3>{draft.id ? `Edit rule ${draft.id}` : "Add rule"}</h3>
         </div>
-        {field("Rule id", (
+        {field(
+          "Rule id",
           <input
             value={draft.id}
             onChange={(e) => setDraft({ ...draft, id: e.target.value })}
             placeholder="allow-lan-web"
-          />
-        ))}
-        {field("Action", (
+          />,
+        )}
+        {field(
+          "Action",
           <select
             value={draft.action}
             onChange={(e) =>
-              setDraft({ ...draft, action: e.target.value as FirewallRule["action"] })
+              setDraft({
+                ...draft,
+                action: e.target.value as FirewallRule["action"],
+              })
             }
           >
             <option value="accept">accept</option>
             <option value="drop">drop</option>
             <option value="reject">reject</option>
-          </select>
-        ))}
-        {field("Protocol", (
+          </select>,
+        )}
+        {field(
+          "Protocol",
           <select
             value={draft.protocol}
             onChange={(e) =>
@@ -295,23 +316,26 @@ export function FirewallRulesPage({
             <option value="any">any</option>
             <option value="tcp">tcp</option>
             <option value="udp">udp</option>
-          </select>
-        ))}
-        {field("Source prefix (CIDR)", (
+          </select>,
+        )}
+        {field(
+          "Source prefix (CIDR)",
           <input
             value={draft.srcPrefix ?? ""}
             onChange={(e) => setDraft({ ...draft, srcPrefix: e.target.value })}
             placeholder="192.168.10.0/24"
-          />
-        ))}
-        {field("Destination prefix (CIDR)", (
+          />,
+        )}
+        {field(
+          "Destination prefix (CIDR)",
           <input
             value={draft.dstPrefix ?? ""}
             onChange={(e) => setDraft({ ...draft, dstPrefix: e.target.value })}
-          />
-        ))}
+          />,
+        )}
         {draft.protocol !== "any" &&
-          field("Destination port", (
+          field(
+            "Destination port",
             <input
               type="number"
               min={1}
@@ -323,28 +347,31 @@ export function FirewallRulesPage({
                   dstPort: e.target.value ? Number(e.target.value) : undefined,
                 })
               }
-            />
-          ))}
-        {field("In interface", (
+            />,
+          )}
+        {field(
+          "In interface",
           <input
             value={draft.inIface ?? ""}
             onChange={(e) => setDraft({ ...draft, inIface: e.target.value })}
             placeholder="br-lan"
-          />
-        ))}
-        {field("Out interface", (
+          />,
+        )}
+        {field(
+          "Out interface",
           <input
             value={draft.outIface ?? ""}
             onChange={(e) => setDraft({ ...draft, outIface: e.target.value })}
             placeholder="eth-wan"
-          />
-        ))}
-        {field("Comment", (
+          />,
+        )}
+        {field(
+          "Comment",
           <input
             value={draft.comment ?? ""}
             onChange={(e) => setDraft({ ...draft, comment: e.target.value })}
-          />
-        ))}
+          />,
+        )}
         <div className="v1-row">
           <button
             type="button"
