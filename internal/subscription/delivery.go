@@ -193,7 +193,25 @@ func (s *TokenStore) Issue(subID string, ttl time.Duration) (string, TokenRecord
 		}
 	}
 	s.byHash[rec.TokenHash] = &rec
-	s.persistLocked()
+	outcome, perr := s.persistLocked()
+	if perr != nil {
+		// AUD-02: the issuance outcome is never discarded.
+		// NOT_COMMITTED → roll back, the token never existed.
+		// COMMIT_UNCERTAIN → keep the record (it may be on disk),
+		// mark the store DEGRADED and fail the operation; the
+		// token must NOT be handed out as valid while the
+		// authoritative state is uncertain.
+		if outcome != persist.CommitUncertain {
+			delete(s.byHash, rec.TokenHash)
+		} else {
+			s.degraded = fmt.Sprintf("commit_uncertain on token issue: %v", perr)
+		}
+		s.mu.Unlock()
+		if outcome == persist.CommitUncertain {
+			return "", TokenRecord{}, fmt.Errorf("subscription: token commit outcome UNCERTAIN; token not issued: %w", perr)
+		}
+		return "", TokenRecord{}, fmt.Errorf("subscription: token not committed durably: %w", perr)
+	}
 	s.mu.Unlock()
 	return token, rec, nil
 }
@@ -384,6 +402,12 @@ type DeliveryHandler struct {
 	// requested format. The ?format= query value is validated
 	// against the Formats allow-list before this is called.
 	RenderFormat func(subID string, format Format) ([]byte, error)
+	// Validate, when wired, authoritatively validates a presentation
+	// token for THIS request (production wiring: the agent-side
+	// store over the restricted IPC). Revocation and rotation become
+	// effective immediately — no daemon restart, no cache. When nil,
+	// the local Store is consulted (single-process deployments).
+	Validate func(token string) (subID string, ok bool)
 	// Prefix is the mounted path, default "/sub".
 	Prefix string
 	// RequestsPerMinute is the per-token and per-IP limit.
@@ -441,12 +465,22 @@ func (h *DeliveryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		uniform404(w)
 		return
 	}
-	rec, ok := h.Store.Lookup(token)
+	var rec TokenRecord
+	var ok bool
+	if h.Validate != nil {
+		var subID string
+		subID, ok = h.Validate(token)
+		if ok {
+			rec = TokenRecord{SubID: subID}
+		}
+	} else {
+		rec, ok = h.Store.Lookup(token)
+	}
 	if !ok {
 		uniform404(w)
 		return
 	}
-	if !h.limiter.allow("tok:" + rec.TokenHash[:8]) {
+	if !h.limiter.allow("tok:" + TokenDigestPrefix(token)) {
 		uniform404(w)
 		return
 	}

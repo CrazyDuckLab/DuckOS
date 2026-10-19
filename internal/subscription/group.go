@@ -138,6 +138,15 @@ func (s *GroupStore) Upsert(g Group) (Group, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// AUD-06: mutations are refused while storage is degraded and
+	// the bounded capacity is enforced inside the same critical
+	// section as the mutation.
+	if s.degraded != "" {
+		return Group{}, fmt.Errorf("subscription: storage degraded (%s); reconciliation required before mutations", s.degraded)
+	}
+	if _, exists := s.groups[g.ID]; !exists && len(s.groups) >= MaxGroups {
+		return Group{}, fmt.Errorf("subscription: group capacity exceeded (%d)", MaxGroups)
+	}
 	now := s.clock().UTC()
 	if prev, ok := s.groups[g.ID]; ok {
 		g.CreatedAt = prev.CreatedAt
@@ -222,6 +231,9 @@ func (s *GroupStore) Get(id string) (Group, bool) {
 func (s *GroupStore) Delete(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.degraded != "" {
+		return fmt.Errorf("subscription: storage degraded (%s); reconciliation required before mutations", s.degraded)
+	}
 	if _, ok := s.groups[id]; !ok {
 		return errors.New("subscription: group not found")
 	}

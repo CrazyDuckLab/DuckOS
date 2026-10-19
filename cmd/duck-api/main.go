@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -11,7 +12,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/CrazyDuckLab/DuckOS/internal/api"
@@ -22,7 +22,6 @@ import (
 	"github.com/CrazyDuckLab/DuckOS/internal/model"
 	"github.com/CrazyDuckLab/DuckOS/internal/network"
 	"github.com/CrazyDuckLab/DuckOS/internal/objectlisters"
-	"github.com/CrazyDuckLab/DuckOS/internal/persist"
 	"github.com/CrazyDuckLab/DuckOS/internal/state"
 	"github.com/CrazyDuckLab/DuckOS/internal/subscription"
 	"github.com/CrazyDuckLab/DuckOS/internal/wireguard"
@@ -192,25 +191,31 @@ func openPolicyStoreForStartup(policyDir string) (*identity.PolicyStore, error) 
 // proxy. A nil return means delivery is not available and must be
 // reported honestly, not faked.
 func enableSubscriptionDelivery(catalogDir string, eng *engine.Engine, assertionKey string) http.Handler {
-	tokens := subscription.NewTokenStore()
-	tokenFile, err := persist.Open[[]subscription.TokenRecord](filepath.Join(catalogDir, "center"), "tokens.json")
-	if err != nil {
-		return nil
-	}
-	tokens.SetPersist(func(recs []subscription.TokenRecord) (persist.CommitOutcome, error) {
-		return tokenFile.Update(func(cur *[]subscription.TokenRecord) { *cur = recs })
-	})
-	tokens.LoadRecords(tokenFile.Get())
-	delivery := subscription.NewDeliveryHandler(tokens, nil)
+	// AUD-07: the delivery daemon holds NO token table of its own.
+	// Every request is validated authoritatively against the
+	// agent-side store through the restricted IPC (the delivery
+	// principal may only call preview + delivery-validate), so
+	// revocation and rotation are effective immediately — no
+	// restart, no stale cache. IPC failure fails CLOSED (uniform
+	// 404), never on a stale in-memory catalog.
+	delivery := subscription.NewDeliveryHandler(nil, nil)
 	delivery.Prefix = "/sub"
 	// The delivery daemon acts as the dedicated service principal
-	// "duck-api-delivery" with network-admin rights, scoped to the
-	// single render endpoint; it never forwards subscriber tokens
-	// into the management plane.
+	// "duck-api-delivery"; its forwarded token is scoped to render +
+	// validate; it never forwards subscriber tokens anywhere except
+	// the validate endpoint, over a local trusted IPC.
 	serviceToken := identity.ForwardedToken(assertionKey, identity.User{
 		Username: "duck-api-delivery",
 		Role:     identity.NetworkAdmin,
 	})
+	delivery.Validate = func(token string) (string, bool) {
+		subID, ok := validateThroughIPC(eng, token, serviceToken)
+		if !ok {
+			return "", false
+		}
+		return subID, true
+	}
+	_ = catalogDir
 	delivery.Render = func(subID string) ([]byte, error) {
 		// Subscription records issued by the management surface may
 		// reference either a group or a profile-based subscription;
@@ -245,4 +250,24 @@ func renderThroughIPC(eng *engine.Engine, kind, subID string, format subscriptio
 		return nil, fmt.Errorf("render returned status %d", status)
 	}
 	return data, nil
+}
+
+// validateThroughIPC asks the agent's restricted delivery-validate
+// endpoint. Any failure (timeout, IPC error, non-200) fails CLOSED.
+func validateThroughIPC(eng *engine.Engine, token, serviceToken string) (string, bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	body, _ := json.Marshal(map[string]string{"token": token})
+	status, data, _, err := eng.XrayProxy(ctx, http.MethodPost, "/api/v1/xray/center/delivery-validate", "", serviceToken, bytes.NewReader(body))
+	if err != nil || status != http.StatusOK {
+		return "", false
+	}
+	var resp struct {
+		OK    bool   `json:"ok"`
+		SubID string `json:"subId"`
+	}
+	if json.Unmarshal(data, &resp) != nil || !resp.OK || resp.SubID == "" {
+		return "", false
+	}
+	return resp.SubID, true
 }

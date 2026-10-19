@@ -333,3 +333,77 @@ func TestCenter_RevocationPersistenceFailureIs503(t *testing.T) {
 	}
 	_ = failing
 }
+
+// AUD-01: the storage status/reconciliation surface works through
+// the INSTALLED handler configuration (fields as production sets
+// them), authentication and authorization are enforced, and
+// unauthorized callers cannot reconcile. Mirrors the auditor's
+// dead-endpoint reproduction with the corrected wiring.
+func TestAUD01_StorageSurfaceThroughProductionWiring(t *testing.T) {
+	h, access := fixture(t)
+	// Production wiring shape: StorageStatus + ReconcileStorage set.
+	h.StorageStatus = func() map[string]string {
+		return map[string]string{"nodes": "commit_uncertain at revision 3: injected"}
+	}
+	calls := 0
+	h.ReconcileStorage = func() (string, error) {
+		calls++
+		return "recovered: uncertain commit is on disk", nil
+	}
+	// GET storage status: 200 with the degraded diagnosis.
+	w := do(t, h, http.MethodGet, "/center/storage", nil)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "commit_uncertain") {
+		t.Fatalf("AUD-01 DEFECT: storage status dead: %d %s", w.Code, w.Body.String())
+	}
+	// POST reconcile: works and is real (the hook ran).
+	w = do(t, h, http.MethodPost, "/center/storage/reconcile", nil)
+	if w.Code != http.StatusOK || calls != 1 || !strings.Contains(w.Body.String(), "recovered") {
+		t.Fatalf("AUD-01 DEFECT: reconcile dead: %d calls=%d", w.Code, calls)
+	}
+	// Unauthorized callers cannot reconcile.
+	access.allowed = false
+	w = do(t, h, http.MethodPost, "/center/storage/reconcile", nil)
+	if w.Code != http.StatusForbidden || calls != 1 {
+		t.Fatalf("unauthorized reconcile: %d calls=%d", w.Code, calls)
+	}
+	// The delivery principal cannot reconcile (least privilege).
+	access.allowed = true
+	h.authorizedUser = func() (identity.User, error) {
+		return identity.User{Username: DeliveryServicePrincipal, Role: identity.NetworkAdmin}, nil
+	}
+	w = do(t, h, http.MethodPost, "/center/storage/reconcile", nil)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("delivery principal reconciled storage: %d", w.Code)
+	}
+}
+
+// AUD-07: delivery-validate through the restricted principal.
+func TestAUD07_DeliveryValidateEndpoint(t *testing.T) {
+	h, access := fixture(t)
+	access.allowed = true
+	issued := "presentation-token-value"
+	h.DeliveryValidate = func(token string) (string, bool) {
+		if token == issued {
+			return "g1", true
+		}
+		return "", false
+	}
+	h.authorizedUser = func() (identity.User, error) {
+		return identity.User{Username: DeliveryServicePrincipal}, nil
+	}
+	w := do(t, h, http.MethodPost, "/center/delivery-validate", map[string]string{"token": issued})
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"subId":"g1"`) {
+		t.Fatalf("validate: %d %s", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), issued) {
+		t.Fatal("token echoed back")
+	}
+	// Unknown token: uniform denial shape, no echo.
+	w = do(t, h, http.MethodPost, "/center/delivery-validate", map[string]string{"token": "other"})
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"ok":false`) {
+		t.Fatalf("unknown token: %d %s", w.Code, w.Body.String())
+	}
+	// Non-delivery principals keep their normal rights but this is
+	// not a subscriber capability: a subscriber token as bearer is
+	// still refused by the identity gate (covered above).
+}

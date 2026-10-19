@@ -30,6 +30,7 @@ import (
 	"github.com/CrazyDuckLab/DuckOS/internal/model"
 	"github.com/CrazyDuckLab/DuckOS/internal/multiwan"
 	"github.com/CrazyDuckLab/DuckOS/internal/network"
+	"github.com/CrazyDuckLab/DuckOS/internal/nodestate"
 	"github.com/CrazyDuckLab/DuckOS/internal/observe"
 	"github.com/CrazyDuckLab/DuckOS/internal/persist"
 	"github.com/CrazyDuckLab/DuckOS/internal/qos"
@@ -972,36 +973,15 @@ func enableXrayCenter(catalogDir string, access identityAccess, cat *xray.FileCa
 		return nil, err
 	}
 
-	// UQ-02: ONE atomic durable snapshot for the whole node-security
-	// domain (identities, credential hashes, revocation/suspension
-	// states, enrollment tokens and consumption marks, monotonic
-	// revision). The legacy two-file layout (nodes.json +
-	// enrollments.json) is migrated read-only before activation;
-	// the legacy files remain on disk as rollback evidence and are
-	// never written again.
-	stateFile, legacyErr2 := persist.Open[xnode.DurableState](storeDir, "xnode-state.json")
-	if legacyErr2 != nil {
-		return nil, legacyErr2
-	}
-	legacyNodes, legacyErr3 := persist.Open[[]xnode.Node](storeDir, "nodes.json")
-	if legacyErr3 != nil {
-		return nil, legacyErr3
-	}
-	legacyEnroll, legacyErr4 := persist.Open[[]xnode.EnrollmentToken](storeDir, "enrollments.json")
-	if legacyErr4 != nil {
-		return nil, legacyErr4
-	}
-	if st := stateFile.Get(); st.Revision == 0 && len(st.Nodes) == 0 && len(st.Enrollments) == 0 {
-		migrated, merr := xnode.MigrateLegacy(legacyNodes.Get(), legacyEnroll.Get())
-		if merr != nil {
-			return nil, fmt.Errorf("xray center: legacy node catalog rejected: %w", merr)
-		}
-		if len(migrated.Nodes) > 0 || len(migrated.Enrollments) > 0 {
-			out, cerr := stateFile.Update(func(cur *xnode.DurableState) { *cur = migrated })
-			if cerr != nil || out == persist.CommitUncertain {
-				return nil, fmt.Errorf("xray center: legacy migration not durably committed (outcome=%s): %w", out, cerr)
-			}
-		}
+	// UQ-02 + AUD-04: ONE atomic durable snapshot for the whole
+	// node-security domain behind a durable migration boundary. The
+	// legacy two-file layout is migrated exactly once (validated,
+	// transactionally committed, boundary marker committed); a lost
+	// or corrupt post-migration snapshot fails CLOSED — legacy
+	// records are quarantined evidence and are never reactivated.
+	stateFile, err := nodestate.EnsureMigrated(storeDir)
+	if err != nil {
+		return nil, fmt.Errorf("xray center: %w", err)
 	}
 	nodeMgr := xnode.NewManager(xnode.NewNodeHTTPAdapter())
 	// Security durability: the hook commits the whole registry
@@ -1091,6 +1071,50 @@ func enableXrayCenter(catalogDir string, access identityAccess, cat *xray.FileCa
 		Groups:   groups,
 		Tokens:   tokens,
 		Policies: policyFile,
+		// AUD-01: the storage status and reconciliation surface is
+		// wired into the INSTALLED agent, so degraded storage is
+		// observable and recoverable through the authenticated API.
+		StorageStatus: func() map[string]string {
+			out := map[string]string{}
+			if d := nodeMgr.Degraded(); d != "" {
+				out["nodes"] = d
+			}
+			if d := tokens.Degraded(); d != "" {
+				out["delivery-tokens"] = d
+			}
+			if d := groups.Degraded(); d != "" {
+				out["groups"] = d
+			}
+			return out
+		},
+		ReconcileStorage: func() (string, error) {
+			// The authoritative disk snapshots are re-read and
+			// handed to each domain; the agents side is the single
+			// source of truth for reconciliation.
+			r1, err := nodeMgr.ReconcileStorage(stateFile.Get())
+			if err != nil {
+				return "", err
+			}
+			tokenFile, terr := persist.Open[[]subscription.TokenRecord](storeDir, "tokens.json")
+			if terr != nil {
+				return "", terr
+			}
+			groupFile2, gerr := persist.Open[[]subscription.Group](storeDir, "groups.json")
+			if gerr != nil {
+				return "", gerr
+			}
+			r2 := tokens.Reconcile(tokenFile.Get())
+			r3 := groups.Reconcile(groupFile2.Get())
+			return r1 + "; " + r2 + "; " + r3, nil
+		},
+		// AUD-07: authoritative delivery-token validation for the
+		// public delivery daemon (restricted principal).
+		DeliveryValidate: func(token string) (string, bool) {
+			if rec, ok := tokens.Lookup(token); ok {
+				return rec.SubID, true
+			}
+			return "", false
+		},
 		Stats: func() (map[string]uint64, time.Time, bool) {
 			at, stale := accountant.LastCollection()
 			return accountant.Ledger(), at, stale

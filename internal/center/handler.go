@@ -60,6 +60,12 @@ type Handler struct {
 	Events *xray.EventLog
 	// Diagnose runs the structured diagnostics for a subject.
 	Diagnose func(subject string) ([]xray.Diagnostic, error)
+	// DeliveryValidate, when wired, authoritatively validates a
+	// presentation token against the live agent-side store (used by
+	// the public delivery daemon so revocation is effective
+	// immediately, without a restart). It returns the subscription
+	// id when the token is valid.
+	DeliveryValidate func(token string) (subID string, ok bool)
 	// StorageStatus reports per-domain degraded diagnoses (empty
 	// map = all healthy).
 	StorageStatus func() map[string]string
@@ -96,11 +102,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	rest = strings.TrimPrefix(rest, "/")
 	// Least privilege: the delivery service principal may render
-	// content and nothing else. Every other center operation is
-	// refused for it even when its token carries broad roles.
+	// content and validate delivery tokens — nothing else. Every
+	// other center operation is refused for it even when its token
+	// carries broad roles.
 	if user.Username == DeliveryServicePrincipal {
-		if !strings.HasPrefix(rest, "preview/") {
-			problem(w, 403, "forbidden", "The delivery principal may only render subscription content.")
+		if !strings.HasPrefix(rest, "preview/") && strings.TrimPrefix(rest, "/") != "delivery-validate" {
+			problem(w, 403, "forbidden", "The delivery principal may only render and validate subscription content.")
 			return
 		}
 	}
@@ -125,6 +132,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveEvents(w, r)
 	case strings.HasPrefix(rest, "diagnostics"):
 		h.serveDiagnostics(w, r)
+	case strings.TrimPrefix(rest, "/") == "delivery-validate":
+		h.serveDeliveryValidate(w, r)
 	default:
 		problem(w, 404, "not_found", "Unknown Xray Center operation.")
 	}
@@ -563,4 +572,35 @@ func tokenErrorCode(err error) string {
 		return "token_commit_uncertain"
 	}
 	return "token_persist_failed"
+}
+
+// serveDeliveryValidate is the restricted authoritative validation
+// endpoint: the delivery daemon asks the agent whether a
+// presentation token is currently valid. The token is accepted only
+// from the delivery principal (enforced above), never logged, and
+// never echoed back.
+func (h *Handler) serveDeliveryValidate(w http.ResponseWriter, r *http.Request) {
+	if h.DeliveryValidate == nil {
+		problem(w, 501, "delivery_validate_unavailable", "Authoritative token validation is not enabled.")
+		return
+	}
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		problem(w, 405, "method_not_allowed", "Validation is POST-only.")
+		return
+	}
+	var body struct {
+		Token string `json:"token"`
+	}
+	if err := decodeBody(r, &body); err != nil || body.Token == "" {
+		problem(w, 400, "invalid_request", "Validation needs a token.")
+		return
+	}
+	subID, ok := h.DeliveryValidate(body.Token)
+	if !ok {
+		// Uniform denial: identical for unknown, revoked, expired.
+		writeJSON(w, 200, map[string]any{"ok": false})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"ok": true, "subId": subID})
 }

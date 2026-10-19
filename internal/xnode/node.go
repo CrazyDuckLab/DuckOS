@@ -688,19 +688,50 @@ func (m *Manager) ReconcileStorage(st DurableState) (string, error) {
 	case st.Revision > m.revision:
 		return "", errors.New("xnode: disk revision ahead of memory; refusing to reconcile")
 	default:
-		m.nodes = map[string]*Node{}
-		m.enroll = map[string]*EnrollmentToken{}
+		// AUD-03: an older snapshot is adopted ONLY through a
+		// restrictive merge. Security state is monotonic across
+		// reconciliation: a node revoked in EITHER view stays
+		// revoked, a consumed enrollment token stays consumed, and
+		// the most recently acknowledged credential hash wins (an
+		// older snapshot can never silently reactivate a rotated-out
+		// credential). Every protective decision is reported —
+		// nothing is silently activated, and the operator directive
+		// to re-verify remains.
+		adopted := 0
+		protectedRevocations := 0
+		protectedConsumptions := 0
+		protectedRotations := 0
 		for i := range st.Nodes {
 			n := st.Nodes[i]
+			if prev, ok := m.nodes[n.ID]; ok {
+				if prev.Status == StatusRevoked && n.Status != StatusRevoked {
+					n.Status = StatusRevoked
+					n.LastError = prev.LastError
+					protectedRevocations++
+				}
+				if prev.CredentialHash != n.CredentialHash && prev.CredentialHash != "" {
+					// Memory holds the newest acknowledged rotation.
+					n.CredentialHash = prev.CredentialHash
+					protectedRotations++
+				}
+			}
 			m.nodes[n.ID] = &n
+			adopted++
 		}
 		for i := range st.Enrollments {
 			e := st.Enrollments[i]
+			if prev, ok := m.enroll[e.TokenHash]; ok {
+				if prev.Used && !e.Used {
+					e.Used = true
+					e.UsedBy = prev.UsedBy
+					protectedConsumptions++
+				}
+			}
 			m.enroll[e.TokenHash] = &e
 		}
 		m.revision = st.Revision
 		m.degraded = ""
-		return "recovered: disk state adopted (verify recent revocations)", nil
+		return fmt.Sprintf("recovered: disk state adopted with restrictive merge (%d nodes, %d revocation(s) protected, %d rotation(s) protected, %d consumption(s) protected; verify recent operations)", adopted, protectedRevocations, protectedRotations, protectedConsumptions), nil
 	}
 }
 
@@ -720,16 +751,17 @@ func (m *Manager) commitOutcomeLocked(res CommitResult, err error, what string) 
 }
 
 // requireHealthyStorageLocked is the mutation gate for callers that
-// already hold the lock.
+// do NOT yet hold the lock: it acquires the registry lock for the
+// check, closing the TOCTOU window against a concurrent
+// persistLocked degraded transition (AUD-05).
 func (m *Manager) requireHealthyStorageLocked() error {
-	if m.degraded != "" {
-		return fmt.Errorf("xnode: storage degraded (%s); reconciliation required before mutations", m.degraded)
-	}
-	return nil
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.requireHealthyStorage()
 }
 
-// requireHealthyStorage is the gate for callers that must acquire
-// the lock themselves.
+// requireHealthyStorage is the gate for callers that ALREADY hold
+// m.mu — it must never lock itself (deadlock).
 func (m *Manager) requireHealthyStorage() error {
 	if m.degraded != "" {
 		return fmt.Errorf("xnode: storage degraded (%s); reconciliation required before mutations", m.degraded)

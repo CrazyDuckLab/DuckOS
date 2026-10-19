@@ -42,12 +42,21 @@ func TestUQ01_E_SubscriptionRevocationSurvivesRestart(t *testing.T) {
 // filesystem failure modes of the atomic adapter are covered by
 // internal/persist: partial-write rollback and rename failure.)
 func TestUQ01_F_SubscriptionRevokeFailureNotAcknowledged(t *testing.T) {
-	// Injected fault via hook:
+	// The token is issued against a working hook, then the hook is
+	// armed with a NOT_COMMITTED fault for the revocation. (Since
+	// AUD-02, an Issue itself never succeeds against a failing
+	// hook — no usable token is acknowledged.)
 	failing := NewTokenStore()
+	failing.SetPersist(func([]TokenRecord) (persist.CommitOutcome, error) {
+		return persist.CommitOK, nil
+	})
+	t2, _, err := failing.Issue("g1", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
 	failing.SetPersist(func([]TokenRecord) (persist.CommitOutcome, error) {
 		return persist.CommitNotCommitted, errENOSPC
 	})
-	t2, _, _ := failing.Issue("g1", time.Hour)
 	if _, err := failing.RevokeSubscription("g1"); err == nil || !strings.Contains(err.Error(), "ENOSPC") {
 		t.Fatalf("revocation acknowledged despite failed commit: %v", err)
 	}
