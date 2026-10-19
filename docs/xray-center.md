@@ -224,6 +224,26 @@ UNCERTAIN-неуспех. Монотонный `DurableState.Revision` — як�
 (duck-dev-01, seccomp-инъекция на реальной границе fsync); граница
 fsync в тестах инъектируется на реальном системном пути.
 
+## Ремедиация аудита от 2026-10-19 (7 находок)
+
+AUD-01: статус/реконсиляция хранилища подключены к установленному
+агенту (`GET /center/storage`, `POST /center/storage/reconcile`,
+CLI `duck xray storage status|reconcile`). AUD-02: выпуск подписных
+токенов транзакционен (откат при NOT_COMMITTED, DEGRADED при
+Uncertain). AUD-03: реконсиляция — рестриктивный merge (отзывы и
+потребление токенов монотонны, новейший хэш креденшала побеждает).
+AUD-04: durable migration boundary (`xnode-migrated.json`); утрата
+или порча снапшота после миграции = fail closed, legacy карантин
+(`internal/nodestate`). AUD-05: pre-lock degraded-гейт брал мьютекс
+неправильно — race подтверждён детектором и устранён. AUD-06:
+GroupStore — degraded-гейт и лимит 256 в критической секции мутации.
+AUD-07: delivery-демон более не держит таблицу токенов — каждый
+запрос валидируется авторитетно через restricted IPC
+(`delivery-validate`, принципал ограничен preview+validate), отказ
+IPC = fail-closed 404; отзыв/ротация мгновенны. Все 7 регрессионных
+тестов верифицированно падают на уязвимом коде (сохранён в
+аудиторском worktree) и проходят после ремедиации.
+
 ## Честный статус
 
 IMPLEMENTED AND TESTED (unit/race-тесты на darwin, полный

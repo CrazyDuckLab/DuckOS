@@ -1137,6 +1137,20 @@ func xrayCmd(args []string) error {
 		return authedRead(cf, "/api/v1/xray/center/diagnostics?subject="+url.QueryEscape(*subject), "xray diagnose")
 	case "events":
 		return xrayCenterRead(rest, "center/events?limit=100")
+	case "storage":
+		op := "status"
+		if len(rest) > 0 {
+			op = rest[0]
+		}
+		if op == "reconcile" {
+			fs := flag.NewFlagSet("xray storage reconcile", flag.ContinueOnError)
+			cf := addCommonFlags(fs)
+			if err := fs.Parse(rest[1:]); err != nil {
+				return err
+			}
+			return authedCall(cf, http.MethodPost, "/api/v1/xray/center/storage/reconcile", nil, "xray storage reconcile")
+		}
+		return xrayCenterRead(nil, "center/storage")
 	case "nodes":
 		return xrayNodesCmd(rest)
 	case "groups":
