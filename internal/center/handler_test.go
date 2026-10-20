@@ -407,3 +407,28 @@ func TestAUD07_DeliveryValidateEndpoint(t *testing.T) {
 	// not a subscriber capability: a subscriber token as bearer is
 	// still refused by the identity gate (covered above).
 }
+
+// Node redemption through the API: single-use, credential shown
+// once, reuse refused.
+func TestCenter_NodeRedeem(t *testing.T) {
+	h, _ := fixture(t)
+	w := do(t, h, http.MethodPost, "/center/nodes/enroll-token", nil)
+	var issued struct {
+		Token string `json:"token"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &issued)
+	w = do(t, h, http.MethodPost, "/center/nodes/redeem", map[string]any{
+		"token": issued.Token, "name": "edge-1", "version": "26.3.27",
+		"capabilities": []string{"vless", "reality"},
+	})
+	if w.Code != http.StatusCreated || !strings.Contains(w.Body.String(), `"credential"`) {
+		t.Fatalf("redeem: %d %s", w.Code, w.Body.String())
+	}
+	// Second redemption refused.
+	w = do(t, h, http.MethodPost, "/center/nodes/redeem", map[string]any{
+		"token": issued.Token, "name": "edge-1-again",
+	})
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("token reuse: %d", w.Code)
+	}
+}

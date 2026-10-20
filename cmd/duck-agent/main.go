@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -64,6 +65,9 @@ func main() {
 	vaultDir := flag.String("vault-dir", agent.StandardVaultPath+"/records", "Protected Agent secret records")
 	vaultMasterFile := flag.String("vault-master-file", agent.StandardVaultMasterPath, "Private vault master key file")
 	xrayCatalogDir := flag.String("xray-catalog-dir", "/var/lib/duckos-agent/xray", "Xray durable catalog directory (Agent owns writes)")
+	nodeControlListen := flag.String("node-control-listen", "", "NODE ROLE: HTTPS control listener address (disabled unless set)")
+	nodeControlCert := flag.String("node-control-cert", "", "NODE ROLE: TLS certificate PEM (required when the listener is set)")
+	nodeControlKey := flag.String("node-control-key", "", "NODE ROLE: TLS key PEM (required when the listener is set)")
 	speedlabCatalogDir := flag.String("speedlab-catalog-dir", "/var/lib/duckos-agent/speedlab", "Speed Lab durable catalog directory (Agent owns writes)")
 	speedlabAllowHosts := flag.String("speedlab-allow-hosts", "", "Comma-separated allow-list of hosts the Speed Lab collector may dial; empty refuses every probe (safe default).")
 	frrPathspace := flag.String("frr-pathspace", "duckos", "FRR pathspace used by the DuckOS managed FRR runtime")
@@ -184,7 +188,7 @@ func main() {
 	} else {
 		log.Printf("wireguard service is not enabled: %v", err)
 	}
-	if xrayHost, err := enableXrayService(*xrayCatalogDir, networkAccess, vaultStore); err == nil {
+	if xrayHost, err := enableXrayService(*xrayCatalogDir, networkAccess, vaultStore, *nodeControlListen, *nodeControlCert, *nodeControlKey); err == nil {
 		handler.EnableXray(xrayHost)
 		log.Print("xray service is enabled; server/user/subscription CRUD will be admitted through the loopback")
 	} else {
@@ -1162,7 +1166,8 @@ func enableXrayCenter(catalogDir string, access identityAccess, cat *xray.FileCa
 	}, nil
 }
 
-func enableXrayService(catalogDir string, access identityAccess, secrets *agent.VaultLifecycle) (*agent.XrayHost, error) {
+func enableXrayService(catalogDir string, access identityAccess, secrets *agent.VaultLifecycle,
+	nodeControlListen, nodeControlCert, nodeControlKey string) (*agent.XrayHost, error) {
 	if catalogDir == "" {
 		return nil, errors.New("xray: durable catalog directory is required")
 	}
@@ -1198,6 +1203,16 @@ func enableXrayService(catalogDir string, access identityAccess, secrets *agent.
 		api.Center = centerHandler
 	} else {
 		log.Printf("xray center disabled: %v", err)
+	}
+	// NODE ROLE control listener: DISABLED by default. Enabled only
+	// when an explicit listen address AND a provisioned TLS
+	// certificate/key are configured — a public control listener is
+	// never exposed implicitly, and a listener without credentials
+	// refuses to start.
+	if nodeControlListen != "" {
+		if err := enableNodeControlListener(nodeControlListen, nodeControlCert, nodeControlKey, catalogDir, rt); err != nil {
+			log.Printf("node control listener disabled: %v", err)
+		}
 	}
 	host := agent.NewXrayHost(api, access, rt)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -1457,4 +1472,56 @@ func enableBackupRestoreService(journalDir, backupRoot, liveRoot string) *agent.
 		return nil
 	}
 	return host
+}
+
+// enableNodeControlListener starts the NODE-ROLE HTTPS control
+// listener: the persistent node identity (node-identity.json) is
+// authoritative, pushed Xray JSON flows through the SAME runtime
+// safe-apply path as local management, and TLS is mandatory with an
+// explicitly provisioned certificate. Fail-fast on a listener
+// without credentials: a silently insecure control channel is worse
+// than no node role.
+func enableNodeControlListener(listen, certPath, keyPath, catalogDir string, rt *xray.Runtime) error {
+	if certPath == "" || keyPath == "" {
+		return errors.New("node-control-cert and node-control-key are required when node-control-listen is set")
+	}
+	if _, err := tls.LoadX509KeyPair(certPath, keyPath); err != nil {
+		return fmt.Errorf("provisioned TLS pair unusable: %w", err)
+	}
+	identity, err := xnode.OpenNodeIdentity(filepath.Join(catalogDir, "center", "node-self"))
+	if err != nil {
+		return err
+	}
+	srv := xnode.NewNodeServer(nil, func(config []byte) error {
+		// The coordinator pushes a FULLY RESOLVED configuration; it
+		// flows through the same validate → stage → swap → rollback
+		// runtime path as local management. Secret materialization
+		// is the node's own vault concern and stays local.
+		var cfg xray.Config
+		if err := json.Unmarshal(config, &cfg); err != nil {
+			return fmt.Errorf("pushed config is not valid Xray JSON: %w", err)
+		}
+		return rt.Apply(context.Background(), cfg)
+	}, func() xnode.NodeInfo {
+		return xnode.NodeInfo{
+			Name:         "self",
+			Version:      "26.3.27",
+			Capabilities: []string{"vless", "vmess", "trojan", "shadowsocks", "socks", "http", "reality", "tls"},
+		}
+	})
+	srv.Identity = identity
+	httpSrv := &http.Server{
+		Addr:         listen,
+		Handler:      srv,
+		ReadTimeout:  35 * time.Second,
+		WriteTimeout: 35 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+	go func() {
+		log.Printf("node control listener serving on %s", listen)
+		if err := httpSrv.ListenAndServeTLS(certPath, keyPath); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Printf("node control listener stopped: %v", err)
+		}
+	}()
+	return nil
 }

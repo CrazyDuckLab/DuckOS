@@ -156,6 +156,29 @@ func (h *Handler) serveNodes(w http.ResponseWriter, r *http.Request, rest string
 		writeJSON(w, 200, h.Nodes.List())
 	case r.Method == http.MethodGet && rest == "/eligible":
 		writeJSON(w, 200, h.Nodes.Eligible())
+	case r.Method == http.MethodPost && rest == "/redeem":
+		// Node-side redemption: the enrolling node exchanges its
+		// single-use enrollment token for its permanent identity.
+		// The credential is returned EXACTLY ONCE over this
+		// authenticated management channel.
+		var body struct {
+			Token        string   `json:"token"`
+			Name         string   `json:"name"`
+			Version      string   `json:"version"`
+			Capabilities []string `json:"capabilities"`
+		}
+		if err := decodeBody(r, &body); err != nil || body.Token == "" || body.Name == "" {
+			problem(w, 400, "invalid_request", "Redemption needs a token and a node name.")
+			return
+		}
+		node, credential, err := h.Nodes.Enroll(body.Token, xnode.NodeInfo{
+			Name: body.Name, Version: body.Version, Capabilities: body.Capabilities,
+		})
+		if err != nil {
+			problem(w, 403, "redeem_failed", "The enrollment token is unknown, used or expired.")
+			return
+		}
+		writeJSON(w, 201, map[string]any{"node": node, "credential": credential})
 	case r.Method == http.MethodPost && rest == "/enroll-token":
 		token, _, err := h.Nodes.IssueEnrollmentToken(time.Hour)
 		if err != nil {

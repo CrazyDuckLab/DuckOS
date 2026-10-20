@@ -167,6 +167,47 @@ func (a *NodeHTTPAdapter) PushConfig(ctx Ctx, node Node, config []byte) error {
 	return err
 }
 
+// DeliverRotation performs the controller half of the credential
+// rotation over the channel authenticated with the CURRENT
+// credential: deliver the new credential (node persists it as
+// pending and acknowledges), then — after the CALLER commits the
+// coordinator side — confirm the transition. Order guarantees the
+// node is never orphaned: if delivery fails, the coordinator has
+// not committed anything and simply retries; if the ack is lost,
+// the node already holds both credentials and the retry
+// (BeginTransition is idempotent for the same credential)
+// re-acknowledges.
+func (a *NodeHTTPAdapter) DeliverRotation(ctx Ctx, node Node, oldCredential, newCredential string) error {
+	cred := credentialFromCtx(ctx)
+	if cred == "" {
+		cred = oldCredential
+	}
+	body, err := a.call(node, cred, "rotate-credential", map[string]string{"newCredential": newCredential})
+	if err != nil {
+		return fmt.Errorf("xnode: rotation delivery failed (node keeps the old credential): %w", err)
+	}
+	var ack struct {
+		Acked bool `json:"acked"`
+	}
+	if jsonErr := json.Unmarshal(body, &ack); jsonErr != nil || !ack.Acked {
+		return errors.New("xnode: rotation delivery not acknowledged")
+	}
+	return nil
+}
+
+// ConfirmRotation tells the node (already authenticated with the
+// NEW credential by the caller) to promote the pending credential.
+func (a *NodeHTTPAdapter) ConfirmRotation(ctx Ctx, node Node, newCredential string) error {
+	cred := credentialFromCtx(ctx)
+	if cred == "" {
+		cred = newCredential
+	}
+	if _, err := a.call(node, cred, "commit-credential", map[string]string{"newCredential": newCredential}); err != nil {
+		return fmt.Errorf("xnode: rotation commit not confirmed: %w", err)
+	}
+	return nil
+}
+
 // Health implements Adapter.
 func (a *NodeHTTPAdapter) Health(ctx Ctx, node Node) (time.Duration, error) {
 	cred := credentialFromCtx(ctx)
@@ -228,6 +269,12 @@ type NodeServer struct {
 	// Manager holds THIS node's enrolled identity; Authenticate
 	// verifies the coordinator's bearer credential against it.
 	Manager *Manager
+	// Identity, when wired (production node role), authenticates
+	// the coordinator through the persistent credential document
+	// and enables the rotation delivery ops. When nil, the legacy
+	// Manager.AuthenticateSelf path is used (tests, combined
+	// dev deployments).
+	Identity *NodeIdentity
 	// Apply receives the pushed Xray JSON and must stage it
 	// through the node's own safe-apply path.
 	Apply func(config []byte) error
@@ -273,6 +320,13 @@ func (s *NodeServer) allowPeer(peer string) bool {
 	if now.Sub(s.window2) >= time.Minute {
 		s.window2 = now
 		s.hits = map[string]int{}
+	}
+	if len(s.hits) >= 4096 {
+		// Hard cap on tracked peers (memory bound against a flood
+		// of distinct real sources); reset the window instead of
+		// growing unboundedly.
+		s.hits = map[string]int{}
+		s.window2 = now
 	}
 	s.hits[peer]++
 	return s.hits[peer] <= MaxControlRequestsPerMin
@@ -344,7 +398,12 @@ func (s *NodeServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 
 	credential := bearer(r)
-	if !s.Manager.AuthenticateSelf(credential) {
+	if s.Identity != nil {
+		if !s.Identity.Accepts(credential) {
+			uniformControlReject(w)
+			return
+		}
+	} else if !s.Manager.AuthenticateSelf(credential) {
 		uniformControlReject(w)
 		return
 	}
@@ -354,6 +413,42 @@ func (s *NodeServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		resp.Body, _ = json.Marshal(s.Info())
 	case "health":
 		resp.Body = []byte(`{}`)
+	case "rotate-credential":
+		// Controlled rotation delivery: the new credential arrives
+		// over the CURRENT authenticated channel, is persisted as
+		// pending, and acknowledged. Commit arrives separately.
+		if s.Identity == nil {
+			resp.OK, resp.Error = false, "xnode: rotation requires the node identity store"
+			break
+		}
+		var payload struct {
+			NewCredential string `json:"newCredential"`
+		}
+		if err := json.Unmarshal(req.Body, &payload); err != nil || payload.NewCredential == "" {
+			resp.OK, resp.Error = false, "xnode: rotate payload is malformed"
+			break
+		}
+		if err := s.Identity.BeginTransition(payload.NewCredential); err != nil {
+			resp.OK, resp.Error = false, "xnode: transition rejected by the identity store"
+			break
+		}
+		resp.Body = []byte(`{"acked":true}`)
+	case "commit-credential":
+		if s.Identity == nil {
+			resp.OK, resp.Error = false, "xnode: rotation requires the node identity store"
+			break
+		}
+		var payload struct {
+			NewCredential string `json:"newCredential"`
+		}
+		if err := json.Unmarshal(req.Body, &payload); err != nil || payload.NewCredential == "" {
+			resp.OK, resp.Error = false, "xnode: commit payload is malformed"
+			break
+		}
+		if err := s.Identity.Commit(payload.NewCredential); err != nil {
+			resp.OK, resp.Error = false, "xnode: commit rejected by the identity store"
+			break
+		}
 	case "push":
 		var payload struct {
 			Config json.RawMessage `json:"config"`

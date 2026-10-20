@@ -2114,6 +2114,19 @@ func xrayNodesCmd(args []string) error {
 	switch op {
 	case "list":
 		return xrayCenterRead(rest, "center/nodes")
+	case "redeem":
+		fs := flag.NewFlagSet("xray nodes redeem", flag.ContinueOnError)
+		cf := addCommonFlags(fs)
+		token := fs.String("token", "", "Enrollment token")
+		name := fs.String("name", "", "Node name")
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		if *token == "" || *name == "" {
+			return errors.New("xray nodes redeem: --token and --name are required")
+		}
+		body, _ := json.Marshal(map[string]any{"token": *token, "name": *name})
+		return authedCall(cf, http.MethodPost, "/api/v1/xray/center/nodes/redeem", body, "xray nodes redeem")
 	case "enroll-token":
 		fs := flag.NewFlagSet("xray nodes enroll-token", flag.ContinueOnError)
 		cf := addCommonFlags(fs)
@@ -2151,6 +2164,9 @@ func xrayNodesCmd(args []string) error {
 			return authedCall(cf, http.MethodPost, "/api/v1/xray/center/nodes/"+*id+"/"+op, body, "xray nodes "+op)
 		}
 	case "rotate":
+		// Full rotation delivery: generate (coordinator), deliver
+		// over the old channel, confirm. The stored credential on
+		// the coordinator rotates only after the node ack.
 		fs := flag.NewFlagSet("xray nodes rotate", flag.ContinueOnError)
 		cf := addCommonFlags(fs)
 		id := fs.String("id", "", "Node id")
