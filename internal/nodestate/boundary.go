@@ -59,11 +59,15 @@ func EnsureMigrated(storeDir string) (*persist.File[xnode.DurableState], error) 
 	}
 	st := stateFile.Get()
 	migratedBefore := marker.Get().MigratedAt.After(time.Time{}) || marker.Get().Revision > 0
-	if len(st.Nodes) > 0 || len(st.Enrollments) > 0 || st.Revision > 0 {
-		// Snapshot is live. Ensure the marker exists (it may have
-		// been lost while the snapshot survived — harmless, but the
-		// boundary must be durable for future snapshot losses).
+
+	// AUD-04N: the live-snapshot test is EXISTENCE of the durable
+	// file, not its content. A genuine fresh install commits a
+	// valid EMPTY snapshot, so an untouched installation restarts
+	// cleanly (subscription-only deployments included).
+	if stateFile.Exists() {
 		if !migratedBefore {
+			// Snapshot committed, marker lost (interrupted init):
+			// re-establish the boundary from the live snapshot.
 			if out, cerr := marker.Update(func(cur *migrationMarker) {
 				*cur = migrationMarker{MigratedAt: time.Now().UTC(), Revision: st.Revision, Nodes: len(st.Nodes)}
 			}); cerr != nil || out == persist.CommitUncertain {
@@ -77,7 +81,13 @@ func EnsureMigrated(storeDir string) (*persist.File[xnode.DurableState], error) 
 		// was lost afterwards. NEVER resurrect legacy credentials.
 		return nil, fmt.Errorf("xnode: post-migration state snapshot is missing; legacy records are quarantined and will NOT be reactivated (restore a backup explicitly)")
 	}
-	// Genuine first migration.
+
+	// Genuine initialization (no snapshot, no marker). ORDER IS
+	// THE CONTRACT: the authoritative snapshot commits FIRST
+	// (empty for a fresh install, migrated records otherwise),
+	// the marker SECOND — an interruption before the marker is
+	// recoverable (the snapshot guards re-migration), an
+	// interruption before the snapshot simply retries init.
 	legacyNodes, lerr := persist.Open[[]xnode.Node](storeDir, "nodes.json")
 	if lerr != nil {
 		return nil, lerr
@@ -86,30 +96,29 @@ func EnsureMigrated(storeDir string) (*persist.File[xnode.DurableState], error) 
 	if lerr != nil {
 		return nil, lerr
 	}
-	migrated, merr := xnode.MigrateLegacy(legacyNodes.Get(), legacyEnroll.Get())
-	if merr != nil {
-		return nil, fmt.Errorf("xnode: legacy catalog rejected: %w", merr)
-	}
-	if len(migrated.Nodes) == 0 && len(migrated.Enrollments) == 0 {
-		// Fresh install: nothing to migrate; establish the boundary
-		// so a future stray legacy file can never activate.
-		if out, cerr := marker.Update(func(cur *migrationMarker) {
-			*cur = migrationMarker{MigratedAt: time.Now().UTC(), Nodes: 0}
-		}); cerr != nil || out == persist.CommitUncertain {
-			return nil, fmt.Errorf("xnode: migration boundary commit uncertain (outcome=%s): %w", out, cerr)
+	var initial xnode.DurableState
+	if legacyNodes.Exists() || legacyEnroll.Exists() {
+		migrated, merr := xnode.MigrateLegacy(legacyNodes.Get(), legacyEnroll.Get())
+		if merr != nil {
+			return nil, fmt.Errorf("xnode: legacy catalog rejected: %w", merr)
 		}
-		return stateFile, nil
+		initial = migrated
 	}
-	out, cerr := stateFile.Update(func(cur *xnode.DurableState) { *cur = migrated })
+	out, cerr := stateFile.Update(func(cur *xnode.DurableState) { *cur = initial })
 	if cerr != nil || out == persist.CommitUncertain {
-		return nil, fmt.Errorf("xnode: migration not durably committed (outcome=%s): %w", out, cerr)
+		// AUD-04N-H/I: an init storage failure is never a silent
+		// success; the marker is NOT written, so the next boot
+		// retries initialization cleanly (and an uncertain commit
+		// still left the snapshot on disk, which the existence
+		// check above then treats as live).
+		return nil, fmt.Errorf("xnode: initial state snapshot not durably committed (outcome=%s): %w", out, cerr)
 	}
 	if out2, cerr2 := marker.Update(func(cur *migrationMarker) {
-		*cur = migrationMarker{MigratedAt: time.Now().UTC(), Revision: migrated.Revision, Nodes: len(migrated.Nodes)}
+		*cur = migrationMarker{MigratedAt: time.Now().UTC(), Revision: initial.Revision, Nodes: len(initial.Nodes)}
 	}); cerr2 != nil || out2 == persist.CommitUncertain {
-		// The snapshot IS committed; the marker loss only means a
-		// future loss of the snapshot could re-open the legacy path.
-		// That must never happen silently: fail closed as well.
+		// The snapshot IS committed; the marker loss would re-open
+		// the legacy path after a future snapshot loss. Never
+		// silent: fail closed until the marker commits.
 		return nil, fmt.Errorf("xnode: migration boundary not durably committed (outcome=%s): %w", out2, cerr2)
 	}
 	return stateFile, nil

@@ -101,3 +101,12 @@ func syncDir(dir string) error {
 	defer d.Close()
 	return d.Sync()
 }
+
+// Exists reports whether the durable file is present on disk. The
+// snapshot/marker protocols key restart decisions on existence (an
+// empty-but-present authoritative document is live state), never on
+// content alone.
+func (f *File[T]) Exists() bool {
+	_, err := os.Stat(f.path())
+	return err == nil
+}
