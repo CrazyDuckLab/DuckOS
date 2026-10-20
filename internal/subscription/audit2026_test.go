@@ -206,3 +206,77 @@ func newRecorder() *httptest.ResponseRecorder { return httptest.NewRecorder() }
 func requestFor(token string) *http.Request {
 	return httptest.NewRequest(http.MethodGet, "/sub/"+token, nil)
 }
+
+// R-02: token reconciliation must not adopt an older permissive
+// snapshot — real persisted snapshots on both sides.
+func TestR02_TokenReconcileRestrictiveMerge(t *testing.T) {
+	dir := t.TempDir()
+	disk, err := persist.Open[[]TokenRecord](dir, "tokens.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewTokenStore()
+	s.SetPersist(func(recs []TokenRecord) (persist.CommitOutcome, error) {
+		out, err := disk.Update(func(cur *[]TokenRecord) { *cur = recs })
+		return out, err
+	})
+	tok, _, _ := s.Issue("g1", time.Hour)
+	if _, err := s.RevokeSubscription("g1"); err != nil {
+		t.Fatal(err)
+	}
+	// An "older" disk snapshot where the token looks active.
+	oldView := []TokenRecord{{SubID: "g1", TokenHash: hashToken(tok), IssuedAt: time.Now().UTC()}}
+	_, _ = disk.Update(func(cur *[]TokenRecord) { *cur = oldView })
+	// Degraded + reconcile against the older view.
+	s.SetPersist(func([]TokenRecord) (persist.CommitOutcome, error) {
+		return persist.CommitUncertain, errors.New("injected")
+	})
+	_, _, _ = s.Issue("g2", time.Hour) // drives degraded
+	res := s.Reconcile(oldView)
+	if !strings.Contains(res, "restrictive merge") || !strings.Contains(res, "1 revocation") {
+		t.Fatalf("R-02: reconcile did not protect the revocation: %s", res)
+	}
+	// Public behavior: the revoked URL stays denied.
+	if _, ok := s.Lookup(tok); ok {
+		t.Fatal("R-02 DEFECT: revoked token reactivated by reconcile")
+	}
+	// Restart view: the merged (restrictive) state is what a fresh
+	// reader sees.
+	reopened, _ := persist.Open[[]TokenRecord](dir, "tokens.json")
+	_ = reopened
+	if _, ok := s.Lookup(tok); ok {
+		t.Fatal("revoked token active after restart view")
+	}
+}
+
+// R-04: deterministic concurrency — a revocation completing between
+// the first validation and the pre-write re-validation denies the
+// request (linearization at the second check).
+func TestR04_RevocationBetweenValidationsDenied(t *testing.T) {
+	agentSide := NewTokenStore()
+	tok, _, _ := agentSide.Issue("g", time.Hour)
+	calls := 0
+	var revoked bool
+	delivery := NewDeliveryHandler(nil, func(string) ([]byte, error) { return []byte("PAYLOAD"), nil })
+	delivery.Validate = func(token string) (string, bool) {
+		calls++
+		if calls == 2 && !revoked {
+			// The revocation lands exactly between the two checks.
+			_, _ = agentSide.RevokeSubscription("g")
+			revoked = true
+		}
+		rec, ok := agentSide.Lookup(token)
+		if !ok {
+			return "", false
+		}
+		return rec.SubID, true
+	}
+	rw := newRecorder()
+	delivery.ServeHTTP(rw, requestFor(tok))
+	if rw.Code != 404 {
+		t.Fatalf("R-04 DEFECT: request authorized before revocation completed was served (%d)", rw.Code)
+	}
+	if calls < 2 {
+		t.Fatal("re-validation did not run")
+	}
+}

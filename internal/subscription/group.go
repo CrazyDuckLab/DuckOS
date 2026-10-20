@@ -185,20 +185,28 @@ func (s *GroupStore) Degraded() string {
 	return s.degraded
 }
 
-// Reconcile adopts the authoritative disk snapshot and clears the
-// degraded flag.
+// Reconcile adopts the disk snapshot through a RESTRICTIVE MERGE
+// (R-02): a group disabled in memory stays disabled when the disk
+// view looks enabled; disabled tombstones are reported, never
+// silently activated.
 func (s *GroupStore) Reconcile(groups []Group) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.degraded == "" {
 		return "healthy"
 	}
-	s.groups = map[string]Group{}
+	merged := map[string]Group{}
+	protected := 0
 	for _, g := range groups {
-		s.groups[g.ID] = g
+		if prev, ok := s.groups[g.ID]; ok && !prev.Enabled && g.Enabled {
+			g.Enabled = false
+			protected++
+		}
+		merged[g.ID] = g
 	}
+	s.groups = merged
 	s.degraded = ""
-	return "recovered: disk state adopted"
+	return fmt.Sprintf("recovered: disk state adopted with restrictive merge (%d disabled group(s) protected)", protected)
 }
 
 // LoadGroups seeds the store from persisted state (startup).

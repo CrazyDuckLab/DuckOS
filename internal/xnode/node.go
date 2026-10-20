@@ -226,7 +226,12 @@ func (m *Manager) SetPersist(fn func(DurableState) (CommitResult, error)) { m.pe
 // IssueEnrollmentToken mints a single-use enrollment token. The
 // plaintext token is returned exactly once.
 func (m *Manager) IssueEnrollmentToken(ttl time.Duration) (string, EnrollmentToken, error) {
-	if err := m.requireHealthyStorageLocked(); err != nil {
+	// R-05: the degraded gate and the mutation share ONE critical
+	// section — a concurrent persistLocked cannot transition the
+	// domain to degraded between the check and the write.
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.requireHealthyStorage(); err != nil {
 		return "", EnrollmentToken{}, err
 	}
 	token, err := newSecret()
@@ -238,8 +243,6 @@ func (m *Manager) IssueEnrollmentToken(ttl time.Duration) (string, EnrollmentTok
 	if ttl != 0 {
 		rec.ExpiresAt = now.Add(ttl)
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
 	if len(m.enroll) >= MaxEnrollmentTokens {
 		for h, r := range m.enroll {
 			if r.Used || (!r.ExpiresAt.IsZero() && now.After(r.ExpiresAt)) {
@@ -402,21 +405,21 @@ func (m *Manager) Authenticate(nodeID, credential string) bool {
 // RotateCredential replaces a node credential. The old credential
 // stops validating immediately; the new one is returned once.
 func (m *Manager) RotateCredential(nodeID string) (string, error) {
-	if err := m.requireHealthyStorageLocked(); err != nil {
+	// R-05: gate and rotation share one critical section.
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.requireHealthyStorage(); err != nil {
 		return "", err
 	}
 	credential, err := newSecret()
 	if err != nil {
 		return "", err
 	}
-	m.mu.Lock()
 	node, ok := m.nodes[nodeID]
 	if !ok || node.Status == StatusRevoked {
-		m.mu.Unlock()
 		return "", errors.New("xnode: node is unknown or revoked")
 	}
 	if node.Kind == KindLocal {
-		m.mu.Unlock()
 		return "", errors.New("xnode: local nodes carry no credential")
 	}
 	prevHash := node.CredentialHash
@@ -426,10 +429,8 @@ func (m *Manager) RotateCredential(nodeID string) (string, error) {
 		if !res.Uncertain {
 			node.CredentialHash = prevHash
 		}
-		m.mu.Unlock()
 		return "", m.commitOutcomeLocked(res, perr, "credential rotation")
 	}
-	m.mu.Unlock()
 	return credential, nil
 }
 
@@ -699,15 +700,29 @@ func (m *Manager) ReconcileStorage(st DurableState) (string, error) {
 		// to re-verify remains.
 		adopted := 0
 		protectedRevocations := 0
+		protectedSuspensions := 0
 		protectedConsumptions := 0
 		protectedRotations := 0
 		for i := range st.Nodes {
 			n := st.Nodes[i]
 			if prev, ok := m.nodes[n.ID]; ok {
-				if prev.Status == StatusRevoked && n.Status != StatusRevoked {
-					n.Status = StatusRevoked
+				// R-01: node status is monotonic across
+				// reconciliation under the precedence
+				// REVOKED > SUSPENDED > everything else. A node
+				// suspended or revoked in EITHER view keeps the
+				// restrictive status; a legitimate resume is an
+				// ordinary durably-committed mutation and is not
+				// affected (by the time an older snapshot is
+				// reconciled, a committed resume is already IN that
+				// newer memory state).
+				if statusRank(prev.Status) > statusRank(n.Status) {
+					if prev.Status == StatusRevoked {
+						protectedRevocations++
+					} else {
+						protectedSuspensions++
+					}
+					n.Status = prev.Status
 					n.LastError = prev.LastError
-					protectedRevocations++
 				}
 				if prev.CredentialHash != n.CredentialHash && prev.CredentialHash != "" {
 					// Memory holds the newest acknowledged rotation.
@@ -731,7 +746,22 @@ func (m *Manager) ReconcileStorage(st DurableState) (string, error) {
 		}
 		m.revision = st.Revision
 		m.degraded = ""
-		return fmt.Sprintf("recovered: disk state adopted with restrictive merge (%d nodes, %d revocation(s) protected, %d rotation(s) protected, %d consumption(s) protected; verify recent operations)", adopted, protectedRevocations, protectedRotations, protectedConsumptions), nil
+		return fmt.Sprintf("recovered: disk state adopted with restrictive merge (%d nodes, %d revocation(s) protected, %d suspension(s) protected, %d rotation(s) protected, %d consumption(s) protected; verify recent operations)", adopted, protectedRevocations, protectedSuspensions, protectedRotations, protectedConsumptions), nil
+	}
+}
+
+// statusRank is the security precedence of a node status:
+// REVOKED (irreversible operator decision) > SUSPENDED (maintenance
+// hold) > everything else. Reconciliation never adopts a snapshot
+// with a lower-rank status than the in-memory one.
+func statusRank(s Status) int {
+	switch s {
+	case StatusRevoked:
+		return 3
+	case StatusSuspended:
+		return 2
+	default:
+		return 1
 	}
 }
 

@@ -90,24 +90,45 @@ func (s *TokenStore) Degraded() string {
 	return s.degraded
 }
 
-// Reconcile resolves uncertainty: the disk snapshot becomes
-// authoritative and the store returns to the healthy state. If the
-// disk is older than the uncertain in-memory state, the restrictive
-// in-memory state was NOT durably committed — the operator must
-// re-revoke; this is reported, never silenced.
+// Reconcile resolves uncertainty by adopting the disk snapshot
+// through a RESTRICTIVE MERGE (R-02): a token revoked in memory
+// stays revoked even when the disk view looks active (older
+// snapshot, privileged replacement, corruption recovery); revocation
+// tombstones are never dropped, and expired records can never
+// reactivate (expiry is derived from the immutable ExpiresAt). The
+// merge reports how many revocations were protected — nothing is
+// silently activated.
 func (s *TokenStore) Reconcile(records []TokenRecord) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.degraded == "" {
 		return "healthy"
 	}
-	s.byHash = map[string]*TokenRecord{}
+	merged := map[string]*TokenRecord{}
+	protected := 0
 	for i := range records {
 		rec := records[i]
-		s.byHash[rec.TokenHash] = &rec
+		if prev, ok := s.byHash[rec.TokenHash]; ok && prev.Revoked && !rec.Revoked {
+			rec.Revoked = true
+			protected++
+		}
+		rc := rec
+		merged[rec.TokenHash] = &rc
 	}
+	// Tombstones for records the disk no longer carries: a revocation
+	// that the disk lost must still deny the URL.
+	for h, prev := range s.byHash {
+		if prev.Revoked {
+			if _, onDisk := merged[h]; !onDisk {
+				rc := *prev
+				merged[h] = &rc
+				protected++
+			}
+		}
+	}
+	s.byHash = merged
 	s.degraded = ""
-	return "recovered: disk state adopted (verify recent revocations)"
+	return fmt.Sprintf("recovered: disk state adopted with restrictive merge (%d revocation(s) protected; verify recent operations)", protected)
 }
 
 func (s *TokenStore) persistLocked() (persist.CommitOutcome, error) {
@@ -164,11 +185,12 @@ func NewToken() (string, error) {
 // Issue mints a new token for the subscription and records its
 // digest. The presentation token is returned exactly once.
 func (s *TokenStore) Issue(subID string, ttl time.Duration) (string, TokenRecord, error) {
-	if err := func() error {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		return s.requireHealthyLocked()
-	}(); err != nil {
+	// R-05: the degraded gate and the issuance share ONE critical
+	// section (no check-then-act window against a concurrent
+	// persistLocked degraded transition).
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.requireHealthyLocked(); err != nil {
 		return "", TokenRecord{}, err
 	}
 	if subID == "" {
@@ -183,7 +205,6 @@ func (s *TokenStore) Issue(subID string, ttl time.Duration) (string, TokenRecord
 	if ttl != 0 {
 		rec.ExpiresAt = now.Add(ttl)
 	}
-	s.mu.Lock()
 	// Bound the store: drop expired/revoked records beyond capacity.
 	if len(s.byHash) >= 8192 {
 		for h, r := range s.byHash {
@@ -206,13 +227,11 @@ func (s *TokenStore) Issue(subID string, ttl time.Duration) (string, TokenRecord
 		} else {
 			s.degraded = fmt.Sprintf("commit_uncertain on token issue: %v", perr)
 		}
-		s.mu.Unlock()
 		if outcome == persist.CommitUncertain {
 			return "", TokenRecord{}, fmt.Errorf("subscription: token commit outcome UNCERTAIN; token not issued: %w", perr)
 		}
 		return "", TokenRecord{}, fmt.Errorf("subscription: token not committed durably: %w", perr)
 	}
-	s.mu.Unlock()
 	return token, rec, nil
 }
 
@@ -498,6 +517,19 @@ func (h *DeliveryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil || len(payload) == 0 {
 		uniform404(w)
 		return
+	}
+	// R-04 re-validation: the request's authorization linearization
+	// point is this SECOND check, after rendering but BEFORE any
+	// byte reaches the wire. A revocation completing between the
+	// first check and here denies the request with the uniform 404.
+	// Data already transmitted before a revocation cannot be
+	// retroactively recalled — documented behavior, never claimed
+	// otherwise.
+	if h.Validate != nil {
+		if _, stillValid := h.Validate(token); !stillValid {
+			uniform404(w)
+			return
+		}
 	}
 	hd := w.Header()
 	hd.Set("Content-Type", format.ContentType())

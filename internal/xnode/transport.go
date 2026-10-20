@@ -19,6 +19,7 @@ package xnode
 
 import (
 	"bytes"
+	"context"
 	crand "crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
@@ -28,6 +29,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -236,11 +238,44 @@ type NodeServer struct {
 	mu     sync.Mutex
 	seen   map[string]time.Time
 	window time.Duration
+	// inFlight bounds concurrent control-plane requests (memory
+	// bound for unauthenticated traffic floods); excess gets the
+	// uniform 401 without any expensive work.
+	inFlight chan struct{}
+	// hits is a bounded per-peer fixed-window rate limiter applied
+	// BEFORE authentication parsing work.
+	hits    map[string]int
+	window2 time.Time
+	windowN int
 }
+
+const (
+	// MaxInFlightControl bounds concurrent control-plane requests.
+	MaxInFlightControl = 8
+	// MaxControlRequestsPerMin bounds per-peer request rate.
+	MaxControlRequestsPerMin = 120
+)
 
 func NewNodeServer(m *Manager, apply func([]byte) error, info func() NodeInfo) *NodeServer {
 	return &NodeServer{Manager: m, Apply: apply, Info: info, now: time.Now,
-		seen: map[string]time.Time{}, window: 10 * time.Minute}
+		seen: map[string]time.Time{}, window: 10 * time.Minute,
+		inFlight: make(chan struct{}, MaxInFlightControl),
+		hits:     map[string]int{},
+	}
+}
+
+// allowPeer applies the bounded per-peer rate limit. Peers are the
+// immediate TCP address; spoofable proxy headers are ignored.
+func (s *NodeServer) allowPeer(peer string) bool {
+	now := s.now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if now.Sub(s.window2) >= time.Minute {
+		s.window2 = now
+		s.hits = map[string]int{}
+	}
+	s.hits[peer]++
+	return s.hits[peer] <= MaxControlRequestsPerMin
 }
 
 // SetClock overrides the clock (testing).
@@ -251,6 +286,29 @@ func (s *NodeServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
+	// Bounded resources before any parsing work (R: multi-node
+	// resource exhaustion): rate limit, concurrency semaphore,
+	// request deadline.
+	peer := ""
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		peer = host
+	} else {
+		peer = r.RemoteAddr
+	}
+	if !s.allowPeer(peer) {
+		uniformControlReject(w)
+		return
+	}
+	select {
+	case s.inFlight <- struct{}{}:
+		defer func() { <-s.inFlight }()
+	default:
+		uniformControlReject(w)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	r = r.WithContext(ctx)
 	body, err := io.ReadAll(io.LimitReader(r.Body, MaxControlBytes))
 	if err != nil {
 		uniformControlReject(w)

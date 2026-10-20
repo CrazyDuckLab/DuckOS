@@ -1088,9 +1088,14 @@ func enableXrayCenter(catalogDir string, access identityAccess, cat *xray.FileCa
 			return out
 		},
 		ReconcileStorage: func() (string, error) {
-			// The authoritative disk snapshots are re-read and
-			// handed to each domain; the agents side is the single
-			// source of truth for reconciliation.
+			// R-03: reconciliation reads AUTHORITATIVE storage —
+			// each durable file is re-read from DISK (not from the
+			// in-memory mirror) before the merge; an unreadable or
+			// corrupt snapshot keeps the domain degraded instead of
+			// reconciling against unknown state.
+			if err := stateFile.Reload(); err != nil {
+				return "", fmt.Errorf("xnode: authoritative snapshot unreadable; staying degraded: %w", err)
+			}
 			r1, err := nodeMgr.ReconcileStorage(stateFile.Get())
 			if err != nil {
 				return "", err
@@ -1099,9 +1104,15 @@ func enableXrayCenter(catalogDir string, access identityAccess, cat *xray.FileCa
 			if terr != nil {
 				return "", terr
 			}
+			if rerr := tokenFile.Reload(); rerr != nil {
+				return "", fmt.Errorf("delivery tokens: authoritative snapshot unreadable; staying degraded: %w", rerr)
+			}
 			groupFile2, gerr := persist.Open[[]subscription.Group](storeDir, "groups.json")
 			if gerr != nil {
 				return "", gerr
+			}
+			if rerr := groupFile2.Reload(); rerr != nil {
+				return "", fmt.Errorf("groups: authoritative snapshot unreadable; staying degraded: %w", rerr)
 			}
 			r2 := tokens.Reconcile(tokenFile.Get())
 			r3 := groups.Reconcile(groupFile2.Get())

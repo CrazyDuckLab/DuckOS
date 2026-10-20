@@ -110,3 +110,25 @@ func (f *File[T]) Exists() bool {
 	_, err := os.Stat(f.path())
 	return err == nil
 }
+
+// Reload re-reads the durable document from disk into the in-memory
+// mirror. Reconciliation MUST reload before consulting Get(): the
+// mirror is coherent only for writes made through this File, and an
+// external/privileged replacement on disk is invisible until a
+// reload. A read error is propagated — callers must stay in the
+// fail-closed state rather than reconcile against an unreadable
+// snapshot.
+func (f *File[T]) Reload() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	raw, err := os.ReadFile(f.path())
+	if err != nil {
+		return fmt.Errorf("persist: reload: %w", err)
+	}
+	var st T
+	if err := json.Unmarshal(raw, &st); err != nil {
+		return fmt.Errorf("persist: reload decode %s: %w", f.name, err)
+	}
+	f.state = st
+	return nil
+}
