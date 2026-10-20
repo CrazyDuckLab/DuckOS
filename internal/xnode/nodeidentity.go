@@ -130,6 +130,11 @@ func (n *NodeIdentity) Commit(newCredential string) error {
 	defer n.mu.Unlock()
 	doc := n.file.Get()
 	pending := nodeCredentialHash(newCredential)
+	// Idempotent: a confirm whose ack was lost already committed —
+	// re-committing the CURRENT credential is a no-op success.
+	if doc.PendingHash == "" && doc.CurrentHash == pending {
+		return nil
+	}
 	if doc.PendingHash == "" || doc.PendingHash != pending {
 		return errors.New("xnode: commit-credential does not match the pending transition")
 	}
