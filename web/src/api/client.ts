@@ -28,6 +28,8 @@ import type {
   UplinkStatus,
   WireguardPeerView,
   WireguardServerView,
+  XrayGroupView,
+  XrayNodeView,
   XrayServerView,
   XrayUserView,
 } from "./types";
@@ -687,6 +689,70 @@ export class APIClient {
         method: "POST",
         body: sub,
       },
+    );
+  }
+  /* — Nodes management (real center surface) — */
+  fetchXrayNodes(options: FetchOptions = {}) {
+    return this.fetch<XrayNodeView[]>(
+      `${APIClient.ENDPOINTS.xray}/center/nodes`,
+      null,
+      options,
+    );
+  }
+  fetchXrayGroups(options: FetchOptions = {}) {
+    return this.fetch<XrayGroupView[]>(
+      `${APIClient.ENDPOINTS.xray}/center/groups`,
+      null,
+      options,
+    );
+  }
+  fetchXrayStorage(options: FetchOptions = {}) {
+    return this.fetch<{ domains: Record<string, string> }>(
+      `${APIClient.ENDPOINTS.xray}/center/storage`,
+      null,
+      options,
+    );
+  }
+  xrayIssueEnrollToken(options: FetchOptions = {}) {
+    return this.fetch<{ token: string }>(
+      `${APIClient.ENDPOINTS.xray}/center/nodes/enroll-token`,
+      null,
+      { ...options, method: "POST" },
+    );
+  }
+  xrayRotateNode(nodeId: string, options: FetchOptions = {}) {
+    return this.fetch<{ credential: string }>(
+      `${APIClient.ENDPOINTS.xray}/center/nodes/${encodeURIComponent(nodeId)}/rotate`,
+      null,
+      { ...options, method: "POST" },
+    );
+  }
+  xraySuspendNode(nodeId: string, options: FetchOptions = {}) {
+    return this.fetch<unknown>(
+      `${APIClient.ENDPOINTS.xray}/center/nodes/${encodeURIComponent(nodeId)}/suspend`,
+      null,
+      { ...options, method: "POST" },
+    );
+  }
+  xrayResumeNode(nodeId: string, options: FetchOptions = {}) {
+    return this.fetch<unknown>(
+      `${APIClient.ENDPOINTS.xray}/center/nodes/${encodeURIComponent(nodeId)}/resume`,
+      null,
+      { ...options, method: "POST" },
+    );
+  }
+  xrayRevokeNode(nodeId: string, options: FetchOptions = {}) {
+    return this.fetch<unknown>(
+      `${APIClient.ENDPOINTS.xray}/center/nodes/${encodeURIComponent(nodeId)}`,
+      null,
+      { ...options, method: "DELETE" },
+    );
+  }
+  xrayReconcileStorage(options: FetchOptions = {}) {
+    return this.fetch<{ result: string }>(
+      `${APIClient.ENDPOINTS.xray}/center/storage/reconcile`,
+      null,
+      { ...options, method: "POST" },
     );
   }
   fetchXrayCenterStats(options: FetchOptions = {}) {

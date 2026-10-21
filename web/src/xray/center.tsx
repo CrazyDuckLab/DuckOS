@@ -11,7 +11,12 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { APIClient, type FetchResult } from "../api/client";
-import type { XrayServerView, XrayUserView } from "../api/types";
+import type {
+  XrayGroupView,
+  XrayNodeView,
+  XrayServerView,
+  XrayUserView,
+} from "../api/types";
 import type { Locale, Messages } from "../i18n/messages";
 import type { PageMeta } from "../pages/registry";
 import { PageFrame } from "../components/PageFrame";
@@ -52,6 +57,33 @@ type Dict = {
   statsStale: string;
   statsEmpty: string;
   diagnostics: string;
+  sectionNodes: string;
+  nodesEmpty: string;
+  nodeEnroll: string;
+  nodeTokenOnce: string;
+  nodeTokenInstructions: string;
+  nodeTokenExpired: string;
+  nodeSuspend: string;
+  nodeResume: string;
+  nodeRotate: string;
+  nodeRevoke: string;
+  nodeLastSeen: string;
+  nodeNeverSeen: string;
+  nodeVersion: string;
+  nodeCapabilities: string;
+  nodeError: string;
+  nodeGroups: string;
+  rotateCommitted: string;
+  rotateCredentialOnce: string;
+  rotateFailed: string;
+  storageDegraded: string;
+  storageReconcile: string;
+  storageReconciled: string;
+  statusActive: string;
+  statusStale: string;
+  statusSuspended: string;
+  statusRevoked: string;
+  statusPending: string;
   users: string;
 };
 
@@ -89,6 +121,39 @@ const en: Dict = {
   statsStale: "Statistics are stale: the last collection failed.",
   statsEmpty: "No traffic has been observed yet.",
   diagnostics: "Diagnostics",
+  sectionNodes: "Nodes",
+  nodesEmpty:
+    "No nodes are enrolled. Generate an enrollment token to onboard one.",
+  nodeEnroll: "Generate enrollment token",
+  nodeTokenOnce:
+    "One-time enrollment token — copy it now; it will never be shown again.",
+  nodeTokenInstructions:
+    "Run on the node: duck xray nodes redeem --token <token> --name <node-name>. The token expires in 1 hour and is single-use.",
+  nodeTokenExpired: "The enrollment token is unknown, used or expired.",
+  nodeSuspend: "Suspend",
+  nodeResume: "Resume",
+  nodeRotate: "Rotate credential",
+  nodeRevoke: "Revoke",
+  nodeLastSeen: "Last contact",
+  nodeNeverSeen: "never",
+  nodeVersion: "Version",
+  nodeCapabilities: "Capabilities",
+  nodeError: "Last error",
+  nodeGroups: "Groups",
+  rotateCommitted:
+    "Rotation committed on the controller. The old credential is already invalid; deliver the new credential to the node and confirm the transition.",
+  rotateCredentialOnce:
+    "New node credential — copy it now; it will never be shown again.",
+  rotateFailed:
+    "Rotation failed; the state was not changed as reported by the API.",
+  storageDegraded: "Storage is DEGRADED:",
+  storageReconcile: "Reconcile storage",
+  storageReconciled: "Storage reconciliation completed.",
+  statusActive: "active",
+  statusStale: "stale",
+  statusSuspended: "suspended",
+  statusRevoked: "revoked",
+  statusPending: "pending",
   helpTitle: "What is this?",
   users: "clients",
 };
@@ -129,6 +194,38 @@ const ru: Dict = {
   statsStale: "Статистика устарела: последняя сборка не удалась.",
   statsEmpty: "Трафик пока не наблюдался.",
   diagnostics: "Диагностика",
+  sectionNodes: "Узлы",
+  nodesEmpty:
+    "Узлы не зарегистрированы. Сгенерируйте enrollment-токен для подключения.",
+  nodeEnroll: "Сгенерировать enrollment-токен",
+  nodeTokenOnce:
+    "Одноразовый enrollment-токен — скопируйте сейчас; повторно показан не будет.",
+  nodeTokenInstructions:
+    "На узле выполните: duck xray nodes redeem --token <токен> --name <имя-узла>. Токен действует 1 час и одноразовый.",
+  nodeTokenExpired: "Токен неизвестен, использован или истёк.",
+  nodeSuspend: "Приостановить",
+  nodeResume: "Возобновить",
+  nodeRotate: "Ротация креденшала",
+  nodeRevoke: "Отозвать",
+  nodeLastSeen: "Последний контакт",
+  nodeNeverSeen: "никогда",
+  nodeVersion: "Версия",
+  nodeCapabilities: "Возможности",
+  nodeError: "Последняя ошибка",
+  nodeGroups: "Группы",
+  rotateCommitted:
+    "Ротация закоммичена на контроллере. Старый креденшал уже недействителен; доставьте новый креденшал на узел и подтвердите переход.",
+  rotateCredentialOnce:
+    "Новый креденшал узла — скопируйте сейчас; повторно показан не будет.",
+  rotateFailed: "Ротация не удалась; состояние не изменено, как сообщило API.",
+  storageDegraded: "Хранилище в состоянии DEGRADED:",
+  storageReconcile: "Реконслировать хранилище",
+  storageReconciled: "Реконсиляция хранилища завершена.",
+  statusActive: "активен",
+  statusStale: "не отвечает",
+  statusSuspended: "приостановлен",
+  statusRevoked: "отозван",
+  statusPending: "ожидает",
   users: "клиентов",
 };
 
@@ -743,6 +840,16 @@ export function XrayCenterPage({
         )}
       </section>
 
+      <section aria-labelledby="xray-nodes-h">
+        <h2 id="xray-nodes-h">{d.sectionNodes}</h2>
+        <Help id="nodes" locale={resolvedLocale} />
+        <NodesPanel
+          client={client}
+          locale={resolvedLocale}
+          onChanged={reload}
+        />
+      </section>
+
       <section aria-labelledby="xray-stats-h">
         <h2 id="xray-stats-h">{d.sectionStats}</h2>
         <StatsPanel client={client} locale={resolvedLocale} />
@@ -902,6 +1009,301 @@ function StatsPanel({ client, locale }: { client: APIClient; locale: Locale }) {
             </p>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+/* — Nodes management (real center API; no mock states) — */
+
+function statusLabel(status: XrayNodeView["status"], locale: Locale): string {
+  const d = dicts[locale];
+  switch (status) {
+    case "active":
+      return d.statusActive;
+    case "stale":
+      return d.statusStale;
+    case "suspended":
+      return d.statusSuspended;
+    case "revoked":
+      return d.statusRevoked;
+    default:
+      return d.statusPending;
+  }
+}
+
+function NodesPanel({
+  client,
+  locale,
+  onChanged,
+}: {
+  client: APIClient;
+  locale: Locale;
+  onChanged: () => void;
+}) {
+  const d = dicts[locale];
+  const [nodes, setNodes] = useState<XrayNodeView[] | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [groups, setGroups] = useState<XrayGroupView[]>([]);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [enrollToken, setEnrollToken] = useState<string | null>(null);
+  const [enrollError, setEnrollError] = useState<string | null>(null);
+  const [rotated, setRotated] = useState<{
+    node: string;
+    credential: string;
+  } | null>(null);
+  const [confirm, setConfirm] = useState<{
+    action: "revoke" | "suspend";
+    node: XrayNodeView;
+  } | null>(null);
+  const [degraded, setDegraded] = useState<Record<string, string> | null>(null);
+  const [reconciled, setReconciled] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const reloadNodes = useCallback(() => {
+    client.fetchXrayNodes().then((r) => {
+      if (r.ok) {
+        setNodes(r.data);
+        setLoadFailed(false);
+      } else {
+        setLoadFailed(true);
+      }
+    });
+    client.fetchXrayGroups().then((r) => {
+      if (r.ok) setGroups(r.data);
+    });
+    client.fetchXrayStorage().then((r) => {
+      if (r.ok) setDegraded(r.data.domains ?? {});
+    });
+  }, [client]);
+
+  useEffect(() => {
+    reloadNodes();
+  }, [reloadNodes]);
+
+  async function runAction(fn: () => Promise<unknown>) {
+    setBusy(true);
+    setActionError(null);
+    try {
+      await fn();
+      onChanged();
+      reloadNodes();
+    } catch {
+      setActionError(d.errSubmit);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function issueToken() {
+    setEnrollError(null);
+    setBusy(true);
+    try {
+      const r = await client.xrayIssueEnrollToken();
+      if (r.ok && r.data.token) {
+        // Held in memory only: never persisted to browser storage.
+        setEnrollToken(r.data.token);
+      } else {
+        setEnrollError(d.errSubmit);
+      }
+    } catch {
+      setEnrollError(d.errSubmit);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function rotate(node: XrayNodeView) {
+    setBusy(true);
+    setActionError(null);
+    setRotated(null);
+    try {
+      const r = await client.xrayRotateNode(node.id);
+      if (r.ok && r.data.credential) {
+        // Shown exactly once, held in memory only.
+        setRotated({ node: node.name, credential: r.data.credential });
+        reloadNodes();
+      } else {
+        setActionError(d.rotateFailed);
+      }
+    } catch {
+      setActionError(d.rotateFailed);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      {degraded && Object.keys(degraded).length > 0 && (
+        <p className="xray-error" role="alert">
+          {d.storageDegraded}{" "}
+          {Object.entries(degraded)
+            .map(([k, v]) => `${k}: ${v}`)
+            .join("; ")}{" "}
+          <button
+            type="button"
+            onClick={() =>
+              client.xrayReconcileStorage().then((r) => {
+                if (r.ok) {
+                  setReconciled(true);
+                  setDegraded({});
+                } else {
+                  setActionError(d.errSubmit);
+                }
+              })
+            }
+          >
+            {d.storageReconcile}
+          </button>
+          {reconciled && <span> {d.storageReconciled}</span>}
+        </p>
+      )}
+      {enrollToken && (
+        <div className="xray-confirm" role="alert">
+          <p>{d.nodeTokenOnce}</p>
+          <code>{enrollToken}</code>
+          <p>{d.nodeTokenInstructions}</p>
+        </div>
+      )}
+      {rotated && (
+        <div className="xray-confirm" role="alert">
+          <p>{d.rotateCommitted}</p>
+          <p>{d.rotateCredentialOnce}</p>
+          <code>{rotated.credential}</code>
+        </div>
+      )}
+      {actionError && (
+        <p className="xray-error" role="alert">
+          {actionError}
+        </p>
+      )}
+      {enrollError && (
+        <p className="xray-error" role="alert">
+          {enrollError}
+        </p>
+      )}
+      <button type="button" disabled={busy} onClick={issueToken}>
+        {d.nodeEnroll}
+      </button>
+      {!nodes && !loadFailed && <StatePanel state="loading" />}
+      {loadFailed && <StatePanel state="error" />}
+      {nodes && nodes.length === 0 && <StatePanel state="empty" />}
+      {nodes && nodes.length > 0 && (
+        <table className="xray-table">
+          <thead>
+            <tr>
+              <th>{d.name}</th>
+              <th>{d.server}</th>
+              <th>{d.nodeLastSeen}</th>
+              <th>{d.nodeVersion}</th>
+              <th>{d.nodeCapabilities}</th>
+              <th>{d.nodeGroups}</th>
+              <th aria-label="actions" />
+            </tr>
+          </thead>
+          <tbody>
+            {nodes.map((n) => {
+              const groupCount = groups.filter((g) =>
+                g.members.some((m) => m.nodeId === n.id),
+              ).length;
+              const lastSeen = n.lastSeenAt
+                ? new Date(n.lastSeenAt).toLocaleString()
+                : d.nodeNeverSeen;
+              return (
+                <tr key={n.id} data-status={n.status}>
+                  <td>
+                    {n.name}
+                    <br />
+                    <small>{statusLabel(n.status, locale)}</small>
+                    {n.lastError && (
+                      <>
+                        <br />
+                        <small className="xray-error">
+                          {d.nodeError}: {n.lastError}
+                        </small>
+                      </>
+                    )}
+                  </td>
+                  <td>
+                    <small>{n.id}</small>
+                  </td>
+                  <td>{lastSeen}</td>
+                  <td>{n.version ?? "—"}</td>
+                  <td>{(n.capabilities ?? []).join(", ") || "—"}</td>
+                  <td>{String(groupCount)}</td>
+                  <td>
+                    {n.status === "active" && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          setConfirm({ action: "suspend", node: n })
+                        }
+                      >
+                        {d.nodeSuspend}
+                      </button>
+                    )}
+                    {n.status === "suspended" && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          runAction(() => client.xrayResumeNode(n.id))
+                        }
+                      >
+                        {d.nodeResume}
+                      </button>
+                    )}
+                    {(n.status === "active" || n.status === "suspended") && (
+                      <>
+                        {" "}
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => rotate(n)}
+                        >
+                          {d.nodeRotate}
+                        </button>
+                      </>
+                    )}
+                    {n.status !== "revoked" && (
+                      <>
+                        {" "}
+                        <button
+                          type="button"
+                          className="danger"
+                          disabled={busy}
+                          onClick={() =>
+                            setConfirm({ action: "revoke", node: n })
+                          }
+                        >
+                          {d.nodeRevoke}
+                        </button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+      {confirm && (
+        <ConfirmDialog
+          locale={locale}
+          subject={`${d[confirm.action === "revoke" ? "nodeRevoke" : "nodeSuspend"]}: ${confirm.node.name}`}
+          onConfirm={() => {
+            const { action, node } = confirm;
+            setConfirm(null);
+            if (action === "revoke") {
+              runAction(() => client.xrayRevokeNode(node.id));
+            } else {
+              runAction(() => client.xraySuspendNode(node.id));
+            }
+          }}
+          onCancel={() => setConfirm(null)}
+        />
       )}
     </div>
   );
