@@ -22,6 +22,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/CrazyDuckLab/DuckOS/internal/ximport"
+	"github.com/CrazyDuckLab/DuckOS/internal/xray"
 	"github.com/CrazyDuckLab/DuckOS/pkg/brand"
 	"github.com/CrazyDuckLab/DuckOS/pkg/buildinfo"
 )
@@ -1109,9 +1111,319 @@ func xrayCmd(args []string) error {
 	switch op {
 	case "servers", "users", "profiles", "subscriptions":
 		return xrayCRUD(op, rest)
+	case "reality":
+		return xrayRealityKeygen(rest)
+	case "import-3xui":
+		return xrayImportThreeUI(rest)
+	case "import-uri":
+		return xrayImportURI(rest)
+	case "parse-uri":
+		return xrayParseURI(rest)
+	case "policy":
+		return xrayPolicyCompile(rest)
+	case "backup":
+		return xrayBackupExport(rest)
+	case "restore-preview":
+		return xrayRestorePreview(rest)
+	case "stats":
+		return xrayCenterRead(rest, "center/stats")
+	case "diagnose":
+		fs := flag.NewFlagSet("xray diagnose", flag.ContinueOnError)
+		cf := addCommonFlags(fs)
+		subject := fs.String("subject", "", "Server or user id (empty = fleet overview)")
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		return authedRead(cf, "/api/v1/xray/center/diagnostics?subject="+url.QueryEscape(*subject), "xray diagnose")
+	case "events":
+		return xrayCenterRead(rest, "center/events?limit=100")
+	case "storage":
+		op := "status"
+		if len(rest) > 0 {
+			op = rest[0]
+		}
+		if op == "reconcile" {
+			fs := flag.NewFlagSet("xray storage reconcile", flag.ContinueOnError)
+			cf := addCommonFlags(fs)
+			if err := fs.Parse(rest[1:]); err != nil {
+				return err
+			}
+			return authedCall(cf, http.MethodPost, "/api/v1/xray/center/storage/reconcile", nil, "xray storage reconcile")
+		}
+		return xrayCenterRead(nil, "center/storage")
+	case "nodes":
+		return xrayNodesCmd(rest)
+	case "groups":
+		return xrayGroupsCmd(rest)
 	default:
 		return fmt.Errorf("xray: unknown operation %q", op)
 	}
+}
+
+// xrayPolicyCompile validates a policy set and prints the compiled
+// routing rules. Compilation is local; apply still goes through the
+// agent's safe-apply path.
+func xrayPolicyCompile(args []string) error {
+	fs := flag.NewFlagSet("xray policy compile", flag.ContinueOnError)
+	file := fs.String("file", "", "Path to a policy-set JSON document (array of policies)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *file == "" {
+		return errors.New("xray policy compile: --file is required")
+	}
+	data, err := os.ReadFile(*file)
+	if err != nil {
+		return fmt.Errorf("read policies: %w", err)
+	}
+	var policies []xray.Policy
+	if err := json.Unmarshal(data, &policies); err != nil {
+		return fmt.Errorf("decode policies: %w", err)
+	}
+	rules, err := xray.Compile(policies)
+	if err != nil {
+		return err
+	}
+	for _, c := range xray.DetectConflicts(policies) {
+		fmt.Fprintf(os.Stderr, "warning: %s vs %s: %s\n", c.A, c.B, c.Reason)
+	}
+	out, err := json.MarshalIndent(rules, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(out))
+	return nil
+}
+
+// xrayBackupExport builds a backup document from a catalog export
+// file. Secrets are excluded unless --include-secrets is passed
+// (the operator then owns the file's protection).
+func xrayBackupExport(args []string) error {
+	fs := flag.NewFlagSet("xray backup export", flag.ContinueOnError)
+	file := fs.String("file", "", "Path to a catalog export JSON document (with servers/users/profiles/subscriptions keys)")
+	includeSecrets := fs.Bool("include-secrets", false, "Include inline credentials (the operator owns file protection)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *file == "" {
+		return errors.New("xray backup export: --file is required")
+	}
+	data, err := os.ReadFile(*file)
+	if err != nil {
+		return fmt.Errorf("read catalog export: %w", err)
+	}
+	var src struct {
+		Servers       []xray.Server       `json:"servers"`
+		Users         []xray.User         `json:"users"`
+		Profiles      []xray.Profile      `json:"profiles"`
+		Subscriptions []xray.Subscription `json:"subscriptions"`
+	}
+	if err := json.Unmarshal(data, &src); err != nil {
+		return fmt.Errorf("decode catalog export: %w", err)
+	}
+	backup, err := xray.Export(src.Servers, src.Users, src.Profiles, src.Subscriptions,
+		xray.ExportOptions{IncludeSecrets: *includeSecrets, Producer: "duck-cli"})
+	if err != nil {
+		return err
+	}
+	out, err := json.MarshalIndent(backup, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(out))
+	return nil
+}
+
+// xrayRestorePreview validates a backup document and prints the
+// restore classification without touching the agent.
+func xrayRestorePreview(args []string) error {
+	fs := flag.NewFlagSet("xray restore-preview", flag.ContinueOnError)
+	file := fs.String("file", "", "Path to a backup JSON document")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *file == "" {
+		return errors.New("xray restore-preview: --file is required")
+	}
+	data, err := os.ReadFile(*file)
+	if err != nil {
+		return fmt.Errorf("read backup: %w", err)
+	}
+	var backup xray.Backup
+	if err := json.Unmarshal(data, &backup); err != nil {
+		return fmt.Errorf("decode backup: %w", err)
+	}
+	if err := xray.ValidateBackup(backup); err != nil {
+		return err
+	}
+	preview, err := xray.RestorePreview(backup, func() ([]xray.Server, []xray.User, []xray.Profile, []xray.Subscription) {
+		return nil, nil, nil, nil
+	})
+	if err != nil {
+		return err
+	}
+	out, err := json.MarshalIndent(map[string]any{
+		"preview": preview,
+		"note":    "preview against empty live set; run against the live catalog for conflict classification",
+	}, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(out))
+	return nil
+}
+
+// xrayRealityKeygen generates REALITY key material offline. The
+// private key is printed exactly once and must be stored into the
+// vault (purpose reality-private) immediately; it is never written
+// to a file by the CLI.
+func xrayRealityKeygen(args []string) error {
+	fs := flag.NewFlagSet("xray reality keygen", flag.ContinueOnError)
+	pairs := fs.Int("pairs", 1, "Number of keypairs to generate (1..8)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *pairs < 1 || *pairs > 8 {
+		return errors.New("xray reality keygen: --pairs must be 1..8")
+	}
+	type keypair struct {
+		PublicKey  string `json:"publicKey"`
+		PrivateKey string `json:"privateKey"`
+		ShortID    string `json:"shortId"`
+	}
+	out := make([]keypair, 0, *pairs)
+	for i := 0; i < *pairs; i++ {
+		kp, err := xray.GenerateRealityKeypair()
+		if err != nil {
+			return err
+		}
+		sid, err := xray.GenerateShortID()
+		if err != nil {
+			return err
+		}
+		out = append(out, keypair{PublicKey: kp.PublicKey, PrivateKey: kp.PrivateKey, ShortID: sid})
+	}
+	data, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(data))
+	fmt.Fprintln(os.Stderr, "store each privateKey into the vault (purpose reality-private) before use")
+	return nil
+}
+
+// xrayImportThreeUI previews a 3x-ui export as DuckOS drafts. The
+// command is strictly read-only: nothing is committed to the agent.
+func xrayImportThreeUI(args []string) error {
+	fs := flag.NewFlagSet("xray import-3xui", flag.ContinueOnError)
+	file := fs.String("file", "", "Path to a 3x-ui export JSON document")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *file == "" {
+		return errors.New("xray import-3xui: --file is required")
+	}
+	data, err := os.ReadFile(*file)
+	if err != nil {
+		return fmt.Errorf("read export: %w", err)
+	}
+	preview, err := ximport.ParseThreeUIExport(data)
+	if err != nil {
+		return err
+	}
+	out := map[string]any{
+		"servers":     preview.Servers,
+		"users":       preview.Users,
+		"warnings":    preview.Warnings,
+		"unsupported": preview.Unsupported,
+		"note":        "preview only: assign ids and vault bindings at commit time",
+	}
+	data, err = json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(data))
+	return nil
+}
+
+// xrayParseURI validates connection URIs offline.
+func xrayParseURI(args []string) error {
+	fs := flag.NewFlagSet("xray parse-uri", flag.ContinueOnError)
+	file := fs.String("file", "", "Path to a text file with one URI per line (or omit for stdin)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	var data []byte
+	var err error
+	if *file == "" {
+		data, err = io.ReadAll(os.Stdin)
+	} else {
+		data, err = os.ReadFile(*file)
+	}
+	if err != nil {
+		return err
+	}
+	accepted, skipped := 0, 0
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parsed, err := xray.ParseConnectionURI(line)
+		if err != nil {
+			skipped++
+			fmt.Fprintf(os.Stderr, "reject: %v\n", err)
+			continue
+		}
+		accepted++
+		out := map[string]any{
+			"protocol": parsed.Protocol, "host": parsed.Host, "port": parsed.Port,
+			"transport": parsed.Transport, "security": parsed.Security,
+			"unknownQuery": parsed.UnknownQuery,
+		}
+		enc, _ := json.Marshal(out)
+		fmt.Println(string(enc))
+	}
+	fmt.Fprintf(os.Stderr, "%d accepted, %d rejected\n", accepted, skipped)
+	return nil
+}
+
+// xrayImportURI fetches or reads a subscription payload and prints
+// the strictly-validated parsed connections. Fetch requires an
+// https:// URL; local files bypass the network path.
+func xrayImportURI(args []string) error {
+	fs := flag.NewFlagSet("xray import-uri", flag.ContinueOnError)
+	file := fs.String("file", "", "Path to a subscription payload file")
+	url := fs.String("url", "", "https:// subscription URL to fetch")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	var conns []xray.ParsedConnectionWithUnknown
+	var skipped []string
+	var err error
+	switch {
+	case *file != "" && *url != "":
+		return errors.New("xray import-uri: --file and --url are mutually exclusive")
+	case *file != "":
+		var data []byte
+		data, err = os.ReadFile(*file)
+		if err == nil {
+			conns, skipped, err = ximport.ParseSubscriptionPayload(string(data))
+		}
+	case *url != "":
+		conns, skipped, err = ximport.FetchSubscription(context.Background(), *url, ximport.DefaultFetchLimits())
+	default:
+		return errors.New("xray import-uri: --file or --url is required")
+	}
+	if err != nil {
+		return err
+	}
+	data, merr := json.MarshalIndent(map[string]any{"connections": conns, "skipped": skipped}, "", "  ")
+	if merr != nil {
+		return merr
+	}
+	fmt.Println(string(data))
+	return nil
 }
 
 func xrayCRUD(kind string, args []string) error {
@@ -1121,6 +1433,31 @@ func xrayCRUD(kind string, args []string) error {
 	op, rest := args[0], args[1:]
 	path := "/api/v1/xray/" + kind
 	switch op {
+	case "list":
+		fs := flag.NewFlagSet("xray "+kind+" list", flag.ContinueOnError)
+		cf := addCommonFlags(fs)
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		if kind == "users" {
+			server := fs.Arg(0)
+			if server == "" {
+				return errors.New("xray users list: server id argument is required")
+			}
+			return authedRead(cf, path+"?server="+url.QueryEscape(server), "xray users list")
+		}
+		return authedRead(cf, path, "xray "+kind+" list")
+	case "get":
+		fs := flag.NewFlagSet("xray "+kind+" get", flag.ContinueOnError)
+		cf := addCommonFlags(fs)
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		id := fs.Arg(0)
+		if id == "" {
+			return fmt.Errorf("xray %s get: object id argument is required", kind)
+		}
+		return authedRead(cf, path+"/"+id, "xray "+kind+" get")
 	case "create":
 		fs := flag.NewFlagSet("xray "+kind+" create", flag.ContinueOnError)
 		cf := addCommonFlags(fs)
@@ -1757,3 +2094,210 @@ func urlQueryEscape(s string) string {
 
 var _ = strconv.Itoa
 var _ = brand.Mark
+
+// xrayCenterRead is a thin authenticated GET against the center
+// surface.
+func xrayCenterRead(args []string, path string) error {
+	fs := flag.NewFlagSet("xray center read", flag.ContinueOnError)
+	cf := addCommonFlags(fs)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	return authedRead(cf, "/api/v1/xray/"+path, "xray center read")
+}
+
+func xrayNodesCmd(args []string) error {
+	if len(args) == 0 {
+		return errors.New("xray nodes: missing operation (list|enroll-token|local|revoke|suspend|resume|rotate)")
+	}
+	op, rest := args[0], args[1:]
+	switch op {
+	case "list":
+		return xrayCenterRead(rest, "center/nodes")
+	case "redeem":
+		fs := flag.NewFlagSet("xray nodes redeem", flag.ContinueOnError)
+		cf := addCommonFlags(fs)
+		token := fs.String("token", "", "Enrollment token")
+		name := fs.String("name", "", "Node name")
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		if *token == "" || *name == "" {
+			return errors.New("xray nodes redeem: --token and --name are required")
+		}
+		body, _ := json.Marshal(map[string]any{"token": *token, "name": *name})
+		return authedCall(cf, http.MethodPost, "/api/v1/xray/center/nodes/redeem", body, "xray nodes redeem")
+	case "enroll-token":
+		fs := flag.NewFlagSet("xray nodes enroll-token", flag.ContinueOnError)
+		cf := addCommonFlags(fs)
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		return authedCall(cf, http.MethodPost, "/api/v1/xray/center/nodes/enroll-token", nil, "xray nodes enroll-token")
+	case "local":
+		fs := flag.NewFlagSet("xray nodes local", flag.ContinueOnError)
+		cf := addCommonFlags(fs)
+		name := fs.String("name", "", "Local node name")
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		if *name == "" {
+			return errors.New("xray nodes local: --name is required")
+		}
+		body, _ := json.Marshal(map[string]string{"name": *name})
+		return authedCall(cf, http.MethodPost, "/api/v1/xray/center/nodes/local", body, "xray nodes local")
+	case "revoke", "suspend", "resume":
+		fs := flag.NewFlagSet("xray nodes "+op, flag.ContinueOnError)
+		cf := addCommonFlags(fs)
+		id := fs.String("id", "", "Node id")
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		if *id == "" {
+			return errors.New("xray nodes " + op + ": --id is required")
+		}
+		switch op {
+		case "revoke":
+			return authedCall(cf, http.MethodDelete, "/api/v1/xray/center/nodes/"+*id, nil, "xray nodes revoke")
+		default:
+			body, _ := json.Marshal(map[string]string{})
+			return authedCall(cf, http.MethodPost, "/api/v1/xray/center/nodes/"+*id+"/"+op, body, "xray nodes "+op)
+		}
+	case "pull-rotation":
+		// NODE SIDE: pull the staged credential (auth: current
+		// credential), then confirm possession. Old stays valid
+		// until confirm.
+		fs := flag.NewFlagSet("xray nodes pull-rotation", flag.ContinueOnError)
+		cf := addCommonFlags(fs)
+		id := fs.String("id", "", "Node id")
+		cred := fs.String("credential", "", "Current node credential")
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		if *id == "" || *cred == "" {
+			return errors.New("xray nodes pull-rotation: --id and --credential are required")
+		}
+		newCred, err := nodeAuthCall(cf, "/api/v1/xray/center/node-auth/"+*id+"/pull", *cred)
+		if err != nil {
+			return err
+		}
+		if newCred == "" {
+			return errors.New("xray nodes pull-rotation: no credential returned")
+		}
+		fmt.Println("staged credential received; confirming possession...")
+		if _, err := nodeAuthCall(cf, "/api/v1/xray/center/node-auth/"+*id+"/confirm", newCred); err != nil {
+			// The controller committed nothing on a failed confirm;
+			// the new credential is printed above so the operator
+			// can retry the confirm without re-staging.
+			return err
+		}
+		fmt.Println("rotation confirmed: the new credential above is now the node credential")
+		return nil
+	case "rotate":
+		// Full rotation delivery: generate (coordinator), deliver
+		// over the old channel, confirm. The stored credential on
+		// the coordinator rotates only after the node ack.
+		fs := flag.NewFlagSet("xray nodes rotate", flag.ContinueOnError)
+		cf := addCommonFlags(fs)
+		id := fs.String("id", "", "Node id")
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		body, _ := json.Marshal(map[string]string{})
+		return authedCall(cf, http.MethodPost, "/api/v1/xray/center/nodes/"+*id+"/rotate", body, "xray nodes rotate")
+	default:
+		return fmt.Errorf("xray nodes: unknown operation %q", op)
+	}
+}
+
+func xrayGroupsCmd(args []string) error {
+	if len(args) == 0 {
+		return errors.New("xray groups: missing operation (list|create|delete|issue-token|rotate-token|revoke-tokens|preview)")
+	}
+	op, rest := args[0], args[1:]
+	switch op {
+	case "list":
+		return xrayCenterRead(rest, "center/groups")
+	case "create":
+		fs := flag.NewFlagSet("xray groups create", flag.ContinueOnError)
+		cf := addCommonFlags(fs)
+		file := fs.String("file", "", "Path to a group JSON document")
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		if *file == "" {
+			return errors.New("xray groups create: --file is required")
+		}
+		data, err := os.ReadFile(*file)
+		if err != nil {
+			return err
+		}
+		return authedCall(cf, http.MethodPost, "/api/v1/xray/center/groups", data, "xray groups create")
+	case "delete":
+		fs := flag.NewFlagSet("xray groups delete", flag.ContinueOnError)
+		cf := addCommonFlags(fs)
+		id := fs.String("id", "", "Group id")
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		return authedCall(cf, http.MethodDelete, "/api/v1/xray/center/groups/"+*id, nil, "xray groups delete")
+	case "issue-token", "rotate-token":
+		fs := flag.NewFlagSet("xray groups "+op, flag.ContinueOnError)
+		cf := addCommonFlags(fs)
+		id := fs.String("id", "", "Group/subscription id")
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		action := "tokens"
+		if op == "rotate-token" {
+			action = "tokens/rotate"
+		}
+		body, _ := json.Marshal(map[string]any{"subId": *id})
+		return authedCall(cf, http.MethodPost, "/api/v1/xray/center/"+action, body, "xray groups "+op)
+	case "revoke-tokens":
+		fs := flag.NewFlagSet("xray groups revoke-tokens", flag.ContinueOnError)
+		cf := addCommonFlags(fs)
+		id := fs.String("id", "", "Group/subscription id")
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		body, _ := json.Marshal(map[string]any{"subId": *id})
+		return authedCall(cf, http.MethodPost, "/api/v1/xray/center/tokens/revoke", body, "xray groups revoke-tokens")
+	case "preview":
+		fs := flag.NewFlagSet("xray groups preview", flag.ContinueOnError)
+		cf := addCommonFlags(fs)
+		id := fs.String("id", "", "Group id")
+		format := fs.String("format", "clash", "Output format (base64|plain|clash|json)")
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		return authedRead(cf, "/api/v1/xray/center/preview/group/"+url.QueryEscape(*id)+"?format="+url.QueryEscape(*format), "xray groups preview")
+	default:
+		return fmt.Errorf("xray groups: unknown operation %q", op)
+	}
+}
+
+// nodeAuthCall performs a node-authenticated center call: the node
+// credential travels in the X-Node-Credential header. It returns the
+// response credential (staged rotation pulls) when present.
+func nodeAuthCall(cf *commonFlags, path, credential string) (string, error) {
+	st, err := newState(cf)
+	if err != nil {
+		return "", err
+	}
+	hdr := http.Header{}
+	hdr.Set("Content-Type", "application/json")
+	hdr.Set("X-Node-Credential", credential)
+	var out map[string]any
+	code, err := st.call(context.Background(), apiCall{method: http.MethodPost, path: path, headers: hdr}, &out)
+	if err != nil {
+		return "", err
+	}
+	if code/100 != 2 {
+		return "", fmt.Errorf("node auth returned %d: %s", code, errorMessage(out))
+	}
+	stateRaw, _ := out["state"].(string)
+	newCredRaw, _ := out["credential"].(string)
+	_ = stateRaw
+	return newCredRaw, nil
+}

@@ -28,6 +28,8 @@ import type {
   UplinkStatus,
   WireguardPeerView,
   WireguardServerView,
+  XrayGroupView,
+  XrayNodeView,
   XrayServerView,
   XrayUserView,
 } from "./types";
@@ -56,7 +58,7 @@ export type FetchResult<T> =
 
 export interface FetchOptions {
   signal?: AbortSignal;
-  method?: "GET" | "POST" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "DELETE";
   body?: unknown;
   fallbackToMissing?: boolean;
   /** Pass revision preconditions for conditional mutation. */
@@ -339,9 +341,10 @@ export class APIClient {
       options,
     );
   }
-  fetchXrayUsers(options: FetchOptions = {}) {
+  fetchXrayUsers(serverId?: string, options: FetchOptions = {}) {
+    const query = serverId ? `?server=${encodeURIComponent(serverId)}` : "";
     return this.fetch<XrayUserView[]>(
-      `${APIClient.ENDPOINTS.xray}/users`,
+      `${APIClient.ENDPOINTS.xray}/users${query}`,
       null,
       options,
     );
@@ -606,6 +609,192 @@ export class APIClient {
   xrayDeleteUser(userId: string, options: FetchOptions = {}) {
     return this.fetch<unknown>(
       `${APIClient.ENDPOINTS.xray}/users/${encodeURIComponent(userId)}`,
+      null,
+      { ...options, method: "DELETE" },
+    );
+  }
+  /* Xray Center: protocol/transport/security capability matrix
+     (same matrix the Go compatibility engine enforces; mirrored
+     client-side so invalid combinations are refused before POST). */
+  static readonly XRAY_PROTOCOLS = [
+    "vless",
+    "vmess",
+    "trojan",
+    "shadowsocks",
+    "socks",
+    "http",
+  ] as const;
+  static readonly XRAY_TRANSPORTS = [
+    "tcp",
+    "ws",
+    "grpc",
+    "xhttp",
+    "httpupgrade",
+    "kcp",
+  ] as const;
+  static readonly XRAY_SECURITY = ["none", "tls", "reality"] as const;
+  static xrayRealityAllowed(protocol: string, transport: string): boolean {
+    return (
+      protocol === "vless" && (transport === "tcp" || transport === "xhttp")
+    );
+  }
+  static xrayFlowAllowed(
+    protocol: string,
+    transport: string,
+    security: string,
+  ): boolean {
+    return (
+      protocol === "vless" && transport === "tcp" && security === "reality"
+    );
+  }
+  static readonly XRAY_SS_METHODS = [
+    "aes-128-gcm",
+    "aes-256-gcm",
+    "chacha20-poly1305",
+    "2022-blake3-aes-128-gcm",
+    "2022-blake3-aes-256-gcm",
+    "2022-blake3-chacha20-poly1305",
+  ] as const;
+  xrayUpdateServer(
+    serverId: string,
+    server: unknown,
+    options: FetchOptions = {},
+  ) {
+    return this.fetch<unknown>(
+      `${APIClient.ENDPOINTS.xray}/servers/${encodeURIComponent(serverId)}`,
+      null,
+      { ...options, method: "PUT", body: server },
+    );
+  }
+  xrayUpdateUser(userId: string, user: unknown, options: FetchOptions = {}) {
+    return this.fetch<unknown>(
+      `${APIClient.ENDPOINTS.xray}/users/${encodeURIComponent(userId)}`,
+      null,
+      { ...options, method: "PUT", body: user },
+    );
+  }
+  xrayDeleteProfile(profileId: string, options: FetchOptions = {}) {
+    return this.fetch<unknown>(
+      `${APIClient.ENDPOINTS.xray}/profiles/${encodeURIComponent(profileId)}`,
+      null,
+      { ...options, method: "DELETE" },
+    );
+  }
+  xrayCreateSubscription(sub: unknown, options: FetchOptions = {}) {
+    return this.fetch<unknown>(
+      `${APIClient.ENDPOINTS.xray}/subscriptions`,
+      null,
+      {
+        ...options,
+        method: "POST",
+        body: sub,
+      },
+    );
+  }
+  /* — Nodes management (real center surface) — */
+  fetchXrayNodes(options: FetchOptions = {}) {
+    return this.fetch<XrayNodeView[]>(
+      `${APIClient.ENDPOINTS.xray}/center/nodes`,
+      null,
+      options,
+    );
+  }
+  fetchXrayGroups(options: FetchOptions = {}) {
+    return this.fetch<XrayGroupView[]>(
+      `${APIClient.ENDPOINTS.xray}/center/groups`,
+      null,
+      options,
+    );
+  }
+  fetchXrayStorage(options: FetchOptions = {}) {
+    return this.fetch<{ domains: Record<string, string> }>(
+      `${APIClient.ENDPOINTS.xray}/center/storage`,
+      null,
+      options,
+    );
+  }
+  xrayIssueEnrollToken(options: FetchOptions = {}) {
+    return this.fetch<{ token: string }>(
+      `${APIClient.ENDPOINTS.xray}/center/nodes/enroll-token`,
+      null,
+      { ...options, method: "POST" },
+    );
+  }
+  xrayStageRotation(nodeId: string, options: FetchOptions = {}) {
+    return this.fetch<{ credential: string; state: string }>(
+      `${APIClient.ENDPOINTS.xray}/center/nodes/${encodeURIComponent(nodeId)}/rotate`,
+      null,
+      { ...options, method: "POST" },
+    );
+  }
+  fetchXrayRotationState(nodeId: string, options: FetchOptions = {}) {
+    return this.fetch<{ state: string }>(
+      `${APIClient.ENDPOINTS.xray}/center/nodes/${encodeURIComponent(nodeId)}/rotation`,
+      null,
+      options,
+    );
+  }
+  xrayCancelRotation(nodeId: string, options: FetchOptions = {}) {
+    return this.fetch<{ state: string }>(
+      `${APIClient.ENDPOINTS.xray}/center/nodes/${encodeURIComponent(nodeId)}/rotate/cancel`,
+      null,
+      { ...options, method: "POST" },
+    );
+  }
+  xraySuspendNode(nodeId: string, options: FetchOptions = {}) {
+    return this.fetch<unknown>(
+      `${APIClient.ENDPOINTS.xray}/center/nodes/${encodeURIComponent(nodeId)}/suspend`,
+      null,
+      { ...options, method: "POST" },
+    );
+  }
+  xrayResumeNode(nodeId: string, options: FetchOptions = {}) {
+    return this.fetch<unknown>(
+      `${APIClient.ENDPOINTS.xray}/center/nodes/${encodeURIComponent(nodeId)}/resume`,
+      null,
+      { ...options, method: "POST" },
+    );
+  }
+  xrayRevokeNode(nodeId: string, options: FetchOptions = {}) {
+    return this.fetch<unknown>(
+      `${APIClient.ENDPOINTS.xray}/center/nodes/${encodeURIComponent(nodeId)}`,
+      null,
+      { ...options, method: "DELETE" },
+    );
+  }
+  xrayReconcileStorage(options: FetchOptions = {}) {
+    return this.fetch<{ result: string }>(
+      `${APIClient.ENDPOINTS.xray}/center/storage/reconcile`,
+      null,
+      { ...options, method: "POST" },
+    );
+  }
+  fetchXrayCenterStats(options: FetchOptions = {}) {
+    return this.fetch<{
+      stale: boolean;
+      collectedAt?: string;
+      ledger?: Record<string, number>;
+      note?: string;
+    }>(`${APIClient.ENDPOINTS.xray}/center/stats`, null, options);
+  }
+  fetchXrayDiagnostics(subject: string, options: FetchOptions = {}) {
+    return this.fetch<
+      Array<{
+        code: string;
+        severity: string;
+        summary: string;
+        remediation: string;
+        evidence?: string[];
+      }>
+    >(
+      `${APIClient.ENDPOINTS.xray}/center/diagnostics?subject=${encodeURIComponent(subject)}`,
+      null,
+      options,
+    );
+  }
+  xrayDeleteSubscription(subId: string, options: FetchOptions = {}) {
+    return this.fetch<unknown>(
+      `${APIClient.ENDPOINTS.xray}/subscriptions/${encodeURIComponent(subId)}`,
       null,
       { ...options, method: "DELETE" },
     );

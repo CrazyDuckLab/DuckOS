@@ -1,0 +1,66 @@
+/* Xray Center page — reuses shell tokens; minimal own surface. */
+.xray-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.5rem 0 1rem;
+}
+.xray-table th,
+.xray-table td {
+  text-align: left;
+  padding: 0.35rem 0.6rem;
+  border-bottom: 1px solid var(--border, #ddd);
+}
+.xray-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: end;
+  margin: 0.75rem 0 1.5rem;
+}
+.xray-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+.xray-form input,
+.xray-form select {
+  min-width: 9rem;
+}
+.xray-help {
+  margin: 0.25rem 0 0.5rem;
+  font-size: 0.85rem;
+}
+.xray-help summary {
+  cursor: pointer;
+}
+.xray-help p {
+  margin: 0.35rem 0 0;
+  opacity: 0.85;
+}
+.xray-error {
+  color: var(--danger, #b00020);
+}
+.xray-empty {
+  opacity: 0.7;
+}
+.xray-confirm {
+  border: 1px solid var(--border, #ccc);
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+}
+button.danger {
+  color: var(--danger, #b00020);
+}
+@media (max-width: 640px) {
+  .xray-form input,
+  .xray-form select {
+    min-width: 100%;
+  }
+  .xray-table th,
+  .xray-table td {
+    padding: 0.3rem 0.3rem;
+    font-size: 0.85rem;
+  }
+}

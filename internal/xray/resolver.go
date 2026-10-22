@@ -260,28 +260,34 @@ func substituteCredentialsOnInbound(in *Inbound, credByKeyID map[string]KeyRef, 
 		if !ok {
 			continue
 		}
-		v, ok := entry["id"].(string)
-		if !ok {
-			continue
+		// Placeholder-bearing keys: "id" (VLESS/VMess UUID) plus
+		// "password" (Trojan, Shadowsocks client PSK) and "pass"
+		// (SOCKS/HTTP accounts). All carry the same credential
+		// placeholder form; the resolved bytes are the UTF-8 secret.
+		for _, key := range []string{"id", "password", "pass"} {
+			v, ok := entry[key].(string)
+			if !ok {
+				continue
+			}
+			credKeyID, isPlaceholder := parseCredentialPlaceholder(v)
+			if !isPlaceholder {
+				continue
+			}
+			cred, ok := credByKeyID[credKeyID]
+			if !ok {
+				return fmt.Errorf("xray: substitute credentials: no user with credential KeyID %s", credKeyID)
+			}
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			secret, err := resolver.Resolve(ctx, cred)
+			if err != nil {
+				return fmt.Errorf("xray: resolve credential: %w", err)
+			}
+			entry[key] = strings.TrimSpace(string(secret))
+			changed = true
 		}
-		credKeyID, isPlaceholder := parseCredentialPlaceholder(v)
-		if !isPlaceholder {
-			continue
-		}
-		cred, ok := credByKeyID[credKeyID]
-		if !ok {
-			return fmt.Errorf("xray: substitute credentials: no user with credential KeyID %s", credKeyID)
-		}
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		uuid, err := resolver.Resolve(ctx, cred)
-		if err != nil {
-			return fmt.Errorf("xray: resolve credential: %w", err)
-		}
-		entry["id"] = strings.TrimSpace(string(uuid))
 		clients[i] = entry
-		changed = true
 	}
 	if !changed {
 		return nil

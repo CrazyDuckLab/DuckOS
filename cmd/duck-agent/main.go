@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"net/http"
 	"net/netip"
 	"os"
 	"os/exec"
@@ -20,6 +22,7 @@ import (
 
 	"github.com/CrazyDuckLab/DuckOS/internal/agent"
 	"github.com/CrazyDuckLab/DuckOS/internal/backup"
+	"github.com/CrazyDuckLab/DuckOS/internal/center"
 	"github.com/CrazyDuckLab/DuckOS/internal/chaos"
 	"github.com/CrazyDuckLab/DuckOS/internal/firstrun"
 	"github.com/CrazyDuckLab/DuckOS/internal/frr"
@@ -28,10 +31,13 @@ import (
 	"github.com/CrazyDuckLab/DuckOS/internal/model"
 	"github.com/CrazyDuckLab/DuckOS/internal/multiwan"
 	"github.com/CrazyDuckLab/DuckOS/internal/network"
+	"github.com/CrazyDuckLab/DuckOS/internal/nodestate"
 	"github.com/CrazyDuckLab/DuckOS/internal/observe"
+	"github.com/CrazyDuckLab/DuckOS/internal/persist"
 	"github.com/CrazyDuckLab/DuckOS/internal/qos"
 	"github.com/CrazyDuckLab/DuckOS/internal/speedlab"
 	"github.com/CrazyDuckLab/DuckOS/internal/state"
+	"github.com/CrazyDuckLab/DuckOS/internal/subscription"
 	"github.com/CrazyDuckLab/DuckOS/internal/upgrade"
 	"github.com/CrazyDuckLab/DuckOS/internal/upnp"
 	"github.com/CrazyDuckLab/DuckOS/internal/upnp/frontend"
@@ -39,6 +45,7 @@ import (
 	"github.com/CrazyDuckLab/DuckOS/internal/vault"
 	"github.com/CrazyDuckLab/DuckOS/internal/wake"
 	"github.com/CrazyDuckLab/DuckOS/internal/wireguard"
+	"github.com/CrazyDuckLab/DuckOS/internal/xnode"
 	"github.com/CrazyDuckLab/DuckOS/internal/xray"
 	"github.com/CrazyDuckLab/DuckOS/internal/ztp"
 	"github.com/CrazyDuckLab/DuckOS/pkg/brand"
@@ -58,6 +65,9 @@ func main() {
 	vaultDir := flag.String("vault-dir", agent.StandardVaultPath+"/records", "Protected Agent secret records")
 	vaultMasterFile := flag.String("vault-master-file", agent.StandardVaultMasterPath, "Private vault master key file")
 	xrayCatalogDir := flag.String("xray-catalog-dir", "/var/lib/duckos-agent/xray", "Xray durable catalog directory (Agent owns writes)")
+	nodeControlListen := flag.String("node-control-listen", "", "NODE ROLE: HTTPS control listener address (disabled unless set)")
+	nodeControlCert := flag.String("node-control-cert", "", "NODE ROLE: TLS certificate PEM (required when the listener is set)")
+	nodeControlKey := flag.String("node-control-key", "", "NODE ROLE: TLS key PEM (required when the listener is set)")
 	speedlabCatalogDir := flag.String("speedlab-catalog-dir", "/var/lib/duckos-agent/speedlab", "Speed Lab durable catalog directory (Agent owns writes)")
 	speedlabAllowHosts := flag.String("speedlab-allow-hosts", "", "Comma-separated allow-list of hosts the Speed Lab collector may dial; empty refuses every probe (safe default).")
 	frrPathspace := flag.String("frr-pathspace", "duckos", "FRR pathspace used by the DuckOS managed FRR runtime")
@@ -178,7 +188,7 @@ func main() {
 	} else {
 		log.Printf("wireguard service is not enabled: %v", err)
 	}
-	if xrayHost, err := enableXrayService(*xrayCatalogDir, networkAccess, vaultStore); err == nil {
+	if xrayHost, err := enableXrayService(*xrayCatalogDir, networkAccess, vaultStore, *nodeControlListen, *nodeControlCert, *nodeControlKey); err == nil {
 		handler.EnableXray(xrayHost)
 		log.Print("xray service is enabled; server/user/subscription CRUD will be admitted through the loopback")
 	} else {
@@ -944,7 +954,220 @@ type identityAccess interface {
 // The host now exposes the runtime + the durable
 // catalog so a real Xray daemon can be brought up
 // through public API -> IPC -> kernel.
-func enableXrayService(catalogDir string, access identityAccess, secrets *agent.VaultLifecycle) (*agent.XrayHost, error) {
+// enableXrayCenter builds the Xray Center loopback surface with
+// durable stores under <catalogDir>/center. Failure returns an
+// error and the xray API runs WITHOUT the center (the loopback
+// reports center_unavailable) — degradation is honest, never fatal.
+func enableXrayCenter(catalogDir string, access identityAccess, cat *xray.FileCatalog, secrets *agent.VaultLifecycle) (http.Handler, error) {
+	storeDir := filepath.Join(catalogDir, "center")
+	groupFile, err := persist.Open[[]subscription.Group](storeDir, "groups.json")
+	if err != nil {
+		return nil, err
+	}
+	tokenFile, err := persist.Open[[]subscription.TokenRecord](storeDir, "tokens.json")
+	if err != nil {
+		return nil, err
+	}
+	policyFile, err := persist.Open[[]xray.Policy](storeDir, "policies.json")
+	if err != nil {
+		return nil, err
+	}
+	eventFile, err := persist.Open[[]xray.Event](storeDir, "events.json")
+	if err != nil {
+		return nil, err
+	}
+
+	// UQ-02 + AUD-04: ONE atomic durable snapshot for the whole
+	// node-security domain behind a durable migration boundary. The
+	// legacy two-file layout is migrated exactly once (validated,
+	// transactionally committed, boundary marker committed); a lost
+	// or corrupt post-migration snapshot fails CLOSED — legacy
+	// records are quarantined evidence and are never reactivated.
+	stateFile, err := nodestate.EnsureMigrated(storeDir)
+	if err != nil {
+		return nil, fmt.Errorf("xray center: %w", err)
+	}
+	nodeMgr := xnode.NewManager(xnode.NewNodeHTTPAdapter())
+	// Security durability: the hook commits the whole registry
+	// state atomically and reports the commit phase; the manager
+	// fails the operation on NOT_COMMITTED and enters the degraded
+	// fail-closed mode on COMMIT_UNCERTAIN.
+	nodeMgr.SetPersist(func(st xnode.DurableState) (xnode.CommitResult, error) {
+		out, err := stateFile.Update(func(cur *xnode.DurableState) { *cur = st })
+		return xnode.CommitResult{Uncertain: out == persist.CommitUncertain}, err
+	})
+	nodeMgr.LoadState(stateFile.Get())
+
+	groups := subscription.NewGroupStore()
+	groups.SetPersist(func(gs []subscription.Group) (persist.CommitOutcome, error) {
+		return groupFile.Update(func(cur *[]subscription.Group) { *cur = gs })
+	})
+	groups.LoadGroups(groupFile.Get())
+
+	tokens := subscription.NewTokenStore()
+	tokens.SetPersist(func(recs []subscription.TokenRecord) (persist.CommitOutcome, error) {
+		return tokenFile.Update(func(cur *[]subscription.TokenRecord) { *cur = recs })
+	})
+	tokens.LoadRecords(tokenFile.Get())
+
+	events := xray.NewEventLog()
+	events.SetPersist(func(evts []xray.Event) error {
+		// Advisory diagnostics: best-effort persistence, failures
+		// are logged but never block the event flow.
+		_, err := eventFile.Update(func(cur *[]xray.Event) { *cur = evts })
+		return err
+	})
+	for _, e := range eventFile.Get() {
+		_ = events.Record(e)
+	}
+
+	var resolver xray.Resolver
+	if secrets != nil {
+		resolver = secrets.XrayResolver()
+	}
+	render := center.BuildRenderer(center.RendererOptions{
+		Catalog:    cat,
+		Groups:     groups,
+		Resolver:   resolver,
+		CtxTimeout: 5 * time.Second,
+	})
+	accountant := xray.NewAccountant(4096, nil)
+	quotaEngine := xray.NewEngine(xray.NewUsageHistory())
+	diag := &xray.Diagnostician{
+		Servers: func() []xray.Server { s, _ := cat.ListServers(context.Background()); return s },
+		Users: func() []xray.User {
+			servers, _ := cat.ListServers(context.Background())
+			var all []xray.User
+			for _, srv := range servers {
+				us, _ := cat.ListUsers(context.Background(), srv.ID)
+				all = append(all, us...)
+			}
+			return all
+		},
+		Events:     events,
+		StaleStats: accountant.LastCollection,
+	}
+	enforcer := &xray.Enforcer{
+		Accountant: accountant,
+		Engine:     quotaEngine,
+		Events:     events,
+		Collect:    xray.NewSubprocessStatsCollector(xray.StatsCollectorOptions{}),
+	}
+	// Bounded enforcement round each minute; a failed round marks
+	// stats stale and is logged, never fabricated.
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_, _ = enforcer.Round(ctx)
+		for range ticker.C {
+			rctx, rcancel := context.WithTimeout(context.Background(), 30*time.Second)
+			_, _ = enforcer.Round(rctx)
+			rcancel()
+		}
+	}()
+
+	return &center.Handler{
+		Access:   access,
+		Prefix:   "center/",
+		Nodes:    nodeMgr,
+		Groups:   groups,
+		Tokens:   tokens,
+		Policies: policyFile,
+		// AUD-01: the storage status and reconciliation surface is
+		// wired into the INSTALLED agent, so degraded storage is
+		// observable and recoverable through the authenticated API.
+		StorageStatus: func() map[string]string {
+			out := map[string]string{}
+			if d := nodeMgr.Degraded(); d != "" {
+				out["nodes"] = d
+			}
+			if d := tokens.Degraded(); d != "" {
+				out["delivery-tokens"] = d
+			}
+			if d := groups.Degraded(); d != "" {
+				out["groups"] = d
+			}
+			return out
+		},
+		ReconcileStorage: func() (string, error) {
+			// R-03: reconciliation reads AUTHORITATIVE storage —
+			// each durable file is re-read from DISK (not from the
+			// in-memory mirror) before the merge; an unreadable or
+			// corrupt snapshot keeps the domain degraded instead of
+			// reconciling against unknown state.
+			if err := stateFile.Reload(); err != nil {
+				return "", fmt.Errorf("xnode: authoritative snapshot unreadable; staying degraded: %w", err)
+			}
+			r1, err := nodeMgr.ReconcileStorage(stateFile.Get())
+			if err != nil {
+				return "", err
+			}
+			tokenFile, terr := persist.Open[[]subscription.TokenRecord](storeDir, "tokens.json")
+			if terr != nil {
+				return "", terr
+			}
+			if rerr := tokenFile.Reload(); rerr != nil {
+				return "", fmt.Errorf("delivery tokens: authoritative snapshot unreadable; staying degraded: %w", rerr)
+			}
+			groupFile2, gerr := persist.Open[[]subscription.Group](storeDir, "groups.json")
+			if gerr != nil {
+				return "", gerr
+			}
+			if rerr := groupFile2.Reload(); rerr != nil {
+				return "", fmt.Errorf("groups: authoritative snapshot unreadable; staying degraded: %w", rerr)
+			}
+			r2 := tokens.Reconcile(tokenFile.Get())
+			r3 := groups.Reconcile(groupFile2.Get())
+			return r1 + "; " + r2 + "; " + r3, nil
+		},
+		// AUD-07: authoritative delivery-token validation for the
+		// public delivery daemon (restricted principal).
+		DeliveryValidate: func(token string) (string, bool) {
+			if rec, ok := tokens.Lookup(token); ok {
+				return rec.SubID, true
+			}
+			return "", false
+		},
+		Stats: func() (map[string]uint64, time.Time, bool) {
+			at, stale := accountant.LastCollection()
+			return accountant.Ledger(), at, stale
+		},
+		Render:   render,
+		Events:   events,
+		Diagnose: diag.Diagnose,
+		Export: func(includeSecrets bool) (xray.Backup, error) {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			servers, err := cat.ListServers(ctx)
+			if err != nil {
+				return xray.Backup{}, err
+			}
+			var users []xray.User
+			for _, srv := range servers {
+				us, err := cat.ListUsers(ctx, srv.ID)
+				if err != nil {
+					return xray.Backup{}, err
+				}
+				users = append(users, us...)
+			}
+			profiles, err := cat.ListProfiles(ctx)
+			if err != nil {
+				return xray.Backup{}, err
+			}
+			subs, err := cat.ListSubscriptions(ctx)
+			if err != nil {
+				return xray.Backup{}, err
+			}
+			return xray.Export(servers, users, profiles, subs,
+				xray.ExportOptions{IncludeSecrets: includeSecrets, Producer: "duck-agent"})
+		},
+	}, nil
+}
+
+func enableXrayService(catalogDir string, access identityAccess, secrets *agent.VaultLifecycle,
+	nodeControlListen, nodeControlCert, nodeControlKey string) (*agent.XrayHost, error) {
 	if catalogDir == "" {
 		return nil, errors.New("xray: durable catalog directory is required")
 	}
@@ -972,6 +1195,24 @@ func enableXrayService(catalogDir string, access identityAccess, secrets *agent.
 		Catalog: cat,
 		Apply:   rt.ApplyWith,
 		Prefix:  "/xray/v1/",
+	}
+	// Xray Center: durable node registry, subscription groups,
+	// delivery tokens, routing policies, quota enforcement and
+	// diagnostics under /xray/v1/center/*.
+	if centerHandler, err := enableXrayCenter(catalogDir, access, cat, secrets); err == nil {
+		api.Center = centerHandler
+	} else {
+		log.Printf("xray center disabled: %v", err)
+	}
+	// NODE ROLE control listener: DISABLED by default. Enabled only
+	// when an explicit listen address AND a provisioned TLS
+	// certificate/key are configured — a public control listener is
+	// never exposed implicitly, and a listener without credentials
+	// refuses to start.
+	if nodeControlListen != "" {
+		if err := enableNodeControlListener(nodeControlListen, nodeControlCert, nodeControlKey, catalogDir, rt); err != nil {
+			log.Printf("node control listener disabled: %v", err)
+		}
 	}
 	host := agent.NewXrayHost(api, access, rt)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -1234,4 +1475,56 @@ func enableBackupRestoreService(journalDir, backupRoot, liveRoot string) *agent.
 		return nil
 	}
 	return host
+}
+
+// enableNodeControlListener starts the NODE-ROLE HTTPS control
+// listener: the persistent node identity (node-identity.json) is
+// authoritative, pushed Xray JSON flows through the SAME runtime
+// safe-apply path as local management, and TLS is mandatory with an
+// explicitly provisioned certificate. Fail-fast on a listener
+// without credentials: a silently insecure control channel is worse
+// than no node role.
+func enableNodeControlListener(listen, certPath, keyPath, catalogDir string, rt *xray.Runtime) error {
+	if certPath == "" || keyPath == "" {
+		return errors.New("node-control-cert and node-control-key are required when node-control-listen is set")
+	}
+	if _, err := tls.LoadX509KeyPair(certPath, keyPath); err != nil {
+		return fmt.Errorf("provisioned TLS pair unusable: %w", err)
+	}
+	identity, err := xnode.OpenNodeIdentity(filepath.Join(catalogDir, "center", "node-self"))
+	if err != nil {
+		return err
+	}
+	srv := xnode.NewNodeServer(nil, func(config []byte) error {
+		// The coordinator pushes a FULLY RESOLVED configuration; it
+		// flows through the same validate → stage → swap → rollback
+		// runtime path as local management. Secret materialization
+		// is the node's own vault concern and stays local.
+		var cfg xray.Config
+		if err := json.Unmarshal(config, &cfg); err != nil {
+			return fmt.Errorf("pushed config is not valid Xray JSON: %w", err)
+		}
+		return rt.Apply(context.Background(), cfg)
+	}, func() xnode.NodeInfo {
+		return xnode.NodeInfo{
+			Name:         "self",
+			Version:      "26.3.27",
+			Capabilities: []string{"vless", "vmess", "trojan", "shadowsocks", "socks", "http", "reality", "tls"},
+		}
+	})
+	srv.Identity = identity
+	httpSrv := &http.Server{
+		Addr:         listen,
+		Handler:      srv,
+		ReadTimeout:  35 * time.Second,
+		WriteTimeout: 35 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+	go func() {
+		log.Printf("node control listener serving on %s", listen)
+		if err := httpSrv.ListenAndServeTLS(certPath, keyPath); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Printf("node control listener stopped: %v", err)
+		}
+	}()
+	return nil
 }

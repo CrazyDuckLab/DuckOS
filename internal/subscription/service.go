@@ -126,6 +126,22 @@ type Service struct {
 	// subscription package decoupled from
 	// internal/engine.
 	snap XraySnapshot
+	// linkResolver builds the client-consumable share URI for a
+	// (server, user) pair from vault-resolved credentials. When
+	// nil, Render falls back to the reference-only
+	// xray.BuildShareLink (links carry vault ids, not secrets)
+	// which is NOT directly client-consumable; production wiring
+	// MUST inject a resolver.
+	linkResolver func(xray.Server, xray.User) (string, error)
+}
+
+// SetLinkResolver injects the credential-resolving share-link
+// builder. This is the production path for client-consumable
+// subscriptions.
+func (s *Service) SetLinkResolver(fn func(xray.Server, xray.User) (string, error)) {
+	s.mu.Lock()
+	s.linkResolver = fn
+	s.mu.Unlock()
 }
 
 // XraySnapshot is the read-only view of the
@@ -392,11 +408,17 @@ func (s *Service) Render(id string) ([]byte, error) {
 		if !ok {
 			continue
 		}
-		// Subscription serves share links; the
-		// existing internal/xray.BuildShareLink
-		// is the contract. We import it lazily
-		// to keep this file readable.
-		uri, err := xray.BuildShareLink(sv, u)
+		// Subscription serves share links. When a link resolver
+		// is wired, links carry resolved credentials and are
+		// directly client-consumable; otherwise the
+		// reference-only xray.BuildShareLink contract is kept.
+		var uri string
+		var err error
+		if s.linkResolver != nil {
+			uri, err = s.linkResolver(sv, u)
+		} else {
+			uri, err = xray.BuildShareLink(sv, u)
+		}
 		if err != nil {
 			continue
 		}

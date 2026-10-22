@@ -218,6 +218,34 @@ export interface WireguardPeerView {
   updatedAt?: string;
 }
 
+/* — Xray Center node views (mirrors xnode.Manager.List) — */
+export interface XrayNodeView {
+  id: string;
+  name: string;
+  kind: string;
+  endpoint?: string;
+  version?: string;
+  capabilities?: string[];
+  status: "pending" | "active" | "suspended" | "stale" | "revoked";
+  enrolledAt?: string;
+  lastSeenAt?: string;
+  lastError?: string;
+}
+
+export interface XrayGroupView {
+  id: string;
+  name: string;
+  format: string;
+  enabled: boolean;
+  members: Array<{
+    nodeId?: string;
+    serverId: string;
+    userId: string;
+    displayName: string;
+    enabled: boolean;
+  }>;
+}
+
 /* — Xray views — */
 
 export interface XrayServerView {

@@ -59,7 +59,7 @@ func TestH07RealCLITunnelPublicParity(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("DUCKOS_XRAY_STAGE", filepath.Join(dir, "xray-runtime"))
-	xHost, err := enableXrayService(filepath.Join(dir, "xray-catalog"), access, vault)
+	xHost, err := enableXrayService(filepath.Join(dir, "xray-catalog"), access, vault, "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
