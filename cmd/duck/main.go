@@ -2163,6 +2163,36 @@ func xrayNodesCmd(args []string) error {
 			body, _ := json.Marshal(map[string]string{})
 			return authedCall(cf, http.MethodPost, "/api/v1/xray/center/nodes/"+*id+"/"+op, body, "xray nodes "+op)
 		}
+	case "pull-rotation":
+		// NODE SIDE: pull the staged credential (auth: current
+		// credential), then confirm possession. Old stays valid
+		// until confirm.
+		fs := flag.NewFlagSet("xray nodes pull-rotation", flag.ContinueOnError)
+		cf := addCommonFlags(fs)
+		id := fs.String("id", "", "Node id")
+		cred := fs.String("credential", "", "Current node credential")
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		if *id == "" || *cred == "" {
+			return errors.New("xray nodes pull-rotation: --id and --credential are required")
+		}
+		newCred, err := nodeAuthCall(cf, "/api/v1/xray/center/node-auth/"+*id+"/pull", *cred)
+		if err != nil {
+			return err
+		}
+		if newCred == "" {
+			return errors.New("xray nodes pull-rotation: no credential returned")
+		}
+		fmt.Println("staged credential received; confirming possession...")
+		if _, err := nodeAuthCall(cf, "/api/v1/xray/center/node-auth/"+*id+"/confirm", newCred); err != nil {
+			// The controller committed nothing on a failed confirm;
+			// the new credential is printed above so the operator
+			// can retry the confirm without re-staging.
+			return err
+		}
+		fmt.Println("rotation confirmed: the new credential above is now the node credential")
+		return nil
 	case "rotate":
 		// Full rotation delivery: generate (coordinator), deliver
 		// over the old channel, confirm. The stored credential on
@@ -2245,4 +2275,29 @@ func xrayGroupsCmd(args []string) error {
 	default:
 		return fmt.Errorf("xray groups: unknown operation %q", op)
 	}
+}
+
+// nodeAuthCall performs a node-authenticated center call: the node
+// credential travels in the X-Node-Credential header. It returns the
+// response credential (staged rotation pulls) when present.
+func nodeAuthCall(cf *commonFlags, path, credential string) (string, error) {
+	st, err := newState(cf)
+	if err != nil {
+		return "", err
+	}
+	hdr := http.Header{}
+	hdr.Set("Content-Type", "application/json")
+	hdr.Set("X-Node-Credential", credential)
+	var out map[string]any
+	code, err := st.call(context.Background(), apiCall{method: http.MethodPost, path: path, headers: hdr}, &out)
+	if err != nil {
+		return "", err
+	}
+	if code/100 != 2 {
+		return "", fmt.Errorf("node auth returned %d: %s", code, errorMessage(out))
+	}
+	stateRaw, _ := out["state"].(string)
+	newCredRaw, _ := out["credential"].(string)
+	_ = stateRaw
+	return newCredRaw, nil
 }

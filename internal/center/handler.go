@@ -60,6 +60,10 @@ type Handler struct {
 	Events *xray.EventLog
 	// Diagnose runs the structured diagnostics for a subject.
 	Diagnose func(subject string) ([]xray.Diagnostic, error)
+	// NodeAuthRate, when wired, bounds node-auth attempts per peer
+	// (the endpoints accept node credentials; brute-force resistance
+	// is required even on the authenticated surface).
+	NodeAuthRate func(peer string) bool
 	// DeliveryValidate, when wired, authoritatively validates a
 	// presentation token against the live agent-side store (used by
 	// the public delivery daemon so revocation is effective
@@ -134,6 +138,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveDiagnostics(w, r)
 	case strings.TrimPrefix(rest, "/") == "delivery-validate":
 		h.serveDeliveryValidate(w, r)
+	case strings.HasPrefix(strings.TrimPrefix(rest, "/"), "node-auth/"):
+		h.serveNodeAuth(w, r, strings.TrimPrefix(strings.TrimPrefix(rest, "/"), "node-auth/"))
 	default:
 		problem(w, 404, "not_found", "Unknown Xray Center operation.")
 	}
@@ -203,20 +209,31 @@ func (h *Handler) serveNodes(w http.ResponseWriter, r *http.Request, rest string
 		}
 		writeJSON(w, 201, node)
 	case r.Method == http.MethodPost && strings.HasSuffix(rest, "/rotate"):
+		// Milestone 1 fix: staging ONLY. The old credential stays
+		// valid until the node proves possession of the new one via
+		// /rotate/confirm — the previous immediate-commit endpoint
+		// stranded the node (controller invalidated the old
+		// credential before the node could obtain the new one).
 		id := strings.TrimSuffix(strings.TrimPrefix(rest, "/"), "/rotate")
-		credential, err := h.Nodes.RotateCredential(id)
+		credential, state, err := h.Nodes.StageRotation(id)
 		if err != nil {
-			switch {
-			case strings.Contains(strings.ToLower(err.Error()), "uncertain"):
-				problem(w, 503, "rotation_commit_uncertain", err.Error())
-			case strings.Contains(strings.ToLower(err.Error()), "not committed"):
-				problem(w, 503, "rotation_not_committed", err.Error())
-			default:
-				problem(w, 409, "rotate_failed", err.Error())
-			}
+			problem(w, 409, "stage_failed", err.Error())
 			return
 		}
-		writeJSON(w, 200, map[string]string{"credential": credential})
+		// Plaintext returned exactly once over the authenticated
+		// management channel; delivered to the node via the
+		// node-side pull command (see CLI).
+		writeJSON(w, 200, map[string]string{"credential": credential, "state": string(state)})
+	case r.Method == http.MethodPost && strings.HasSuffix(rest, "/rotate/cancel"):
+		id := strings.TrimSuffix(strings.TrimPrefix(strings.TrimSuffix(rest, "/"), "/"), "/rotate/cancel")
+		if err := h.Nodes.CancelStagedRotation(id); err != nil {
+			problem(w, 409, "cancel_failed", err.Error())
+			return
+		}
+		writeJSON(w, 200, map[string]string{"state": string(xnode.RotationNone)})
+	case r.Method == http.MethodGet && strings.HasSuffix(rest, "/rotation"):
+		id := strings.TrimSuffix(strings.TrimPrefix(rest, "/"), "/rotation")
+		writeJSON(w, 200, map[string]string{"state": string(h.Nodes.RotationStatus(id))})
 	case r.Method == http.MethodPost && strings.HasSuffix(rest, "/suspend"):
 		id := strings.TrimSuffix(strings.TrimPrefix(rest, "/"), "/suspend")
 		if err := h.Nodes.Suspend(id); err != nil {
@@ -626,4 +643,58 @@ func (h *Handler) serveDeliveryValidate(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeJSON(w, 200, map[string]any{"ok": true, "subId": subID})
+}
+
+// serveNodeAuth serves the node-side staged-rotation pull/confirm
+// endpoints. These are the ONLY center operations that authenticate
+// with a NODE credential (X-Node-Credential header) instead of an
+// operator bearer — a node can pull its own staged credential and
+// confirm possession, nothing else. Constant-time verification and
+// bounded attempts via NodeAuthRate.
+func (h *Handler) serveNodeAuth(w http.ResponseWriter, r *http.Request, rest string) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		problem(w, 405, "method_not_allowed", "Node auth is POST-only.")
+		return
+	}
+	if h.Nodes == nil {
+		problem(w, 501, "nodes_unavailable", "Node management is not enabled.")
+		return
+	}
+	peer := r.RemoteAddr
+	if h.NodeAuthRate != nil && !h.NodeAuthRate(peer) {
+		problem(w, 429, "rate_limited", "Too many node-auth attempts.")
+		return
+	}
+	credential := r.Header.Get("X-Node-Credential")
+	if credential == "" || len(credential) > 256 {
+		problem(w, 400, "invalid_request", "Missing node credential.")
+		return
+	}
+	// The node id comes from the path segment; the credential is
+	// verified against THAT node only.
+	parts := strings.SplitN(rest, "/", 2)
+	if len(parts) != 2 || parts[0] == "" {
+		problem(w, 400, "invalid_request", "Node auth needs a node id and an operation.")
+		return
+	}
+	nodeID, op := parts[0], parts[1]
+	switch op {
+	case "pull":
+		newCred, state, err := h.Nodes.PullStagedRotation(nodeID, credential)
+		if err != nil {
+			problem(w, 403, "pull_failed", "Pull rejected.")
+			return
+		}
+		writeJSON(w, 200, map[string]string{"credential": newCred, "state": string(state)})
+	case "confirm":
+		state, err := h.Nodes.ConfirmStagedRotation(nodeID, credential)
+		if err != nil {
+			problem(w, 403, "confirm_failed", "Confirmation rejected.")
+			return
+		}
+		writeJSON(w, 200, map[string]string{"state": string(state)})
+	default:
+		problem(w, 404, "not_found", "Unknown node-auth operation.")
+	}
 }

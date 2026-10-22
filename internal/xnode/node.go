@@ -180,6 +180,10 @@ type Manager struct {
 	// degraded carries the active COMMIT_UNCERTAIN diagnosis, or ""
 	// when storage is healthy. Degraded storage BLOCKS mutations.
 	degraded string
+	// staged holds in-memory staged rotation credentials (Milestone
+	// 1): plaintext is never persisted; a controller restart drops
+	// the staging and the operator re-stages (old stays valid).
+	staged map[string]*stagedRotation
 }
 
 func NewManager(adapter Adapter) *Manager {

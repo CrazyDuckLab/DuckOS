@@ -76,6 +76,10 @@ type Dict = {
   rotateCommitted: string;
   rotateCredentialOnce: string;
   rotateFailed: string;
+  rotateStatePending: string;
+  rotateStateDelivered: string;
+  rotateStateConfirmed: string;
+  rotateCancel: string;
   storageDegraded: string;
   storageReconcile: string;
   storageReconciled: string;
@@ -141,7 +145,11 @@ const en: Dict = {
   nodeError: "Last error",
   nodeGroups: "Groups",
   rotateCommitted:
-    "Rotation committed on the controller. The old credential is already invalid; deliver the new credential to the node and confirm the transition.",
+    "Rotation STAGED (PENDING). The old credential stays valid; the node pulls the new credential with: duck xray nodes pull-rotation --id <id> --credential <old>. Until the node confirms, this rotation can be cancelled safely.",
+  rotateStatePending: "Rotation state: PENDING (old credential still valid; node has not pulled).",
+  rotateStateDelivered: "Rotation state: DELIVERED (node pulled the staged credential; awaiting confirmation).",
+  rotateStateConfirmed: "Rotation state: CONFIRMED (controller committed; old credential invalidated).",
+  rotateCancel: "Cancel staged rotation",
   rotateCredentialOnce:
     "New node credential — copy it now; it will never be shown again.",
   rotateFailed:
@@ -214,7 +222,11 @@ const ru: Dict = {
   nodeError: "Последняя ошибка",
   nodeGroups: "Группы",
   rotateCommitted:
-    "Ротация закоммичена на контроллере. Старый креденшал уже недействителен; доставьте новый креденшал на узел и подтвердите переход.",
+    "Ротация ОЖИДАЕТ (PENDING). Старый креденшал действителен; узел забирает новый командой: duck xray nodes pull-rotation --id <id> --credential <старый>. До подтверждения узлом ротацию можно безопасно отменить.",
+  rotateStatePending: "Состояние ротации: PENDING (старый креденшал действителен; узел ещё не забрал).",
+  rotateStateDelivered: "Состояние ротации: DELIVERED (узел забрал креденшал; ожидается подтверждение).",
+  rotateStateConfirmed: "Состояние ротации: CONFIRMED (контроллер закоммитил; старый креденшал недействителен).",
+  rotateCancel: "Отменить отложенную ротацию",
   rotateCredentialOnce:
     "Новый креденшал узла — скопируйте сейчас; повторно показан не будет.",
   rotateFailed: "Ротация не удалась; состояние не изменено, как сообщило API.",
@@ -1051,6 +1063,7 @@ function NodesPanel({
   const [rotated, setRotated] = useState<{
     node: string;
     credential: string;
+    state: string;
   } | null>(null);
   const [confirm, setConfirm] = useState<{
     action: "revoke" | "suspend";
@@ -1113,21 +1126,59 @@ function NodesPanel({
     }
   }
 
+  // Milestone 1: staging ONLY — the backend keeps the old credential
+  // valid until the node pulls and confirms; the UI reflects the
+  // backend state machine (PENDING → DELIVERED → CONFIRMED) and
+  // never claims success before the backend reports it.
   async function rotate(node: XrayNodeView) {
     setBusy(true);
     setActionError(null);
     setRotated(null);
     try {
-      const r = await client.xrayRotateNode(node.id);
+      const r = await client.xrayStageRotation(node.id);
       if (r.ok && r.data.credential) {
         // Shown exactly once, held in memory only.
-        setRotated({ node: node.name, credential: r.data.credential });
-        reloadNodes();
+        setRotated({
+          node: node.name,
+          credential: r.data.credential,
+          state: r.data.state,
+        });
+        // Poll the real backend state so DELIVERED/CONFIRMED appear
+        // as the node completes its side.
+        const poll = setInterval(async () => {
+          const s = await client.fetchXrayRotationState(node.id);
+          if (!s.ok) return;
+          setRotated((prev) =>
+            prev ? { ...prev, state: s.data.state } : prev,
+          );
+          if (s.data.state === "CONFIRMED" || s.data.state === "") {
+            clearInterval(poll);
+            reloadNodes();
+          }
+        }, 5000);
       } else {
         setActionError(d.rotateFailed);
       }
     } catch {
       setActionError(d.rotateFailed);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancelRotation(node: XrayNodeView) {
+    setBusy(true);
+    setActionError(null);
+    try {
+      const r = await client.xrayCancelRotation(node.id);
+      if (r.ok) {
+        setRotated(null);
+        reloadNodes();
+      } else {
+        setActionError(d.errSubmit);
+      }
+    } catch {
+      setActionError(d.errSubmit);
     } finally {
       setBusy(false);
     }
@@ -1169,8 +1220,31 @@ function NodesPanel({
       {rotated && (
         <div className="xray-confirm" role="alert">
           <p>{d.rotateCommitted}</p>
-          <p>{d.rotateCredentialOnce}</p>
-          <code>{rotated.credential}</code>
+          <p>
+            {rotated.state === "DELIVERED"
+              ? d.rotateStateDelivered
+              : rotated.state === "CONFIRMED"
+                ? d.rotateStateConfirmed
+                : d.rotateStatePending}
+          </p>
+          {rotated.state !== "CONFIRMED" && (
+            <>
+              <p>{d.rotateCredentialOnce}</p>
+              <code>{rotated.credential}</code>
+              <p>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    const target = nodes?.find((n) => n.name === rotated.node);
+                    if (target) cancelRotation(target);
+                  }}
+                >
+                  {d.rotateCancel}
+                </button>
+              </p>
+            </>
+          )}
         </div>
       )}
       {actionError && (

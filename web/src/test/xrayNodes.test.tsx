@@ -90,17 +90,19 @@ function nodesClient(
         age: 0,
       } as FetchResult<unknown>);
     },
-    xrayRotateNode: () => {
+    xrayStageRotation: () => {
       calls.rotate = (calls.rotate ?? 0) + 1;
       if (overrides.rotateFails) {
         return Promise.reject(new Error("503"));
       }
       return Promise.resolve({
         ok: true,
-        data: { credential: "NEW-CRED-VALUE" },
+        data: { credential: "NEW-CRED-VALUE", state: "PENDING" },
         age: 0,
       } as FetchResult<unknown>);
     },
+    fetchXrayRotationState: () =>
+      Promise.resolve({ ok: true, data: { state: "PENDING" }, age: 0 } as FetchResult<unknown>),
     xraySuspendNode: () => {
       calls.suspend = (calls.suspend ?? 0) + 1;
       return overrides.suspendFails
@@ -212,7 +214,9 @@ describe("Nodes UI", () => {
     await waitFor(() =>
       expect(screen.getByText("NEW-CRED-VALUE")).toBeTruthy(),
     );
-    expect(screen.getByText(/already invalid/)).toBeTruthy();
+    // Staged semantics: old credential NOT invalidated at stage time.
+    expect(screen.getByText(/STAGED \(PENDING\)/)).toBeTruthy();
+    expect(screen.getByText(/pull-rotation/)).toBeTruthy();
   });
 
   it("rotation failure shows a failure message, never success", async () => {

@@ -720,9 +720,23 @@ export class APIClient {
       { ...options, method: "POST" },
     );
   }
-  xrayRotateNode(nodeId: string, options: FetchOptions = {}) {
-    return this.fetch<{ credential: string }>(
+  xrayStageRotation(nodeId: string, options: FetchOptions = {}) {
+    return this.fetch<{ credential: string; state: string }>(
       `${APIClient.ENDPOINTS.xray}/center/nodes/${encodeURIComponent(nodeId)}/rotate`,
+      null,
+      { ...options, method: "POST" },
+    );
+  }
+  fetchXrayRotationState(nodeId: string, options: FetchOptions = {}) {
+    return this.fetch<{ state: string }>(
+      `${APIClient.ENDPOINTS.xray}/center/nodes/${encodeURIComponent(nodeId)}/rotation`,
+      null,
+      options,
+    );
+  }
+  xrayCancelRotation(nodeId: string, options: FetchOptions = {}) {
+    return this.fetch<{ state: string }>(
+      `${APIClient.ENDPOINTS.xray}/center/nodes/${encodeURIComponent(nodeId)}/rotate/cancel`,
       null,
       { ...options, method: "POST" },
     );
