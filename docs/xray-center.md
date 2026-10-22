@@ -329,6 +329,14 @@ en/ru/de/es; 10 компонентных тестов.
 ACME-challenge, live-подключения 30 комбинаций реальными клиентами,
 установочный clean-install прогон.
 
+## Матрица живой связности (beta.4, 2026-10-22)
+
+| Комбинация | CONFIG | RUNTIME | TRAFFIC | CLIENT |
+|---|---|---|---|---|
+| VLESS+REALITY (vision, tcp) | ✅ | ✅ | ✅ `TestConnectivity_VLESSReality_EndToEnd` | ✅ xray-клиент |
+| SOCKS loop (control path) | ✅ | ✅ | ✅ `TestRuntime_SOCKSLoopTraffic` | ✅ curl |
+| Остальные 28 комбинаций | ✅ (`xray -test`) | — | NOT TESTED (experimental) | — |
+
 ## Честный статус
 
 IMPLEMENTED AND TESTED (unit/race-тесты на darwin, полный
