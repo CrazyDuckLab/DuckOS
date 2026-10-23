@@ -22,6 +22,21 @@ import (
 	"github.com/CrazyDuckLab/DuckOS/internal/xray"
 )
 
+// realityDest/realitySNI: overridable for egress-restricted labs.
+func realityDest() string {
+	if v := os.Getenv("REALITY_TEST_DEST"); v != "" {
+		return v
+	}
+	return "yahoo.com:443"
+}
+
+func realitySNI() string {
+	if v := os.Getenv("REALITY_TEST_SNI"); v != "" {
+		return v
+	}
+	return "yahoo.com"
+}
+
 func startXray(t *testing.T, bin, cfgPath string) *exec.Cmd {
 	t.Helper()
 	cmd := exec.Command(bin, "run", "-c", cfgPath)
@@ -128,7 +143,7 @@ func TestConnectivity_VLESSReality_EndToEnd(t *testing.T) {
 			"streamSettings": map[string]any{
 				"network": "tcp", "security": "reality",
 				"realitySettings": map[string]any{
-					"serverName": "yahoo.com", "fingerprint": "chrome",
+					"serverName": realitySNI(), "fingerprint": "chrome",
 					"publicKey": kp.PublicKey, "shortId": sid,
 				},
 			},
