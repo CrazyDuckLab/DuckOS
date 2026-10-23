@@ -5,8 +5,10 @@
 Prerelease candidate; publication requires owner authorization. Router Core F1–F8
 security fixes, bounded privileged nft launcher, strict payload validation,
 PCP/NAT-PMP corrections and startup/recovery hardening. Documentation and
-release-snapshot cleanup preserve executable source identity with the qualified
+release-snapshot cleanup preserve Router Core application source identity with the qualified
 `2e0c5afa089649a3238c543a82624075a9bc816e` baseline.
+The release also corrects the installer ELF32/ELF64 verifier (T-01) and documents
+the existing artifact-level identity contract (T-02); helper executables are unchanged.
 See [release notes](docs/release-notes.md) for actual qualification and limits.
 
 ## v0.1.0-beta.2

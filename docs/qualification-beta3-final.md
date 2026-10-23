@@ -10,9 +10,12 @@ This section records that accepted prior qualification. No new live run is
 claimed by the documentation/snapshot preparation. Older reports below are
 historical evidence with their original SHA and limits, not additional passes.
 
-The final release source commit adds documentation and snapshot hygiene only.
-Release verification must prove executable sources, units, installer/build
-scripts and lockfiles are byte-identical to this baseline. `BUILD-INFO.json`
+The final release source adds documentation/snapshot hygiene and the focused
+T-01 installer ELF32/ELF64 verifier correction with regression tests. Application
+sources, units, build scripts and lockfiles remain byte-identical to this baseline.
+The installer delta is separately tested, without repeating or expanding the prior
+live AMD64 qualification. T-02 follows the existing artifact identity contract
+([decision](release-identity.md)); helper executables are unchanged. `BUILD-INFO.json`
 records the final release SHA; the approval manifest records both SHAs.
 
 | Finding | Remediation present in qualified code |

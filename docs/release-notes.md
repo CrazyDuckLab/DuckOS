@@ -49,9 +49,11 @@ qualification, real systemd startup, authenticated readiness, service restart
 and VM reboot persistence at code baseline
 `2e0c5afa089649a3238c543a82624075a9bc816e`.
 Release preparation does not repeat those live tests or turn historical
-component reports into new execution evidence. The final documentation and
-snapshot commit is checked for byte-identical executable sources, units,
-installer/build scripts and lockfiles against that baseline.
+component reports into new execution evidence. Application sources, systemd units, build scripts and lockfiles are unchanged
+against that baseline. A focused installer correction distinguishes ELF32 from
+ELF64 and checks header/section/segment bounds without integer wraparound;
+malformed fixtures and genuine binaries for all three targets receive separate
+read-only verification. No new live install or reboot is claimed by these checks.
 
 No claim is made for in-place upgrades, physical power loss, every rollback
 failure, arbitrary NICs/boards, all client interoperability or production
@@ -73,8 +75,10 @@ installation. The installer checks the closed inventory, hashes and ELF
 architecture, including the required nft launcher binary and unit.
 Follow [installation](https://github.com/CrazyDuckLab/DuckOS/blob/v0.1.0-beta.3/docs/install.md).
 
-The runtime `VERSION` and `BUILD-INFO.json` identify `v0.1.0-beta.3` and the
-exact final source commit, with `dirty=false`. The archive includes seven
+The artifact `VERSION` and `BUILD-INFO.json` identify `v0.1.0-beta.3` and the
+exact final source commit, with `dirty=false`. API and Agent embed that version
+and SHA; helper identities are bound by the complete per-file manifest, following
+the existing [identity contract](release-identity.md). The archive includes seven
 DuckOS service binaries and the Web UI; the standalone `duck` CLI remains
 source-built. Use SSH forwarding to the loopback API for enrollment.
 
@@ -98,8 +102,8 @@ and [limitations](https://github.com/CrazyDuckLab/DuckOS/blob/v0.1.0-beta.3/docs
 The release snapshot excludes laboratory `.runtime-data` reports. Their
 removal does **not** erase historical Git objects, including previously
 public laboratory topology. No active credential compromise is established
-by that historical-address finding; residual disclosure requires explicit
-owner acceptance before publication. Do not attach laboratory evidence,
+by that historical-address finding. The owner authorized publication with
+existing history preserved; no history rewrite is performed. Do not attach laboratory evidence,
 credentials, backups or private runtime state to the release.
 
 There is no automatic LAN TLS onboarding or mDNS discovery, no established

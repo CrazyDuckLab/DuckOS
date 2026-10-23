@@ -15,6 +15,6 @@ publicly reachable management endpoint. No live endpoint probing is performed.
 
 The minimal publication plan is a new dedicated release branch/ref pointing at
 the final source and a new annotated release tag, after explicit owner approval.
-Existing beta.2 refs/releases and beta.4 branches remain unchanged. The owner
-must accept residual historical topology disclosure before any source push or
-publication; this requirement does not prevent local builds and verification.
+Existing beta.2 refs/releases and beta.4 branches remain unchanged. The owner has authorized publication with the known historical topology
+disclosure and existing history preserved. This does not authorize publishing
+active credentials or newly discovered material security findings.

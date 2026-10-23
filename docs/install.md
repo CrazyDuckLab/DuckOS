@@ -85,7 +85,8 @@ sudo chmod -R go-w /root/duckos-install/duckos-v0.1.0-beta.3
 
 Stop if the staging directory already exists; use a new operator-reviewed
 staging location rather than merging payloads. Installation directly from a
-user home or world-writable `/tmp` is refused. The verifier checks the closed
+user home or world-writable `/tmp` is refused. Read-only ELF verification also requires `python3` on the verification host.
+The verifier checks the closed
 inventory, hashes, build metadata and architecture-specific ELF headers.
 
 ## Preflight and install

@@ -109,6 +109,9 @@ integrity; no Go module dependencies are currently needed. Toolchain archives
 and checksum provenance are in `scripts/bootstrap.sh`. Dependency review uses
 `npm --prefix web audit`; this is separate from release security qualification.
 
+See the [release identity contract](release-identity.md): API/Agent embed identity;
+helpers are identified by artifact metadata and verified per-file checksums.
+
 Each payload includes binaries, static UI, installer, unit templates, VERSION,
 BUILD-INFO.json, and a complete SHA256SUMS inventory. Metadata identifies commit,
 dirty state, tools and target. Internal versions `1.0.0-dev.<commit>[.dirty]`
