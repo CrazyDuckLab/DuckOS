@@ -325,6 +325,8 @@ suspend/resume/revoke за confirm-диалогом с перезагрузко�
 состояния, DEGRADED-баннер с рабочей реконсиляцией; локализация
 en/ru/de/es; 10 компонентных тестов.
 
+**Статусы beta.4 (честно):** staged rotation (Stage→Pull→Confirm, durable pending/tombstones) — IMPLEMENTED+TESTED; VLESS+REALITY — TRAFFIC VERIFIED (macOS; на Linux-VM REALITY-dest заблокирован egress — BLOCKED, тест параметризован REALITY_TEST_DEST/SNI); квоты — enforcement-цепочка TESTED, не per-packet; ACME — DEFERRED (не включён); 3x-ui bulk migration — DEFERRED (experimental); non-root Agent — **BLOCKED decision gate** (docs/b4-04-agent-privilege-decision.md: Option A non-root миграция vs Option B accepted UID-0 zero-cap; требуется выбор владельца). Agent работает как UID 0 с пустым capability bounding set — это НЕ non-root; остаточный DAC-риск задокументирован.
+
 Чекпоинт оставшихся работ (не PASS):
 ACME-challenge, live-подключения 30 комбинаций реальными клиентами,
 установочный clean-install прогон.

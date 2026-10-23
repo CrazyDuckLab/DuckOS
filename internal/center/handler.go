@@ -86,6 +86,21 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		problem(w, 500, "center_unavailable", "Xray Center is not enabled.")
 		return
 	}
+	// B4-03: node-auth routes are dispatched BEFORE the operator
+	// authorization gate and authenticate with the NODE credential
+	// only (bound to the exact node id, constant-time, rate
+	// limited). They grant nothing beyond pull/confirm of the
+	// node's own staged rotation. Every other operation still
+	// requires the operator ConfigureNetwork permission.
+	trimmedPath := strings.TrimPrefix(r.URL.Path, "/")
+	if strings.HasPrefix(trimmedPath, h.Prefix+"node-auth/") {
+		if h.NodeAuthRate != nil && !h.NodeAuthRate(r.RemoteAddr) {
+			problem(w, 429, "rate_limited", "Too many node-auth attempts.")
+			return
+		}
+		h.serveNodeAuth(w, r, strings.TrimPrefix(trimmedPath, h.Prefix+"node-auth/"))
+		return
+	}
 	user := identity.User{}
 	var err error
 	if h.authorizedUser != nil {
@@ -138,8 +153,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveDiagnostics(w, r)
 	case strings.TrimPrefix(rest, "/") == "delivery-validate":
 		h.serveDeliveryValidate(w, r)
-	case strings.HasPrefix(strings.TrimPrefix(rest, "/"), "node-auth/"):
-		h.serveNodeAuth(w, r, strings.TrimPrefix(strings.TrimPrefix(rest, "/"), "node-auth/"))
 	default:
 		problem(w, 404, "not_found", "Unknown Xray Center operation.")
 	}
@@ -661,6 +674,8 @@ func (h *Handler) serveNodeAuth(w http.ResponseWriter, r *http.Request, rest str
 		problem(w, 501, "nodes_unavailable", "Node management is not enabled.")
 		return
 	}
+	// Reached only through the pre-operator node-auth dispatch; no
+	// operator bearer is required or honored here.
 	peer := r.RemoteAddr
 	if h.NodeAuthRate != nil && !h.NodeAuthRate(peer) {
 		problem(w, 429, "rate_limited", "Too many node-auth attempts.")

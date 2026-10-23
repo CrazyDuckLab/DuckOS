@@ -51,10 +51,14 @@ run_cleanup true true true true
 grep -q "# preexisting" "$ETC/duck-nft-launcher.service"
 [[ $(grep -c "stop duck-nft-launcher.service" "$SYSTEMCTL_LOG") -eq 1 ]]
 
-# Case 3: nothing was installed -> the cleaner must not touch systemd.
+# Case 3: nothing was installed -> the cleaner must not touch
+# systemd. The flags are consistent with that contract: a unit this
+# install never created was also never started or enabled by it
+# (the previous contradictory true/true made the cleaner stop and
+# disable a unit it did not install).
 : > "$SYSTEMCTL_LOG"
 rm -f "$ETC/duck-nft-launcher.service"
-run_cleanup false false true true
+run_cleanup false false false false
 [[ ! -s "$SYSTEMCTL_LOG" ]]
 
 echo "nft_launcher_rollback: PASS"

@@ -113,11 +113,17 @@ func (m *Manager) ConfirmStagedRotation(nodeID, newCredential string) (RotationS
 	if err := m.requireHealthyStorage(); err != nil {
 		return RotationNone, err
 	}
+	newHash := hashToken("xnode-cred", newCredential)
+	// B4-02 idempotent replay: this exact credential was already
+	// durably committed for this node.
+	if m.completed[nodeID] == newHash {
+		return RotationConfirmed, nil
+	}
 	staged, ok := m.staged[nodeID]
 	if !ok {
 		return RotationNone, errors.New("xnode: no staged rotation for this node (re-stage after a controller restart)")
 	}
-	if !hmac.Equal([]byte(staged.newHash), []byte(hashToken("xnode-cred", newCredential))) {
+	if !hmac.Equal([]byte(staged.newHash), []byte(newHash)) {
 		return RotationNone, errors.New("xnode: confirmation credential does not match the staged rotation")
 	}
 	node, ok := m.nodes[nodeID]
@@ -133,6 +139,12 @@ func (m *Manager) ConfirmStagedRotation(nodeID, newCredential string) (RotationS
 		}
 		return RotationNone, m.commitOutcomeLocked(res, perr, "staged rotation commit")
 	}
+	// Durable tombstone (bounded): survives controller restarts via
+	// the registry persistence hook.
+	if len(m.completed) >= 256 {
+		m.completed = map[string]string{} // bounded reset; history is advisory metadata
+	}
+	m.completed[nodeID] = staged.newHash
 	delete(m.staged, nodeID)
 	return RotationConfirmed, nil
 }
@@ -153,6 +165,9 @@ func (m *Manager) CancelStagedRotation(nodeID string) error {
 func (m *Manager) RotationStatus(nodeID string) RotationState {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+	if _, done := m.completed[nodeID]; done {
+		return RotationConfirmed
+	}
 	staged, ok := m.staged[nodeID]
 	if !ok {
 		return RotationNone

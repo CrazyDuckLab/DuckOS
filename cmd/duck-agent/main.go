@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/CrazyDuckLab/DuckOS/internal/agent"
@@ -1069,12 +1070,14 @@ func enableXrayCenter(catalogDir string, access identityAccess, cat *xray.FileCa
 	}()
 
 	return &center.Handler{
-		Access:   access,
-		Prefix:   "center/",
-		Nodes:    nodeMgr,
-		Groups:   groups,
-		Tokens:   tokens,
-		Policies: policyFile,
+		Access: access,
+		Prefix: "center/",
+		// B4-03: bounded node-auth admission wired in production.
+		NodeAuthRate: nodeAuthLimiter(),
+		Nodes:        nodeMgr,
+		Groups:       groups,
+		Tokens:       tokens,
+		Policies:     policyFile,
 		// AUD-01: the storage status and reconciliation surface is
 		// wired into the INSTALLED agent, so degraded storage is
 		// observable and recoverable through the authenticated API.
@@ -1164,6 +1167,31 @@ func enableXrayCenter(catalogDir string, access identityAccess, cat *xray.FileCa
 				xray.ExportOptions{IncludeSecrets: includeSecrets, Producer: "duck-agent"})
 		},
 	}, nil
+}
+
+// nodeAuthLimiter returns a bounded per-peer fixed-window limiter
+// for the node-auth endpoints (B4-03): 60 attempts/min/peer, hard
+// cap on tracked peers.
+func nodeAuthLimiter() func(string) bool {
+	var mu sync.Mutex
+	hits := map[string]int{}
+	var windowStart time.Time
+	return func(peer string) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		now := time.Now()
+		if now.Sub(windowStart) >= time.Minute {
+			windowStart = now
+			hits = map[string]int{}
+		}
+		if len(hits) >= 4096 {
+			if _, ok := hits[peer]; !ok {
+				return false
+			}
+		}
+		hits[peer]++
+		return hits[peer] <= 60
+	}
 }
 
 func enableXrayService(catalogDir string, access identityAccess, secrets *agent.VaultLifecycle,

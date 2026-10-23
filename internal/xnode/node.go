@@ -184,15 +184,20 @@ type Manager struct {
 	// 1): plaintext is never persisted; a controller restart drops
 	// the staging and the operator re-stages (old stays valid).
 	staged map[string]*stagedRotation
+	// completed maps nodeID → committed new-credential hash
+	// (B4-02 idempotency tombstones). Persisted durably with the
+	// registry so confirm retries survive controller restarts.
+	completed map[string]string
 }
 
 func NewManager(adapter Adapter) *Manager {
 	return &Manager{
-		nodes:    map[string]*Node{},
-		enroll:   map[string]*EnrollmentToken{},
-		clock:    time.Now,
-		adapter:  adapter,
-		staleTTL: 5 * time.Minute,
+		nodes:     map[string]*Node{},
+		completed: map[string]string{},
+		enroll:    map[string]*EnrollmentToken{},
+		clock:     time.Now,
+		adapter:   adapter,
+		staleTTL:  5 * time.Minute,
 	}
 }
 
@@ -210,6 +215,9 @@ type DurableState struct {
 	Revision    uint64            `json:"revision"`
 	Nodes       []Node            `json:"nodes"`
 	Enrollments []EnrollmentToken `json:"enrollments"`
+	// Completed maps nodeID → committed new-credential hash for
+	// finished staged rotations (B4-02 idempotency tombstones).
+	Completed map[string]string `json:"completed,omitempty"`
 }
 
 // CommitResult carries the commit-phase information the manager
@@ -643,7 +651,10 @@ func (m *Manager) persistLocked() (CommitResult, error) {
 		return CommitResult{}, nil
 	}
 	m.revision++
-	st := DurableState{Revision: m.revision}
+	st := DurableState{Revision: m.revision, Completed: map[string]string{}}
+	for id, h := range m.completed {
+		st.Completed[id] = h
+	}
 	for _, n := range m.nodes {
 		c := *n
 		st.Nodes = append(st.Nodes, c)
@@ -811,6 +822,10 @@ func (m *Manager) LoadState(st DurableState) {
 	defer m.mu.Unlock()
 	m.nodes = map[string]*Node{}
 	m.enroll = map[string]*EnrollmentToken{}
+	m.completed = map[string]string{}
+	for id, h := range st.Completed {
+		m.completed[id] = h
+	}
 	for i := range st.Nodes {
 		n := st.Nodes[i]
 		m.nodes[n.ID] = &n

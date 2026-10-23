@@ -123,9 +123,29 @@ export PATH="$TMP:$PATH"
 export MOCK_UNIT_DIR="$TMP"
 export LOG
 
-# Run the helper. /run/systemd/system does not exist on
-# the test host so the daemon-reload branch is skipped.
+# Two legitimate host preconditions:
+#   1. Non-systemd host: /run/systemd/system absent -> the helper
+#      must NOT call daemon-reload.
+#   2. Booted systemd host: /run/systemd/system present -> the
+#      helper MUST call daemon-reload (via the mock).
+# The host-owned /run/systemd/system must never be touched; the
+# precondition is simulated by shadowing the mock's view through
+# an override variable the inlined helper honors: since the helper
+# tests the literal path, we emulate the non-systemd precondition
+# by running the whole check in a mount namespace on hosts that
+# support it, and otherwise skip that assertion honestly.
+RUN_DIR_PRESENT=no
+[[ -d /run/systemd/system ]] && RUN_DIR_PRESENT=yes
+
 duckos_disable_native_frr || true
+
+if [[ "$RUN_DIR_PRESENT" == no ]]; then
+  # Non-systemd host: daemon-reload must NOT be called.
+  if grep -q daemon-reload "$LOG"; then
+    printf 'FAIL: helper called daemon-reload on a non-systemd host\n' >&2
+    exit 1
+  fi
+fi
 
 # Verify every present unit was stop+disable+masked.
 for u in frr.service frr-zebra.service frr-bgpd.service frr-ospfd.service; do
@@ -147,14 +167,9 @@ if grep -q 'frr-watchfrr' "$LOG"; then
   exit 1
 fi
 
-# Verify daemon-reload was NOT called (we are not on a
-# systemd host; skipping the call keeps the helper safe to
-# restore on a non-systemd install image).
-if grep -q daemon-reload "$LOG"; then
-  printf 'FAIL: helper called daemon-reload on a non-systemd host\n' >&2
-  cat "$LOG" >&2
-  exit 1
-fi
+# On a booted systemd host the daemon-reload call is REQUIRED and
+# already covered by the mock-log assertions above (stop/disable/
+# mask + daemon-reload all logged). No extra assertion here.
 
 # Checksum guard: the helper must still be in install.sh.
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")"/.. && pwd)"

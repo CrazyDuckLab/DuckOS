@@ -146,3 +146,47 @@ func (n *NodeIdentity) Commit(newCredential string) error {
 	}
 	return nil
 }
+
+// PendingCredential reports a durably stored pending (transition)
+// credential, if any. Used by the CLI resume path after an
+// interrupted rotation.
+func (n *NodeIdentity) PendingCredential() (string, bool) {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	doc := n.file.Get()
+	if doc.PendingHash == "" {
+		return "", false
+	}
+	// The store keeps hashes only; the CLI resume path re-derives
+	// the plaintext from the operator-supplied value. A pending
+	// hash alone cannot be reversed, so the resume contract is:
+	// the operator re-runs pull-rotation with the NEW credential
+	// they saved; if it matches the pending hash, confirm proceeds.
+	return "", false
+}
+
+// ConfirmPending verifies the presented new credential against the
+// durable pending hash and finalizes the transition.
+func (n *NodeIdentity) ConfirmPending(newCredential string) error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	doc := n.file.Get()
+	pending := nodeCredentialHash(newCredential)
+	if doc.PendingHash == "" || doc.PendingHash != pending {
+		return errors.New("xnode: no matching pending credential in the local identity store")
+	}
+	doc.CurrentHash = pending
+	doc.PendingHash = ""
+	out, err := n.file.Update(func(cur *NodeIdentityDocument) { *cur = doc })
+	if err != nil || out == persist.CommitUncertain {
+		return fmt.Errorf("xnode: local finalization not durably committed (outcome=%s): %w", out, err)
+	}
+	return nil
+}
+
+// HasPending reports whether a pending transition exists.
+func (n *NodeIdentity) HasPending() bool {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	return n.file.Get().PendingHash != ""
+}
