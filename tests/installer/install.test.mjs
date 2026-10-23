@@ -11,7 +11,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const installer = path.join(root, 'scripts/install.sh');
 const hash = (data) => createHash('sha256').update(data).digest('hex');
 
-async function fixture(t) {
+async function fixture(t, arch = 'amd64') {
   const directory = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'duckos-installer-test-')));
   t.after(() => fs.rm(directory, { recursive: true, force: true }));
   const artifact = path.join(directory, 'artifact');
@@ -20,12 +20,23 @@ async function fixture(t) {
   // Minimal but structurally complete ELF64: the installer's F3
   // truncation check requires a section header table that fits inside
   // the file, so the fixture carries a real (empty) table.
-  const elf = Buffer.alloc(128);
-  elf.set([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1]);
-  elf[18] = 0x3e; // e_machine = EM_X86_64
-  elf.writeBigUInt64LE(64n, 40); // e_shoff: table right after the header
-  elf.writeUInt16LE(64, 58); // e_shentsize
-  elf.writeUInt16LE(1, 60); // e_shnum
+  const is32 = arch === 'armv7';
+  const elf = Buffer.alloc(is32 ? 92 : 128);
+  elf.set([0x7f, 0x45, 0x4c, 0x46, is32 ? 1 : 2, 1, 1]);
+  elf.writeUInt16LE(2, 16); // ET_EXEC
+  elf.writeUInt16LE({ amd64: 0x3e, arm64: 0xb7, armv7: 0x28 }[arch], 18);
+  elf.writeUInt32LE(1, 20); // EV_CURRENT
+  if (is32) {
+    elf.writeUInt32LE(52, 32);
+    elf.writeUInt16LE(52, 40);
+    elf.writeUInt16LE(40, 46);
+    elf.writeUInt16LE(1, 48);
+  } else {
+    elf.writeBigUInt64LE(64n, 40);
+    elf.writeUInt16LE(64, 52);
+    elf.writeUInt16LE(64, 58);
+    elf.writeUInt16LE(1, 60);
+  }
   // Synthetic xray-core payload. The vendored ELF cannot hash to the real
   // upstream pin (no preimage), so the fixture rewrites the pin inside the
   // artifact's own install.sh to the synthetic digest; the verifier is run
@@ -34,24 +45,27 @@ async function fixture(t) {
   // rejection test below.
   const xrayBinary = 'synthetic-xray-amd64-payload\n';
   const xraySha = hash(xrayBinary);
+  const xrayName = { amd64: 'Xray-linux-64', arm64: 'Xray-linux-arm64-v8a', armv7: 'Xray-linux-arm32-v7a' }[arch];
   const installerSource = (await fs.readFile(installer))
     .toString('utf8')
+    .replace('c2d20a7045250497083afea0d79db0672f6c89a25aaaf37c92de034d6b764b04', xraySha)
+    .replace('b7ea2a82185f0f7a59510b01b24a93cc3c45529dabbf3c97970ad66c49c6b882', xraySha)
     .replace('8255dd939c34cf966cc91517b6324dd3c8d0bcf49ffac8beca049a38c46845ed', xraySha);
   const files = new Map([
     ['VERSION', '1.0.0-dev.012345abcdef\n'],
     ['LICENSE', 'Synthetic GPL license fixture\n'],
     ['COPYRIGHT.md', 'Synthetic copyright fixture\n'],
-    ['BUILD-INFO.json', JSON.stringify({ version: '1.0.0-dev.012345abcdef', commit: '012345abcdef0000000000000000000000000000', dirty: false, target: 'linux/amd64', goVersion: 'go1.27.1', nodeVersion: 'v24.20.0', sourceDateEpoch: 1788796800, kind: 'internal-development' }, null, 2) + '\n'],
+    ['BUILD-INFO.json', JSON.stringify({ version: '1.0.0-dev.012345abcdef', commit: '012345abcdef0000000000000000000000000000', dirty: false, target: `linux/${arch}`, goVersion: 'go1.27.1', nodeVersion: 'v24.20.0', sourceDateEpoch: 1788796800, kind: 'internal-development' }, null, 2) + '\n'],
     ['install.sh', installerSource],
     ['bin/duck-agent', elf],
     ['bin/duck-api', elf],
     ['bin/duck-updater', elf],
     ['bin/duck-restore', elf],
     ['bin/duck-nft-launcher', elf],
-    ['xray-core/Xray-linux-64', xrayBinary],
+    [`xray-core/${xrayName}`, xrayBinary],
     ['xray-core/XRAY_CORE_VERSION', '26.3.27\n'],
     ['xray-core/XRAY_CORE_LICENSE', 'MPL-2.0 synthetic license fixture\n'],
-    ['xray-core/XRAY_CORE_SHA256SUMS', `${xraySha}  Xray-linux-64\n`],
+    ['xray-core/XRAY_CORE_SHA256SUMS', `${xraySha}  ${xrayName}\n`],
     ['web/index.html', '<!doctype html><title>Synthetic installer fixture</title>\n'],
     ['web/assets/main.js', '/* Synthetic packaging fixture, never executed. */\n'],
     ['systemd/duck-agent.service', await fs.readFile(path.join(root, 'packaging/systemd/duck-agent.service'))],
@@ -89,6 +103,61 @@ function verify(artifact, args = []) {
   });
   assert.equal(result.error, undefined, result.error?.message);
   return { status: result.status, output: result.stdout + result.stderr };
+}
+
+for (const arch of ['amd64', 'arm64', 'armv7']) {
+  test(`ELF class-specific headers accepted: ${arch}`, async (t) => {
+    const f = await fixture(t, arch);
+    assert.equal(verify(f.artifact).status, 0);
+  });
+  const is32 = arch === 'armv7';
+  const mutations = {
+    'wrong byte order': (b) => { b[5] = 2; },
+    'wrong identification version': (b) => { b[6] = 0; },
+    'wrong executable version': (b) => { b.writeUInt32LE(0, 20); },
+    'wrong header size': (b) => { b.writeUInt16LE(1, is32 ? 40 : 52); },
+    'section offset at UINT maximum': (b) => { if (is32) b.writeUInt32LE(0xffffffff, 32); else b.writeBigUInt64LE(0xffffffffffffffffn, 40); },
+    'invalid section entry size': (b) => { b.writeUInt16LE(0xffff, is32 ? 46 : 58); },
+    'section count beyond file': (b) => { b.writeUInt16LE(0xfffe, is32 ? 48 : 60); },
+    'missing section count': (b) => { b.writeUInt16LE(0, is32 ? 48 : 60); },
+    'invalid string-table index': (b) => { b.writeUInt16LE(2, is32 ? 50 : 62); },
+    'extended numbering': (b) => { b.writeUInt16LE(0xffff, is32 ? 50 : 62); },
+    'malformed null section': (b) => { b[is32 ? 52 : 64] = 1; },
+    'program table beyond file': (b) => {
+      if (is32) b.writeUInt32LE(0xffffffff, 28); else b.writeBigUInt64LE(0xffffffffffffffffn, 32);
+      b.writeUInt16LE(is32 ? 32 : 56, is32 ? 42 : 54);
+      b.writeUInt16LE(1, is32 ? 44 : 56);
+    },
+  };
+  for (const [name, mutate] of Object.entries(mutations)) {
+    test(`malformed ELF rejected despite matching manifest: ${arch}: ${name}`, async (t) => {
+      const f = await fixture(t, arch);
+      const p = path.join(f.artifact, 'bin/duck-api');
+      const b = await fs.readFile(p); mutate(b); await fs.writeFile(p, b);
+      await f.manifest();
+      rejected(verify(f.artifact), /ELF/);
+    });
+  }
+  for (const nobits of [false, true]) {
+    test(`ELF section payload bounds: ${arch}: NOBITS=${nobits}`, async (t) => {
+      const f = await fixture(t, arch);
+      const p = path.join(f.artifact, 'bin/duck-api');
+      const old = await fs.readFile(p);
+      const b = Buffer.concat([old, Buffer.alloc(is32 ? 40 : 64)]);
+      b.writeUInt16LE(2, is32 ? 48 : 60);
+      b.writeUInt32LE(nobits ? 8 : 1, old.length + 4);
+      if (is32) {
+        b.writeUInt32LE(0xffffffff, old.length + 16);
+        b.writeUInt32LE(0xffffffff, old.length + 20);
+      } else {
+        b.writeBigUInt64LE(0xffffffffffffffffn, old.length + 24);
+        b.writeBigUInt64LE(0xffffffffffffffffn, old.length + 32);
+      }
+      await fs.writeFile(p, b); await f.manifest();
+      if (nobits) assert.equal(verify(f.artifact).status, 0);
+      else rejected(verify(f.artifact), /section data.*bounds/);
+    });
+  }
 }
 // regenChecksums rebuilds the artifact manifest after direct fixture
 // mutations (the fixture's own manifest() closure only runs at build time).
