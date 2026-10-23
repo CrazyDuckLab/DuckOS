@@ -96,7 +96,9 @@ type Engine interface {
 	// production-path contract. rawQuery is the
 	// unparsed query string (e.g. ?server=ID for
 	// /users, ?cursor=VAL for /subscriptions).
-	XrayProxy(ctx context.Context, method, path, rawQuery, token string, body io.Reader) (status int, data []byte, contentType string, err error)
+	// nodeCredential carries the X-Node-Credential value for the
+	// canonical node-auth route only (engine.IsXrayNodeAuthPath).
+	XrayProxy(ctx context.Context, method, path, rawQuery, token, nodeCredential string, body io.Reader) (status int, data []byte, contentType string, err error)
 	// VaultProxy proxies the public /api/v1/vault/*
 	// request to the privileged Agent
 	// /agent/v1/vault/vault/v1/* IPC. DV04-VAULT
@@ -348,6 +350,24 @@ func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request) {
 		// additional parameters.
 		_ = ParseCollectionParams(r.URL.RawQuery)
 	}
+	// B4-03 production node-auth admission: the two node-side
+	// rotation endpoints authenticate with the NODE credential at
+	// the Center boundary. They are admitted through the public API
+	// without an operator bearer, grant NO operator privilege, and
+	// only the strictly canonical POST paths pass (everything else
+	// keeps the normal gate).
+	nodeAuth := engine.IsXrayNodeAuthPath(r.URL.Path)
+	if nodeAuth {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "POST")
+			problem(w, r, 405, errorCategoryFromCode("method_not_allowed"), "method_not_allowed", "Node auth is POST-only.")
+			return
+		}
+		if r.URL.RawPath != "" {
+			problem(w, r, 404, errorCategoryFromCode("not_found"), "not_found", "Unknown API operation.")
+			return
+		}
+	}
 	value := r.Header.Get("Authorization")
 	token, ok := strings.CutPrefix(value, "Bearer ")
 	hash := sha256.Sum256([]byte(token))
@@ -370,6 +390,14 @@ func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.URL.Path == "/api/v1/backup/restore" && (h.identity == nil || !h.identity.Enrolled()) {
 		authorized = false
+	}
+	if nodeAuth {
+		// Node-only admission: no operator bearer is required and
+		// none is honored — the caller keeps no user identity and
+		// the node credential is verified exclusively by the Center
+		// against the exact node id.
+		authorized = true
+		user = identity.User{}
 	}
 	if !authorized {
 		if machineHealth {
@@ -401,7 +429,18 @@ func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request) {
 			problem(w, r, 503, errorCategoryFromCode("agent_unavailable"), "agent_unavailable", "Agent assertion key is not configured.")
 			return
 		}
-		h.handleXrayProxy(w, r, identity.ForwardedToken(h.assertionKey, user))
+		token := identity.ForwardedToken(h.assertionKey, user)
+		nodeCredential := ""
+		if nodeAuth {
+			// Dedicated least-privilege IPC principal: the forwarded
+			// token only authenticates this relay call to the Agent
+			// (Observe level); it carries no operator privileges. The
+			// node credential travels in its own header and is
+			// checked by the Center against the exact node id.
+			token = identity.ForwardedToken(h.assertionKey, identity.User{Username: "duck-api-node-auth", Role: identity.ReadOnly})
+			nodeCredential = r.Header.Get("X-Node-Credential")
+		}
+		h.handleXrayProxy(w, r, token, nodeCredential)
 		return
 	}
 	if strings.HasPrefix(r.URL.Path, "/api/v1/vault/") || r.URL.Path == "/api/v1/vault" {
@@ -999,7 +1038,7 @@ func (h *Handler) handleWireGuardProxy(w http.ResponseWriter, r *http.Request, t
 //	       -> Agent /agent/v1/xray/xray/v1/* -> XrayHost
 //	       -> xray.API -> RenderConfig + Runtime.Apply
 //	       -> /tmp/duckos-test/xray/xray run -c <path>
-func (h *Handler) handleXrayProxy(w http.ResponseWriter, r *http.Request, token string) {
+func (h *Handler) handleXrayProxy(w http.ResponseWriter, r *http.Request, token, nodeCredential string) {
 	if r.ContentLength > 1<<20 {
 		problem(w, r, 413, errorCategoryFromCode("payload_too_large"), "payload_too_large", "Xray payload exceeds 1 MiB.")
 		return
@@ -1008,7 +1047,7 @@ func (h *Handler) handleXrayProxy(w http.ResponseWriter, r *http.Request, token 
 	if r.Body != nil {
 		body = io.LimitReader(r.Body, 1<<20)
 	}
-	status, data, contentType, err := h.engine.XrayProxy(r.Context(), r.Method, r.URL.Path, r.URL.RawQuery, token, body)
+	status, data, contentType, err := h.engine.XrayProxy(r.Context(), r.Method, r.URL.Path, r.URL.RawQuery, token, nodeCredential, body)
 	if err != nil {
 		problem(w, r, 503, errorCategoryFromCode("agent_unavailable"), "agent_unavailable", err.Error())
 		return

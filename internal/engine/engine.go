@@ -1039,13 +1039,21 @@ const WakeMaxBytes = 4 << 10
 //	           RenderConfig + Runtime.Apply ->
 //	           /tmp/duckos-test/xray/xray run -c <path>
 //
+// nodeCredential carries the node-auth credential (X-Node-Credential)
+// for the two node-side rotation endpoints. It is accepted ONLY for
+// the canonical node-auth path — a credential on any other path is
+// rejected before the request is sent, and non-node-auth requests
+// never carry the header (no unrestricted forwarding of arbitrary
+// credential headers). The operator bearer token and the node
+// credential are independent principals; neither implies the other.
+//
 // rawQuery is the unparsed query string from the public
 // request (e.g. "server=ID&cursor=VAL"). It is forwarded
 // verbatim so Xray listing calls that pin a server or a
 // cursor survive the public→IPC boundary. An unparsable
 // or oversized rawQuery is rejected at this layer so
 // the Agent never sees a malformed envelope.
-func (e *Engine) XrayProxy(ctx context.Context, method, path, rawQuery, token string, body io.Reader) (status int, data []byte, contentType string, err error) {
+func (e *Engine) XrayProxy(ctx context.Context, method, path, rawQuery, token, nodeCredential string, body io.Reader) (status int, data []byte, contentType string, err error) {
 	if e == nil {
 		return 0, nil, "", errors.New("engine not configured")
 	}
@@ -1054,6 +1062,9 @@ func (e *Engine) XrayProxy(ctx context.Context, method, path, rawQuery, token st
 		tail = path
 	}
 	target := "http://agent" + agent.XrayPath + "/xray/v1/" + strings.TrimPrefix(tail, "/")
+	if nodeCredential != "" && !IsXrayNodeAuthPath(path) {
+		return 0, nil, "", errors.New("node credentials are only accepted on the node-auth route")
+	}
 	if err := validateRawQuery(rawQuery); err != nil {
 		return 0, nil, "", err
 	}
@@ -1066,6 +1077,9 @@ func (e *Engine) XrayProxy(ctx context.Context, method, path, rawQuery, token st
 	}
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	if nodeCredential != "" {
+		req.Header.Set("X-Node-Credential", nodeCredential)
 	}
 	resp, err := e.client.Do(req)
 	if err != nil {
@@ -1080,6 +1094,32 @@ func (e *Engine) XrayProxy(ctx context.Context, method, path, rawQuery, token st
 		return resp.StatusCode, nil, resp.Header.Get("Content-Type"), errors.New("Agent Xray response exceeds size limit")
 	}
 	return resp.StatusCode, data, resp.Header.Get("Content-Type"), nil
+}
+
+// IsXrayNodeAuthPath reports whether the public API path targets the
+// canonical node-only rotation route:
+//
+//	/api/v1/xray/center/node-auth/<node-id>/<pull|confirm>
+//
+// The match is strict: exactly one node-id segment and one operation
+// segment, no empty or traversal segments. Only these two paths are
+// admitted without an operator bearer and may carry the
+// X-Node-Credential header; every other xray path keeps the operator
+// authorization gate.
+func IsXrayNodeAuthPath(path string) bool {
+	rest, ok := strings.CutPrefix(path, "/api/v1/xray/center/node-auth/")
+	if !ok || rest == "" {
+		return false
+	}
+	parts := strings.Split(rest, "/")
+	if len(parts) != 2 {
+		return false
+	}
+	id, op := parts[0], parts[1]
+	if id == "" || op == "" || id == "." || op == "." || id == ".." || op == ".." {
+		return false
+	}
+	return op == "pull" || op == "confirm"
 }
 
 // VaultProxy proxies a public /api/v1/vault/* request to the

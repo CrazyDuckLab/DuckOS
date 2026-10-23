@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -86,19 +87,27 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		problem(w, 500, "center_unavailable", "Xray Center is not enabled.")
 		return
 	}
+	// Canonical center tail: the same normalization for BOTH the
+	// node-auth pre-gate and the operator dispatch. Production paths
+	// arrive as /xray/v1/center/*, fixtures and direct loopback use
+	// /center/* and the public proxy prefix; all three must resolve
+	// to the same operations (the production node-auth route was
+	// invisible when only the fixture prefix matched).
+	rest := trimCenterPath(h.Prefix, r.URL.Path)
 	// B4-03: node-auth routes are dispatched BEFORE the operator
 	// authorization gate and authenticate with the NODE credential
 	// only (bound to the exact node id, constant-time, rate
 	// limited). They grant nothing beyond pull/confirm of the
 	// node's own staged rotation. Every other operation still
 	// requires the operator ConfigureNetwork permission.
-	trimmedPath := strings.TrimPrefix(r.URL.Path, "/")
-	if strings.HasPrefix(trimmedPath, h.Prefix+"node-auth/") {
-		if h.NodeAuthRate != nil && !h.NodeAuthRate(r.RemoteAddr) {
+	if strings.HasPrefix(rest, "node-auth/") {
+		// Exactly ONE admission decision per request: the limiter is
+		// consulted here and nowhere else on the node-auth path.
+		if h.NodeAuthRate != nil && !h.NodeAuthRate(peerKey(r)) {
 			problem(w, 429, "rate_limited", "Too many node-auth attempts.")
 			return
 		}
-		h.serveNodeAuth(w, r, strings.TrimPrefix(trimmedPath, h.Prefix+"node-auth/"))
+		h.serveNodeAuth(w, r, strings.TrimPrefix(rest, "node-auth/"))
 		return
 	}
 	user := identity.User{}
@@ -112,14 +121,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		problem(w, 403, "forbidden", "Network write permission is required.")
 		return
 	}
-	rest := r.URL.Path
-	for _, p := range []string{h.Prefix, "/" + h.Prefix, "/xray/v1/" + h.Prefix} {
-		if strings.HasPrefix(rest, p) {
-			rest = strings.TrimPrefix(rest, p)
-			break
-		}
-	}
-	rest = strings.TrimPrefix(rest, "/")
 	// Least privilege: the delivery service principal may render
 	// content and validate delivery tokens — nothing else. Every
 	// other center operation is refused for it even when its token
@@ -156,6 +157,31 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		problem(w, 404, "not_found", "Unknown Xray Center operation.")
 	}
+}
+
+// trimCenterPath resolves a request path to the canonical center
+// operation tail ("nodes", "node-auth/<id>/<op>", …). Production
+// mounts the center under /xray/v1/center/*, the public proxy
+// exposes it under its own prefix and tests/loopback use /center/*;
+// node-auth admission must see all three forms.
+func trimCenterPath(prefix, path string) string {
+	for _, p := range []string{prefix, "/" + prefix, "/xray/v1/" + prefix} {
+		if strings.HasPrefix(path, p) {
+			return strings.TrimPrefix(strings.TrimPrefix(path, p), "/")
+		}
+	}
+	return strings.TrimPrefix(path, "/")
+}
+
+// peerKey reduces a request's peer address to the stable host part:
+// ephemeral source ports must not churn the rate-limit key (a
+// client rotating ports would otherwise get a fresh budget per
+// request). Spoofable forwarded headers are deliberately ignored.
+func peerKey(r *http.Request) string {
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return host
+	}
+	return r.RemoteAddr
 }
 
 /* — nodes — */
@@ -674,23 +700,26 @@ func (h *Handler) serveNodeAuth(w http.ResponseWriter, r *http.Request, rest str
 		problem(w, 501, "nodes_unavailable", "Node management is not enabled.")
 		return
 	}
-	// Reached only through the pre-operator node-auth dispatch; no
-	// operator bearer is required or honored here.
-	peer := r.RemoteAddr
-	if h.NodeAuthRate != nil && !h.NodeAuthRate(peer) {
-		problem(w, 429, "rate_limited", "Too many node-auth attempts.")
-		return
-	}
+	// Rate-limit admission already happened exactly once in the
+	// node-auth pre-gate; this handler never charges the limiter
+	// again (double admission halved the effective budget).
 	credential := r.Header.Get("X-Node-Credential")
 	if credential == "" || len(credential) > 256 {
 		problem(w, 400, "invalid_request", "Missing node credential.")
 		return
 	}
-	// The node id comes from the path segment; the credential is
-	// verified against THAT node only.
-	parts := strings.SplitN(rest, "/", 2)
-	if len(parts) != 2 || parts[0] == "" {
-		problem(w, 400, "invalid_request", "Node auth needs a node id and an operation.")
+	// Canonical path contract: exactly "<node-id>/<op>", no empty
+	// segments, no traversal and no operation suffixes. The node id
+	// comes from the path segment; the credential is verified
+	// against THAT node only.
+	if r.URL.RawPath != "" {
+		problem(w, 404, "not_found", "Unknown node-auth operation.")
+		return
+	}
+	parts := strings.Split(rest, "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" ||
+		parts[0] == "." || parts[1] == "." || parts[0] == ".." || parts[1] == ".." {
+		problem(w, 404, "not_found", "Unknown node-auth operation.")
 		return
 	}
 	nodeID, op := parts[0], parts[1]

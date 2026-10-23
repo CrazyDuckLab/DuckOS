@@ -2165,7 +2165,8 @@ func xrayNodesCmd(args []string) error {
 			return authedCall(cf, http.MethodPost, "/api/v1/xray/center/nodes/"+*id+"/"+op, body, "xray nodes "+op)
 		}
 	case "pull-rotation":
-		// NODE SIDE (B4-01): durable adoption protocol.
+		// NODE SIDE (B4-01): durable adoption + controller-
+		// authoritative recovery.
 		//   1. Pull the staged credential (auth: current credential).
 		//   2. Persist it as PENDING in the local NodeIdentity store
 		//      (fsync + dir fsync) BEFORE contacting the controller
@@ -2174,18 +2175,27 @@ func xrayNodesCmd(args []string) error {
 		//      (CommitNotCommitted / CommitUncertain / success).
 		//   4. Only after the controller commit is proven durable,
 		//      finalize locally: pending → current.
-		// A local pending state survives restarts and lets a later
-		// invocation resume (confirm retry) or safely report state.
+		// A PENDING state is NEVER finalized locally just because it
+		// exists: recovery (--finalize) re-confirms against the
+		// authoritative controller first and promotes only on a
+		// proven commit. The pending plaintext lives only in the
+		// local 0600 identity store, so recovery never needs the
+		// secret in argv, on stdout or in shell history.
 		fs := flag.NewFlagSet("xray nodes pull-rotation", flag.ContinueOnError)
 		cf := addCommonFlags(fs)
 		id := fs.String("id", "", "Node id")
 		cred := fs.String("credential", "", "Current node credential")
-		identityDir := fs.String("identity-dir", "/var/lib/duckos-agent/center/node-self", "Node identity directory (durable)")
+		identityDir := fs.String("identity-dir", "/var/lib/duckos-agent/xray/center/node-self", "Node identity directory (durable; the agent's xray catalog directory + /center/node-self)")
+		finalize := fs.Bool("finalize", false, "Recover an interrupted rotation: re-confirm the pending credential against the controller and finalize locally only on a proven controller commit")
+		finalizeStdin := fs.Bool("finalize-stdin", false, "Recover like --finalize, reading the pending new credential from stdin (protected input; never argv)")
 		if err := fs.Parse(rest); err != nil {
 			return err
 		}
-		if *id == "" || *cred == "" || *identityDir == "" {
-			return errors.New("xray nodes pull-rotation: --id, --credential and --identity-dir are required")
+		if fs.NArg() > 0 {
+			return fmt.Errorf("pull-rotation: unexpected argument %q: the pending credential is read from the local identity store or --finalize-stdin, never from the command line", fs.Arg(0))
+		}
+		if *id == "" || *identityDir == "" {
+			return errors.New("xray nodes pull-rotation: --id and --identity-dir are required")
 		}
 		identity, err := xnode.OpenNodeIdentity(*identityDir)
 		if err != nil {
@@ -2194,34 +2204,64 @@ func xrayNodesCmd(args []string) error {
 		if !identity.Adopted() {
 			return errors.New("pull-rotation: local node identity is not adopted; run enrollment first")
 		}
-		// Resume: the identity store keeps only the pending HASH, so
-		// an interrupted run cannot recover the plaintext itself.
-		// The exact-state contract: report the pending state and let
-		// the operator finalize with the saved credential
-		// (--finalize), which verifies against the durable pending
-		// hash without any network access.
-		finalize := fs.String("finalize", "", "Finalize an interrupted rotation with the saved new credential (no network)")
-		if err := fs.Parse(rest); err != nil {
-			return err
+		confirmToController := func(credential string) (string, error) {
+			if cf.endpoint != "" {
+				u, perr := url.Parse(cf.endpoint)
+				if perr != nil {
+					return "", fmt.Errorf("pull-rotation: bad endpoint: %w", perr)
+				}
+				if u.Scheme != "https" && !isLoopbackHost(u.Hostname()) && !cf.insecure {
+					return "", errors.New("pull-rotation: plain-HTTP non-loopback endpoint requires --allow-insecure")
+				}
+				return nodeAuthDirectState(cf.endpoint, *id, "confirm", credential)
+			}
+			return nodeAuthCall(cf, "/api/v1/xray/center/node-auth/"+*id+"/confirm", credential)
 		}
 		if identity.HasPending() {
-			if *finalize == "" {
-				return errors.New("pull-rotation: an interrupted rotation has a PENDING credential in the local identity store; resume with --finalize <new-credential> (saved when it was displayed), or inspect the state and start a new rotation only after cancelling it controller-side")
+			if !*finalize && !*finalizeStdin {
+				return errors.New("pull-rotation: an interrupted rotation has a PENDING credential in the local identity store; the plain flow refuses to run over it. Recovery: re-run with --finalize (uses the credential durably stored in the local identity store) — the controller outcome is re-verified and the local transition is finalized only after a proven controller commit")
 			}
-			if err := identity.ConfirmPending(*finalize); err != nil {
-				return fmt.Errorf("pull-rotation: finalize rejected: %w", err)
+			pending, ok := identity.PendingCredential()
+			if !ok && *finalizeStdin {
+				raw, rerr := io.ReadAll(io.LimitReader(os.Stdin, 4096))
+				if rerr != nil {
+					return fmt.Errorf("pull-rotation: reading the finalize credential from stdin: %w", rerr)
+				}
+				pending = strings.TrimSpace(string(raw))
 			}
-			fmt.Println("rotation finalized: local identity now uses the pending credential")
+			if pending == "" {
+				return errors.New("pull-rotation: the pending credential plaintext is not in the local identity store; pipe it via --finalize-stdin (or cancel the rotation controller-side and start a new one)")
+			}
+			if !identity.PendingHashMatches(pending) {
+				return errors.New("pull-rotation: the presented credential does not match the durable pending transition")
+			}
+			state, cerr := confirmToController(pending)
+			if cerr != nil {
+				return fmt.Errorf("pull-rotation: recovery could not verify the controller outcome; pending state preserved (fail-closed — local finalization without controller proof would strand the node): %w", cerr)
+			}
+			if state != "CONFIRMED" {
+				return fmt.Errorf("pull-rotation: unexpected controller state %q; pending state preserved", state)
+			}
+			if err := identity.Commit(pending); err != nil {
+				return fmt.Errorf("pull-rotation: local finalization failed (controller already committed; rerun with --finalize): %w", err)
+			}
+			fmt.Println("rotation complete: controller confirmed the pending credential; local identity finalized")
 			return nil
 		}
-		if *finalize != "" {
-			_ = *finalize
+		if *cred == "" {
+			return errors.New("xray nodes pull-rotation: --credential is required")
+		}
+		// Guard against rerunning a completed rotation with the old
+		// credential: before any network I/O, the presented
+		// credential must authenticate the local identity.
+		if !identity.Accepts(*cred) {
+			return errors.New("pull-rotation: the provided credential does not authenticate the local identity; if a rotation already completed, use the new credential or inspect the identity store")
 		}
 		// node-auth routes use the node credential only; the
 		// operator --endpoint/--token-file/--allow-insecure common
 		// flags address the controller for the direct HTTP path.
 		var newCred string
-		if cf.endpoint != "" && *identityDir != "" {
+		if cf.endpoint != "" {
 			u, perr := url.Parse(cf.endpoint)
 			if perr != nil {
 				return fmt.Errorf("pull-rotation: bad endpoint: %w", perr)
@@ -2243,34 +2283,39 @@ func xrayNodesCmd(args []string) error {
 			return errors.New("pull-rotation: no staged credential returned")
 		}
 		// B4-01 step 5: durable pending BEFORE controller confirm.
-		// The plaintext is displayed once for the resume path.
-		fmt.Println("NEW-CREDENTIAL (saved for --finalize recovery; shown once):")
-		fmt.Println(newCred)
+		// The plaintext is kept only in the local identity store;
+		// it is never printed, never placed in argv.
 		if err := identity.BeginTransition(newCred); err != nil {
 			return fmt.Errorf("pull-rotation: pending credential NOT durably committed locally; controller was not asked to confirm: %w", err)
 		}
 		fmt.Println("pending credential durably stored; confirming to controller...")
 		var state string
 		var cerr error
-		if cf.endpoint != "" {
-			state, cerr = nodeAuthDirectState(cf.endpoint, *id, "confirm", newCred)
-		} else {
-			state, cerr = nodeAuthCall(cf, "/api/v1/xray/center/node-auth/"+*id+"/confirm", newCred)
-		}
+		state, cerr = confirmToController(newCred)
 		if cerr != nil {
-			// The local pending state survives; a later invocation
-			// resumes with confirm (the controller tombstone makes
-			// the retry idempotent even after a lost ack).
-			return fmt.Errorf("pull-rotation: controller confirm failed; local pending credential preserved for resume: %w", cerr)
+			// The local pending state survives; recovery with
+			// --finalize re-confirms against the controller (the
+			// tombstone makes the retry idempotent even after a
+			// lost ack) and never assumes a commit that was not
+			// proven.
+			return fmt.Errorf("pull-rotation: controller confirm failed; local pending credential preserved; recover with --finalize: %w", cerr)
 		}
 		if state != "CONFIRMED" {
 			return fmt.Errorf("pull-rotation: unexpected controller state %q; local pending preserved", state)
 		}
 		// Controller commit proven → finalize locally.
 		if err := identity.Commit(newCred); err != nil {
-			return fmt.Errorf("pull-rotation: local finalization failed (controller already committed; keep the new credential): %w", err)
+			// CommitUncertain means the rename landed but directory
+			// durability is unconfirmed: the local side most likely
+			// already runs on the new credential. A NotCommitted
+			// failure keeps the pending transition, which --finalize
+			// recovery can converge against the controller tombstone.
+			if identity.Accepts(newCred) {
+				return fmt.Errorf("pull-rotation: local finalization outcome UNCERTAIN (the local identity already authenticates the new credential; verify before rerunning): %w", err)
+			}
+			return fmt.Errorf("pull-rotation: local finalization failed (controller already committed; rerun with --finalize): %w", err)
 		}
-		fmt.Println("rotation complete: local identity finalized to the new credential")
+		fmt.Println("rotation complete: controller and the local node identity now use the new credential")
 		return nil
 	case "rotate":
 		// Full rotation delivery: generate (coordinator), deliver
@@ -2376,7 +2421,19 @@ func nodeAuthDirectState(endpoint, nodeID, op, credential string) (string, error
 }
 
 func nodeAuthDirectFull(endpoint, nodeID, op, credential string) (string, string, error) {
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+		// Secret containment (independent re-audit finding): node
+		// credentials must NEVER follow redirects. A 307 from a
+		// compromised or misconfigured controller would otherwise
+		// relay X-Node-Credential — including to a foreign origin
+		// over plaintext HTTP. Redirects are disabled outright: the
+		// first non-2xx response surfaces as a plain error, the
+		// credential never leaves the original origin.
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 	req, err := http.NewRequest(http.MethodPost,
 		strings.TrimSuffix(endpoint, "/")+"/api/v1/xray/center/node-auth/"+url.PathEscape(nodeID)+"/"+op,
 		nil)

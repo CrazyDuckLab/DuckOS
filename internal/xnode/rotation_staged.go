@@ -36,6 +36,7 @@ package xnode
 import (
 	"crypto/hmac"
 	"errors"
+	"fmt"
 )
 
 // RotationState is the operator-visible staged rotation state.
@@ -114,6 +115,19 @@ func (m *Manager) ConfirmStagedRotation(nodeID, newCredential string) (RotationS
 		return RotationNone, err
 	}
 	newHash := hashToken("xnode-cred", newCredential)
+	// Lifecycle gate BEFORE any replay: the node must still exist and
+	// be operational. A revoked or suspended identity never receives
+	// a successful confirmation outcome — not even the idempotent
+	// replay of a rotation completed before the revocation (the
+	// registry itself is the authority; a tombstone must never
+	// resurrect a dead node's status).
+	node, ok := m.nodes[nodeID]
+	if !ok || node.Status == StatusRevoked {
+		return RotationNone, errors.New("xnode: node is unknown or revoked")
+	}
+	if node.Status != StatusActive && node.Status != StatusStale {
+		return RotationNone, fmt.Errorf("xnode: node status %q cannot confirm rotations", node.Status)
+	}
 	// B4-02 idempotent replay: this exact credential was already
 	// durably committed for this node.
 	if m.completed[nodeID] == newHash {
@@ -126,25 +140,31 @@ func (m *Manager) ConfirmStagedRotation(nodeID, newCredential string) (RotationS
 	if !hmac.Equal([]byte(staged.newHash), []byte(newHash)) {
 		return RotationNone, errors.New("xnode: confirmation credential does not match the staged rotation")
 	}
-	node, ok := m.nodes[nodeID]
-	if !ok || node.Status == StatusRevoked {
-		return RotationNone, errors.New("xnode: node is unknown or revoked")
-	}
 	prevHash := node.CredentialHash
 	node.CredentialHash = staged.newHash
-	res, perr := m.persistLocked()
-	if perr != nil {
-		if !res.Uncertain {
-			node.CredentialHash = prevHash
-		}
-		return RotationNone, m.commitOutcomeLocked(res, perr, "staged rotation commit")
-	}
-	// Durable tombstone (bounded): survives controller restarts via
-	// the registry persistence hook.
+	// The tombstone MUST be recorded BEFORE the durable snapshot is
+	// built: persistLocked serializes m.completed, and a tombstone
+	// written after the snapshot would be lost on controller restart
+	// (durable retry would then report "no staged rotation" although
+	// the credential committed). Credential hash and confirmation
+	// record now commit as ONE authoritative snapshot.
 	if len(m.completed) >= 256 {
 		m.completed = map[string]string{} // bounded reset; history is advisory metadata
 	}
 	m.completed[nodeID] = staged.newHash
+	res, perr := m.persistLocked()
+	if perr != nil {
+		if !res.Uncertain {
+			// NOT_COMMITTED: the durable state is unchanged and
+			// remains authoritative — roll the in-memory state back.
+			node.CredentialHash = prevHash
+			delete(m.completed, nodeID)
+		}
+		// COMMIT_UNCERTAIN: the restrictive NEW state (hash +
+		// tombstone) is retained in memory and possibly on disk;
+		// the degraded gate blocks further mutations.
+		return RotationNone, m.commitOutcomeLocked(res, perr, "staged rotation commit")
+	}
 	delete(m.staged, nodeID)
 	return RotationConfirmed, nil
 }
@@ -162,20 +182,22 @@ func (m *Manager) CancelStagedRotation(nodeID string) error {
 }
 
 // RotationStatus reports the operator-visible staged rotation state.
+// An in-flight (fresh) staged rotation ALWAYS takes precedence over
+// an older completed tombstone: a new PENDING/DELIVERED rotation is
+// never masked by the previous rotation's confirmation record.
 func (m *Manager) RotationStatus(nodeID string) RotationState {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+	if staged, ok := m.staged[nodeID]; ok {
+		if staged.delivered {
+			return RotationDelivered
+		}
+		return RotationPending
+	}
 	if _, done := m.completed[nodeID]; done {
 		return RotationConfirmed
 	}
-	staged, ok := m.staged[nodeID]
-	if !ok {
-		return RotationNone
-	}
-	if staged.delivered {
-		return RotationDelivered
-	}
-	return RotationPending
+	return RotationNone
 }
 
 // authenticateLocked is the lock-free core of Authenticate for

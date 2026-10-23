@@ -28,13 +28,14 @@ const testToken = "synthetic-test-token-not-a-real-credential-123456789"
 const testAssertionKey = "synthetic-agent-assertion-key-for-tests-123456"
 
 type testEngine struct {
-	failed      bool
-	calls       int
-	wgCalls     int
-	xrayCalls   int
-	lastWGToken string
-	lastXRToken string
-	lastToken   string
+	failed         bool
+	calls          int
+	wgCalls        int
+	xrayCalls      int
+	lastWGToken    string
+	lastXRToken    string
+	lastXRNodeCred string
+	lastToken      string
 }
 
 func (e *testEngine) Overview(context.Context) ([]byte, error) {
@@ -150,9 +151,10 @@ func (e *testEngine) WireGuardProxy(_ context.Context, _, _, _, token string, _ 
 	e.lastWGToken = token
 	return 200, []byte(`{"ok":true}`), "application/json", nil
 }
-func (e *testEngine) XrayProxy(_ context.Context, _, _, _, token string, _ io.Reader) (int, []byte, string, error) {
+func (e *testEngine) XrayProxy(_ context.Context, _, _, _, token, nodeCredential string, _ io.Reader) (int, []byte, string, error) {
 	e.xrayCalls++
 	e.lastXRToken = token
+	e.lastXRNodeCred = nodeCredential
 	return 200, []byte(`{"ok":true}`), "application/json", nil
 }
 func (e *testEngine) VaultProxy(_ context.Context, _, _, _, token string, _ io.Reader) (int, []byte, string, error) {

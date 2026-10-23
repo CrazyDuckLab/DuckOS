@@ -22,6 +22,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -34,8 +35,16 @@ type NodeIdentityDocument struct {
 	CurrentHash string `json:"currentHash"`
 	// PendingHash, when set, authenticates during an interrupted or
 	// in-flight rotation transition.
-	PendingHash string    `json:"pendingHash,omitempty"`
-	AdoptedAt   time.Time `json:"adoptedAt"`
+	PendingHash string `json:"pendingHash,omitempty"`
+	// PendingCredential is the plaintext of the pending (transition)
+	// credential, kept ONLY in this 0600 store so an interrupted
+	// rotation stays recoverable without ever exposing the secret
+	// through argv, stdout or shell history. It is cleared when the
+	// transition commits. The plaintext never leaves the node's own
+	// durable secret domain (the same trust boundary that guards the
+	// Xray vault references).
+	PendingCredential string    `json:"pendingCredential,omitempty"`
+	AdoptedAt         time.Time `json:"adoptedAt"`
 }
 
 func nodeCredentialHash(credential string) string {
@@ -116,6 +125,7 @@ func (n *NodeIdentity) BeginTransition(newCredential string) error {
 		return errors.New("xnode: identity not adopted")
 	}
 	doc.PendingHash = nodeCredentialHash(newCredential)
+	doc.PendingCredential = newCredential
 	out, err := n.file.Update(func(cur *NodeIdentityDocument) { *cur = doc })
 	if err != nil || out == persist.CommitUncertain {
 		return fmt.Errorf("xnode: rotation transition not durably committed (outcome=%s): %w", out, err)
@@ -140,6 +150,7 @@ func (n *NodeIdentity) Commit(newCredential string) error {
 	}
 	doc.CurrentHash = pending
 	doc.PendingHash = ""
+	doc.PendingCredential = ""
 	out, err := n.file.Update(func(cur *NodeIdentityDocument) { *cur = doc })
 	if err != nil || out == persist.CommitUncertain {
 		return fmt.Errorf("xnode: rotation commit not durably committed (outcome=%s): %w", out, err)
@@ -148,21 +159,60 @@ func (n *NodeIdentity) Commit(newCredential string) error {
 }
 
 // PendingCredential reports a durably stored pending (transition)
-// credential, if any. Used by the CLI resume path after an
-// interrupted rotation.
+// credential, if any. Used by the CLI recovery path after an
+// interrupted rotation: the plaintext lives only in the node's own
+// 0600 identity store, so recovery never needs the secret in argv,
+// on stdout or in shell history.
 func (n *NodeIdentity) PendingCredential() (string, bool) {
 	n.mu.RLock()
 	defer n.mu.RUnlock()
 	doc := n.file.Get()
-	if doc.PendingHash == "" {
+	if doc.PendingHash == "" || doc.PendingCredential == "" {
 		return "", false
 	}
-	// The store keeps hashes only; the CLI resume path re-derives
-	// the plaintext from the operator-supplied value. A pending
-	// hash alone cannot be reversed, so the resume contract is:
-	// the operator re-runs pull-rotation with the NEW credential
-	// they saved; if it matches the pending hash, confirm proceeds.
-	return "", false
+	// Integrity guard: only return the plaintext when it matches the
+	// durable pending hash (a partially written or tampered document
+	// must not surface a credential).
+	if !hmac.Equal([]byte(doc.PendingHash), []byte(nodeCredentialHash(doc.PendingCredential))) {
+		return "", false
+	}
+	return doc.PendingCredential, true
+}
+
+// PendingHashMatches reports whether the presented credential equals
+// the durably pending one, without promoting anything.
+func (n *NodeIdentity) PendingHashMatches(credential string) bool {
+	if credential == "" {
+		return false
+	}
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	doc := n.file.Get()
+	return doc.PendingHash != "" &&
+		hmac.Equal([]byte(doc.PendingHash), []byte(nodeCredentialHash(credential)))
+}
+
+// Reload re-reads the durable identity document from disk into the
+// in-memory mirror. The node control-plane calls this before every
+// authentication decision so a rotation completed by ANOTHER process
+// (the duck CLI) is adopted by the RUNNING NodeServer immediately:
+// updating the file alone must not leave the live runtime on a stale
+// in-memory credential. An unreadable document keeps the in-memory
+// state (fail-closed: the server keeps authenticating with what it
+// last knew rather than locking itself out on a transient I/O error).
+func (n *NodeIdentity) Reload() error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if err := n.file.Reload(); err != nil {
+		// A missing document means the identity was never written
+		// yet; the in-memory (zero or adopted) state stays
+		// authoritative in that case.
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 // ConfirmPending verifies the presented new credential against the
@@ -177,6 +227,7 @@ func (n *NodeIdentity) ConfirmPending(newCredential string) error {
 	}
 	doc.CurrentHash = pending
 	doc.PendingHash = ""
+	doc.PendingCredential = ""
 	out, err := n.file.Update(func(cur *NodeIdentityDocument) { *cur = doc })
 	if err != nil || out == persist.CommitUncertain {
 		return fmt.Errorf("xnode: local finalization not durably committed (outcome=%s): %w", out, err)

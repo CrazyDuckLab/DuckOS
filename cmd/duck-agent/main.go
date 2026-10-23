@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"net"
 	"net/http"
 	"net/netip"
 	"os"
@@ -1171,12 +1172,17 @@ func enableXrayCenter(catalogDir string, access identityAccess, cat *xray.FileCa
 
 // nodeAuthLimiter returns a bounded per-peer fixed-window limiter
 // for the node-auth endpoints (B4-03): 60 attempts/min/peer, hard
-// cap on tracked peers.
+// cap on tracked peers. The key is the stable source HOST: the
+// ephemeral source port is stripped so port churn cannot mint a
+// fresh budget, and spoofable forwarded headers are never trusted.
 func nodeAuthLimiter() func(string) bool {
 	var mu sync.Mutex
 	hits := map[string]int{}
 	var windowStart time.Time
 	return func(peer string) bool {
+		if host, _, err := net.SplitHostPort(peer); err == nil {
+			peer = host
+		}
 		mu.Lock()
 		defer mu.Unlock()
 		now := time.Now()

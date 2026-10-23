@@ -51,6 +51,10 @@ import (
 	"github.com/CrazyDuckLab/DuckOS/internal/xray"
 )
 
+// nodeAuthTailMarker is the canonical node-auth route inside the
+// Xray IPC surface (after the /agent/v1/xray prefix is stripped).
+const nodeAuthTailMarker = "/xray/v1/center/node-auth/"
+
 // XrayPath is the IPC route prefix for the production
 // Xray host. The prefix is the canonical mount point;
 // the public API proxies /api/v1/xray/* to this loopback.
@@ -110,6 +114,33 @@ func (h *XrayHost) SetTimeout(d time.Duration) {
 	h.timeout = d
 }
 
+// nodeAuthTail matches the canonical node-auth tail of an XrayHost
+// request (after the /agent/v1/xray prefix is stripped):
+// /xray/v1/center/node-auth/<node-id>/<pull|confirm>. The match is
+// strict: exactly one node-id segment and one operation segment, no
+// empty or traversal segments, no percent-encoding tricks. Node-auth
+// requests are admitted to the Center's own node-credential check —
+// never to operator operations.
+func nodeAuthTail(tail string) (nodeID, op string, ok bool) {
+	rest, found := strings.CutPrefix(tail, nodeAuthTailMarker)
+	if !found || rest == "" {
+		return "", "", false
+	}
+	parts := strings.Split(rest, "/")
+	if len(parts) != 2 {
+		return "", "", false
+	}
+	id, operation := parts[0], parts[1]
+	if id == "" || operation == "" ||
+		id == "." || operation == "." || id == ".." || operation == ".." {
+		return "", "", false
+	}
+	if operation != "pull" && operation != "confirm" {
+		return "", "", false
+	}
+	return id, operation, true
+}
+
 // ServeHTTP dispatches /agent/v1/xray/* to the
 // underlying xray.API. The host enforces the
 // authorisation gate (ConfigureNetwork) on every
@@ -118,13 +149,36 @@ func (h *XrayHost) SetTimeout(d time.Duration) {
 // stripped from r.URL.Path before the xray.API sees
 // the request so the API's own prefix matcher
 // (/xray/v1/) sees the canonical tail.
+//
+// The single exception is the node-auth route: those two POST
+// endpoints authenticate with the NODE credential at the Center
+// boundary (bounded admission, exact node-id binding), so the host
+// only verifies that the caller carries a valid forwarded IPC token
+// (Observe — the lowest permission) instead of an operator's
+// ConfigureNetwork. A node credential therefore never gains operator
+// privileges, and an operator token is never required for a
+// legitimate node Pull/Confirm.
 func (h *XrayHost) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.mu.Lock()
 	src := h.Source
 	acc := h.Access
 	timeout := h.timeout
 	h.mu.Unlock()
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+	tail := strings.TrimPrefix(r.URL.EscapedPath(), XrayPath)
+	_, _, isNodeAuth := nodeAuthTail(tail)
+	if isNodeAuth {
+		if r.Method != http.MethodPost || r.URL.RawPath != "" {
+			xrayProblem(w, 405, "method_not_allowed", "Node auth is POST-only.")
+			return
+		}
+		// Preserve the API→Agent IPC boundary: the request must
+		// still carry a valid forwarded token; node-auth just does
+		// not require operator-level permissions.
+		if _, err := acc.Authorize(extractBearer(r), identity.Observe); err != nil {
+			xrayProblem(w, 403, "forbidden", "Agent IPC authorization is required.")
+			return
+		}
+	} else if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		if _, err := acc.Authorize(extractBearer(r), identity.ConfigureNetwork); err != nil {
 			xrayProblem(w, 403, "forbidden", "Network write permission is required.")
 			return
@@ -139,8 +193,8 @@ func (h *XrayHost) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	r = r.WithContext(ctx)
 	// Strip the /agent/v1/xray prefix so the xray.API
-	// sees the canonical /xray/v1/ path.
-	tail := strings.TrimPrefix(r.URL.EscapedPath(), XrayPath)
+	// sees the canonical /xray/v1/ path (the tail was
+	// computed above for the node-auth route decision).
 	if tail == "" {
 		tail = "/"
 	}
