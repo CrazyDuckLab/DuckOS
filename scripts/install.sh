@@ -258,6 +258,70 @@ has_path() {
   for present in "${manifest_paths[@]}"; do [[ "$present" != "$candidate" ]] || return 0; done
   return 1
 }
+verify_elf() {
+  # Python integers do not wrap at 64 bits. Bounds use subtraction/division
+  # before indexing, including malicious UINT64_MAX offsets and counts.
+  command -v python3 >/dev/null 2>&1 || fail 'python3 is required for ELF integrity verification.'
+  python3 - "$1" "$2" <<'PYELF'
+import pathlib
+import struct
+import sys
+
+path = pathlib.Path(sys.argv[1])
+expected_class = int(sys.argv[2], 16)
+data = path.read_bytes()
+
+def reject(message):
+    sys.exit(f"DuckOS installer: {path.name}: ELF {message}")
+
+def extent(offset, count, stride, label):
+    if offset < 0 or offset > len(data) or stride <= 0 or count > (len(data) - offset) // stride:
+        reject(f"{label} exceeds file bounds (truncated binary?)")
+
+header_size, section_size, program_size = (52, 40, 32) if expected_class == 1 else (64, 64, 56)
+if len(data) < header_size:
+    reject("header is incomplete (truncated binary?)")
+if data[:7] != b"\x7fELF" + bytes([expected_class, 1, 1]):
+    reject("class, little-endian encoding or identification version is invalid")
+fmt = "<16sHHIIIIIHHHHHH" if expected_class == 1 else "<16sHHIQQQIHHHHHH"
+_, kind, _, version, _, phoff, shoff, _, ehsize, phentsize, phnum, shentsize, shnum, shstrndx = struct.unpack_from(fmt, data)
+if kind != 2 or version != 1 or ehsize != header_size:
+    reject("executable type, version or header size is invalid")
+# Extended numbering is not used by supported Go release binaries. Reject it
+# explicitly rather than treating zero/escape counts as a valid empty table.
+if shnum == 0 or shstrndx == 0xffff or phnum == 0xffff:
+    reject("extended or missing section/program numbering is unsupported")
+if shoff < header_size or shentsize != section_size or shstrndx >= shnum:
+    reject("section header layout or string-table index is invalid")
+extent(shoff, shnum, shentsize, "section header table")
+section_fmt = "<IIIIIIIIII" if expected_class == 1 else "<IIQQQQIIQQ"
+for index in range(shnum):
+    fields = struct.unpack_from(section_fmt, data, shoff + index * shentsize)
+    _, section_type, _, _, offset, size, _, _, alignment, _ = fields
+    if index == 0 and any(fields):
+        reject("null section header is malformed")
+    if alignment and alignment & (alignment - 1):
+        reject("section alignment is not a power of two")
+    if section_type != 8:  # SHT_NOBITS occupies memory, not file bytes.
+        extent(offset, size, 1, "section data")
+    if index == shstrndx and index != 0 and section_type != 3:
+        reject("section-name string table has the wrong type")
+if phnum:
+    if phoff < header_size or phentsize != program_size:
+        reject("program header layout is invalid")
+    extent(phoff, phnum, phentsize, "program header table")
+    for index in range(phnum):
+        fields = struct.unpack_from("<IIIIIIII" if expected_class == 1 else "<IIQQQQQQ", data, phoff + index * phentsize)
+        if expected_class == 1:
+            kind, offset, _, _, filesz, memsz, _, _ = fields
+        else:
+            kind, _, offset, _, _, filesz, memsz, _ = fields
+        extent(offset, filesz, 1, "program data")
+        if kind == 1 and filesz > memsz:
+            reject("load segment file size exceeds memory size")
+PYELF
+}
+
 verify_artifact() {
   local root=$1 entry relative line expected actual binary magic machine metadata metadata_pattern scan_complete=false count=0 entries=0 total_bytes=0
   [[ -f "$root/SHA256SUMS" && ! -L "$root/SHA256SUMS" ]] || fail 'Missing regular SHA256SUMS.'
@@ -356,17 +420,7 @@ verify_artifact() {
     magic=$(od -An -tx1 -N5 "$root/bin/$binary" | tr -d ' \n')
     machine=$(od -An -tx1 -j18 -N2 "$root/bin/$binary" | tr -d ' \n')
     [[ "$magic" == "7f454c46$expected_elf_class" && "$machine" == "$expected_elf_machine" ]] || fail "$binary must be a Linux $arch_label binary; got ELF magic ${magic:0:14} e_machine ${machine:-??}."
-    # F3: truncation detection. A header-preserved truncated binary
-    # checksums consistently, so the section header table must fit
-    # inside the actual file (target machines are little-endian).
-    binary_size=$(wc -c < "$root/bin/$binary")
-    shoff=$(od -An -tu8 -j40 -N8 "$root/bin/$binary" | tr -d ' ')
-    shentsize=$(od -An -tu2 -j58 -N2 "$root/bin/$binary" | tr -d ' ')
-    shnum=$(od -An -tu2 -j60 -N2 "$root/bin/$binary" | tr -d ' ')
-    [[ "$shoff" =~ ^[0-9]+$ && "$shentsize" =~ ^[0-9]+$ && "$shnum" =~ ^[0-9]+$ ]] || fail "$binary: ELF section header fields are unreadable."
-    [[ "$shoff" -gt 0 && "$shentsize" -gt 0 && "$shnum" -gt 0 ]] || fail "$binary: ELF section header table is missing (truncated binary?)."
-    sh_end=$((shoff + shnum * shentsize))
-    [[ "$sh_end" -le "$binary_size" ]] || fail "$binary: ELF section header table exceeds file size (truncated binary?)."
+    verify_elf "$root/bin/$binary" "$expected_elf_class"
   done
   # F3: binary/service compatibility — the packaged launcher unit must
   # execute the packaged launcher binary from the release tree.
