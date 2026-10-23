@@ -1,3 +1,50 @@
+# Beta.3 final Router Core qualification and release provenance
+
+Status: **Router Core GO accepted by the release owner; publication pending**.
+Qualified executable baseline: `2e0c5afa089649a3238c543a82624075a9bc816e`.
+
+The release owner reports completed native Linux AMD64 Router Core regression,
+firewall/NAT packet, installer, real systemd startup, authenticated readiness,
+service restart and VM reboot persistence qualification on that exact baseline.
+This section records that accepted prior qualification. No new live run is
+claimed by the documentation/snapshot preparation. Older reports below are
+historical evidence with their original SHA and limits, not additional passes.
+
+The final release source commit adds documentation and snapshot hygiene only.
+Release verification must prove executable sources, units, installer/build
+scripts and lockfiles are byte-identical to this baseline. `BUILD-INFO.json`
+records the final release SHA; the approval manifest records both SHAs.
+
+| Finding | Remediation present in qualified code |
+|---|---|
+| F1 text-parser bypass | Whole-batch lexing with quote/comment/escape handling before authorization; adversarial regression fixtures |
+| F2 JSON-wrapper ambiguity | Strict nested object schema, allowlists and duplicate-key rejection |
+| F3 incomplete payload admission | Mandatory nft launcher binary/unit, required core ELF headers, executable modes and truncation checks |
+| F4 PCP wire format | RFC-derived opcode/header/MAP/lifetime fixtures and corrected codec; ANNOUNCE/MAP subset only |
+| F5 startup/recovery race | Dynamic launcher availability and bounded journal recovery retry |
+| F6 failed-install bookkeeping | Created/pre-existing launcher handling and fault-injection regression coverage |
+| F7 foreign reads | Owned-table capture and server-side filtered global observation |
+| F8 resource pressure | Connection/execution/queued-byte bounds, admission deadlines and overload recovery tests |
+
+F1/F2/F5/F7/F8 remediation is in `ebdf3cd`, F3/F6 in `62f46cf`, F4 in
+`33ee2e8`; `2e0c5af` adds nft launcher `NoNewPrivileges=yes`. These references
+identify source changes; they are not fabricated fresh execution logs.
+
+AMD64 VM execution is distinct from fresh release cross-build/inventory checks.
+ARM64 and ARMv7 have no native hardware qualification in this release. In-place
+upgrades, physical power loss, arbitrary hardware and universal protocol-client
+interoperability remain unqualified. Xray Center beta.4 is excluded.
+
+## Superseded historical STOP report — preserved verbatim
+
+The following report describes the earlier source and pre-remediation state.
+Its privilege-boundary and publication conclusions are superseded for the
+qualified Router Core baseline above; its recorded failures and limits are
+retained rather than converted into passes. Current publication remains a
+separate owner security and release approval decision.
+
+---
+
 # Beta.3 independent release gate
 
 Status: **PUBLICATION BLOCKED**, 2026-10-15. Starting source: `ef8cf25`.

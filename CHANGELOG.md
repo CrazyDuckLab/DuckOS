@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.1.0-beta.3
+
+Prerelease candidate; publication requires owner authorization. Router Core F1–F8
+security fixes, bounded privileged nft launcher, strict payload validation,
+PCP/NAT-PMP corrections and startup/recovery hardening. Documentation and
+release-snapshot cleanup preserve executable source identity with the qualified
+`2e0c5afa089649a3238c543a82624075a9bc816e` baseline.
+See [release notes](docs/release-notes.md) for actual qualification and limits.
+
 ## v0.1.0-beta.2
 
 Beta prerelease; fresh installation only. No qualified beta.1 → beta.2 in-place upgrade.

@@ -1,6 +1,7 @@
 # Inside DuckOS
 
-DuckOS beta.2 is a local Linux control plane on Debian 13. The diagrams below
+DuckOS beta.3 is a local Linux control plane on Debian 13. The separate bounded nft launcher is part of the beta.3 Router Core; see
+[qualification and limits](qualification-beta3-final.md). The diagrams below
 show component relationships, not a claim that every catalog workflow is
 qualified. See [current evidence](qualification-beta2.md) and [limitations](beta-limitations.md).
 
@@ -25,7 +26,7 @@ flowchart TD
 ```
 
 Easy and Full modes are parallel views of the same model. The CLI is source-built
-in beta.2, not an installed release-archive binary. This diagram describes ordinary
+in beta.3, not an installed release-archive binary. This diagram describes ordinary
 public management commands; offline root-only Owner recovery is a separate CLI
 operation. The browser never accesses private Agent IPC.
 

@@ -1,12 +1,12 @@
 # Updates and rollback
 
-**v0.1.0-beta.2 is fresh-install-only. No beta.1 → beta.2 in-place upgrade
+**v0.1.0-beta.3 is fresh-install-only. No beta.1/beta.2 → beta.3 in-place upgrade
 has been qualified.** Do not pass the release tarball to an update command or
 replace installed binaries manually as a supported public upgrade procedure.
 
 The source includes signed `.duck` update foundations, a supervisor and the
 Active + Previous release-store invariant. These mechanisms do not establish a
-public beta.2 update channel. No public OTA or beta.2 signed upgrade package is
+public beta.3 update channel. No public OTA or beta.3 signed upgrade package is
 supplied. A successful first install may have Active without Previous.
 
 The broader update design and its evidence requirements are documented in

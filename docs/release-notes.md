@@ -1,23 +1,112 @@
-# DuckOS v0.1.0-beta.3 — unpublished network-core candidate
+# DuckOS v0.1.0-beta.3
 
-**PUBLICATION BLOCKED.** These are candidate notes, not a release announcement.
-The current public release remains beta.2.
+DuckOS beta.3 hardens the Router Core and its installed privilege boundary.
+This is a **prerelease for isolated evaluation**, using fresh Debian 13 with
+systemd. Publication is a separate owner-approved action; these notes do not
+assert that this candidate is already downloadable.
 
-The candidate adds protocol frontend sources (UPnP IGD/SSDP, NAT-PMP and a PCP
-subset), typed forward firewall rules with a durable confirmation journal,
-WAN DHCP/static IPv4 composition, and DHCP lease observation. Existing
-LAN/DHCP/DNS configuration, WireGuard, Xray and FRR foundations remain.
-Implemented source, privileged Linux component tests, installed service
-qualification and hardware qualification are separate evidence levels.
+## Router Core security and privileged execution
 
-Independent investigation corrected NAT-PMP wire offsets, public-address opcode,
-short-packet safety, source-port handling, deletion and error responses. The
-previous loopback timeout was a test design issue masking genuine protocol bugs.
-The installed Agent-to-nftables privilege gap still blocks release.
+The Agent runs as **UID 0 with zero effective capabilities**; it is not a
+non-root process. nftables kernel operations pass through the separate
+`duck-nft-launcher`, limited to `CAP_NET_ADMIN`, with `NoNewPrivileges=yes`.
+The launcher authenticates Unix socket peers with SO_PEERCRED and restricts
+operations to owned `inet duckos`, `inet duckos_fw` and `inet duckos_upnp`
+objects. It exposes no shell or arbitrary execution interface.
 
-UI Next, Xray Center, Subscription Center, Stealth Admin, Core/Complete profiles
-and the separate unmerged PPPoE/L2TP branch are excluded. No power-loss or new
-fresh-host qualification is claimed. See [independent audit](qualification-beta3-final.md).
+F1–F8 remediation includes whole-batch text validation, strict JSON ownership
+and duplicate-key checks, mandatory launcher payload and ELF validation,
+PCP wire-format corrections, delayed-launcher startup/recovery handling,
+failed-install launcher bookkeeping, server-side filtering of global reads,
+and bounded connections, execution, queued bytes and deadlines.
+
+## Firewall, NAT and recovery
+
+Typed forward firewall rules use atomic nftables batches, semantic readback
+verification and a durable Safe Apply journal. Operator confirmation is
+required; timeout, failure and explicit rollback retain the recovery path.
+Empty configurations use a canonical absent-table state. Firewall and NAT
+mapping ownership are separate, with scoped restore and coexistence checks.
+
+Port Mapping includes Trusted LAN admission, TTL expiry, revoke and cleanup,
+NAT-PMP, a PCP ANNOUNCE/MAP subset, and UPnP IGD/SSDP frontend sources.
+PEER and unsupported PCP options are refused. This does not claim full PCP,
+IPv6 frontend support or interoperability with every discovery client.
+Existing WireGuard, FRR and Xray foundations remain; Xray-core is pinned to
+**26.3.27**. Xray Center beta.4 development is excluded.
+
+## Architectures and verification scope
+
+| Target | Release packaging | Native execution qualification |
+|---|---|---|
+| Linux AMD64 | Fresh cross-build, ELF/inventory/hash verification | Debian 13 AMD64 Router Core scope below |
+| Linux ARM64 | Fresh cross-build, ELF/inventory/hash verification | No native ARM hardware qualification |
+| Linux ARMv7 (`GOARCH=arm GOARM=7`) | Fresh cross-build, ELF/inventory/hash verification | No native ARM hardware qualification |
+
+The prior qualification accepted by the release owner covers native Linux
+AMD64 Router Core regressions, firewall/NAT packet tests, installer
+qualification, real systemd startup, authenticated readiness, service restart
+and VM reboot persistence at code baseline
+`2e0c5afa089649a3238c543a82624075a9bc816e`.
+Release preparation does not repeat those live tests or turn historical
+component reports into new execution evidence. The final documentation and
+snapshot commit is checked for byte-identical executable sources, units,
+installer/build scripts and lockfiles against that baseline.
+
+No claim is made for in-place upgrades, physical power loss, every rollback
+failure, arbitrary NICs/boards, all client interoperability or production
+readiness. This is not a completed product security audit.
+
+## Fresh installation
+
+Choose exactly one architecture archive and the accompanying `SHA256SUMS`:
+
+- `duckos-v0.1.0-beta.3-linux-amd64.tar.gz`
+- `duckos-v0.1.0-beta.3-linux-arm64.tar.gz`
+- `duckos-v0.1.0-beta.3-linux-armv7.tar.gz`
+
+Verify `sha256sum --check --ignore-missing SHA256SUMS` and require an `OK`
+line for the selected archive. Extract it into a new directory; each archive
+contains `duckos-v0.1.0-beta.3/`. Run the bundled installer's
+`--verify-artifact`, then use root-owned staging and `--check` before a fresh
+installation. The installer checks the closed inventory, hashes and ELF
+architecture, including the required nft launcher binary and unit.
+Follow [installation](https://github.com/CrazyDuckLab/DuckOS/blob/v0.1.0-beta.3/docs/install.md).
+
+The runtime `VERSION` and `BUILD-INFO.json` identify `v0.1.0-beta.3` and the
+exact final source commit, with `dirty=false`. The archive includes seven
+DuckOS service binaries and the Web UI; the standalone `duck` CLI remains
+source-built. Use SSH forwarding to the loopback API for enrollment.
+
+## Upgrade restrictions and recovery
+
+No beta.1/beta.2 → beta.3 in-place upgrade has been qualified. These archives
+are installer payloads, not signed `.duck` update packages; no public OTA
+channel is supplied. Do not overwrite installed services manually or remove
+state to bypass fresh-install preflight.
+
+Keep an out-of-band console and preserve the management interface. Inspect
+the installer status and bounded systemd journal on failure. Do not assume
+API liveness proves authenticated readiness or network health. Pre-networkd
+recovery, the Safe Apply journal and Active + Previous update foundations
+serve different failure paths; reboot alone is not a guarantee of recovery.
+See [recovery](https://github.com/CrazyDuckLab/DuckOS/blob/v0.1.0-beta.3/docs/user/recovery.md)
+and [limitations](https://github.com/CrazyDuckLab/DuckOS/blob/v0.1.0-beta.3/docs/beta-limitations.md).
+
+## Source hygiene and known beta restrictions
+
+The release snapshot excludes laboratory `.runtime-data` reports. Their
+removal does **not** erase historical Git objects, including previously
+public laboratory topology. No active credential compromise is established
+by that historical-address finding; residual disclosure requires explicit
+owner acceptance before publication. Do not attach laboratory evidence,
+credentials, backups or private runtime state to the release.
+
+There is no automatic LAN TLS onboarding or mDNS discovery, no established
+physical Wi-Fi/modem matrix, and no qualification of every page in the UI
+catalog. API reachability, observed state and verified health remain distinct.
+Source is GPL-3.0-only; bundled Xray licensing is included. Report vulnerabilities
+privately under [SECURITY.md](https://github.com/CrazyDuckLab/DuckOS/blob/v0.1.0-beta.3/SECURITY.md).
 
 ---
 

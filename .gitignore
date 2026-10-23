@@ -77,3 +77,8 @@ e2e/playwright-report/
 /qa-ospfv3/
 /duckos-evidence/
 /duckos-control.log
+
+# Private laboratory and runtime evidence: never commit to a release snapshot
+.runtime-data/
+/lab-backups/
+/lab-logs/

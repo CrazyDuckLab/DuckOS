@@ -4,6 +4,12 @@ DuckOS V1 is designed so that an installed system can be recovered
 without a full reinstall. This page describes the recovery primitives
 that the V1 beta exposes.
 
+Beta.3 accepted AMD64 qualification includes service restart and VM reboot
+persistence; it does not establish physical power-loss or every recovery path.
+Installation failures retain status under `/var/lib/duckos/install-status`.
+Inspect bounded journals for `duck-agent`, `duck-api` and `duck-nft-launcher`;
+do not remove state or replace installed services to bypass preflight.
+
 ## The recovery primitives
 
 | Primitive                     | Lives in                                | Purpose                                                  |
@@ -28,10 +34,9 @@ restores host routing state from it. The boot recovery is the safety
 net for the case where the Engine dies or loses its connection to the
 Agent during an Apply.
 
-If the boot recovery fails, the system falls back to a minimal
-configuration with the management anchor preserved. The device is
-still reachable on the management LAN; from there you can use the
-Safe Apply UI to inspect the journal and roll back.
+If boot recovery fails, do not assume the management path is reachable.
+Use the out-of-band console to inspect service and journal failures before
+attempting further changes. Preserve the management anchor and retained state.
 
 ## Safe Apply rollback
 
@@ -47,8 +52,9 @@ Rollback happens automatically when:
 You can also rollback manually from the Safe Apply UI before
 Confirming.
 
-If a rollback itself fails, the boot recovery unit reconstructs the
-state on the next reboot.
+If rollback fails, keep the failure visible and use console-led diagnosis.
+The pre-networkd recovery path is a separate safeguard, not a guarantee that
+reboot repairs every firewall, storage or launcher failure.
 
 ## Update rollback
 
@@ -62,7 +68,7 @@ contract and the `Active + Previous` invariant.
 
 ## Owner reset
 
-The beta.2 archive does not install `duck`. These commands require the
+The beta.3 archive does not install `duck`. These commands require the
 [source-built CLI](../cli-api.md); stop `duck-api` before offline reset.
 Keep console access and review the consequences before proceeding.
 

@@ -1,12 +1,12 @@
 # DuckOS documentation
 
-## Install and operate beta.2
+## Install and operate beta.3
 
 - [Installation](install.md) — Debian 13, architecture selection, checksums, preflight and enrollment.
 - [User guide](user/README.md) — Easy / Full modes, networking, diagnostics and recovery.
-- [CLI and API](cli-api.md) — actual beta.2 availability and public contracts.
+- [CLI and API](cli-api.md) — archive/CLI availability and public contracts.
 - [Troubleshooting](troubleshooting.md) and [recovery](user/recovery.md).
-- [Platform matrix](compatibility.md), [limitations](beta-limitations.md) and [qualification](qualification-beta2.md).
+- [Platform matrix](compatibility.md), [limitations](beta-limitations.md) and [qualification](qualification-beta3-final.md).
 - [Release notes](release-notes.md) and [changelog](../CHANGELOG.md).
 
 ## Architecture and security
@@ -22,7 +22,7 @@
 - [Development](development.md), [testing](testing.md), [contribution policy](../CONTRIBUTING.md) and [engineering policy](../AGENTS.md).
 - [Product scope](product-spec-1.0.md), [roadmap](roadmap.md), [open decisions](open-decisions.md) and [ADRs](adr/).
 - [UX principles](ux-principles.md) and [V1 design documentation](ux-v1/).
-- [Historical qualification report](../beta2-final-report.md); current evidence is summarized [here](qualification-beta2.md).
+- [Historical qualification report](../beta2-final-report.md); current evidence is summarized [here](qualification-beta3-final.md).
 
 ## Licensing and identity
 
@@ -31,5 +31,5 @@
 - [Existing branding](brand-mark.md) and [historical beta.1 screenshot provenance](assets/screenshots/README.md).
 
 Documentation is versioned with source. Product specifications and historical
-procedures describe broader intent or earlier evidence; consult beta.2 release
+procedures describe broader intent or earlier evidence; consult beta.3 release
 notes and qualification boundaries before treating a workflow as supported.

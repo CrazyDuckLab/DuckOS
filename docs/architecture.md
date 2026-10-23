@@ -1,11 +1,12 @@
 # DuckOS architecture
 
-> **Beta.3 implementation gap:** the new firewall and mapping adapters invoke
-> nftables directly while duck-agent retains zero capabilities and
-> NoNewPrivileges=yes. Privileged root component tests do not close this gap.
-> A bounded privileged execution design and installed-boundary qualification
-> are required; do not broaden Agent capabilities. See
-> [independent audit](qualification-beta3-final.md).
+> **Beta.3 qualified Router Core:** the UID-0 Agent retains zero effective
+> capabilities and `NoNewPrivileges=yes`. nftables operations use the bounded
+> `duck-nft-launcher` with `CAP_NET_ADMIN` only and `NoNewPrivileges=yes`.
+> SO_PEERCRED authenticates the Unix peer; strict text/JSON validation confines
+> mutation to `inet duckos`, `inet duckos_fw`, `inet duckos_upnp`; global reads
+> are filtered server-side. Queue, connection, execution and deadline limits
+> bound resource use. See [qualification and limits](qualification-beta3-final.md).
 
 Status: target architecture; current implementation snapshot is recorded in the source tree (`internal/`) and ADRs in `docs/adr/`
 

@@ -1,11 +1,12 @@
-# Install DuckOS v0.1.0-beta.2
+# Install DuckOS v0.1.0-beta.3
 
-> **Beta.3 candidate is not an installable qualified release.** Do not use
-> development payloads to replace an installed evaluation router. The new nftables
-> adapters have not passed the zero-capability Agent boundary. See
-> [final candidate audit](qualification-beta3-final.md).
+> **Beta.3 Router Core:** the nft launcher path is implemented and covered by
+> the accepted native AMD64 qualification. ARM targets are cross-built and
+> artifact-verified, without native hardware qualification. Publication is a
+> separate owner decision; download commands apply after the release exists.
+> See [qualification](qualification-beta3-final.md).
 
-**Beta software. FRESH-INSTALL-ONLY. No qualified beta.1 → beta.2 in-place upgrade.**
+**Beta software. FRESH-INSTALL-ONLY. No qualified beta.1/beta.2 → beta.3 in-place upgrade.**
 Use a fresh Debian 13 host with systemd, an isolated test network, and an
 out-of-band console. Do not remove an existing installation to bypass preflight.
 Keep your management interface outside network changes.
@@ -34,8 +35,8 @@ Choose the suffix above. The example defaults to AMD64; set `ARCH=arm64` or
 
 ```bash
 ARCH=amd64
-ARCHIVE="duckos-v0.1.0-beta.2-linux-${ARCH}.tar.gz"
-BASE=https://github.com/CrazyDuckLab/DuckOS/releases/download/v0.1.0-beta.2
+ARCHIVE="duckos-v0.1.0-beta.3-linux-${ARCH}.tar.gz"
+BASE=https://github.com/CrazyDuckLab/DuckOS/releases/download/v0.1.0-beta.3
 curl --fail --location --output "$ARCHIVE" "$BASE/$ARCHIVE"
 curl --fail --location --output SHA256SUMS "$BASE/SHA256SUMS"
 sha256sum --check --ignore-missing SHA256SUMS
@@ -43,7 +44,7 @@ sha256sum --check --ignore-missing SHA256SUMS
 
 Require an `OK` line for the selected archive. Checksums detect corruption;
 they do not independently authenticate the publisher. Use the trusted GitHub
-release channel. All three archives extract to `duckos-v0.1.0-beta.2/`;
+release channel. All three archives extract to `duckos-v0.1.0-beta.3/`;
 extract only the selected architecture into a new directory.
 
 ## Prerequisites and root-owned staging
@@ -72,14 +73,14 @@ reuse of an interactive account a recommended deployment practice.
 Verify the extracted payload locally, then stage it with root-owned ancestors:
 
 ```bash
-mkdir duckos-beta2-download
-tar -xzf "$ARCHIVE" -C duckos-beta2-download
-bash duckos-beta2-download/duckos-v0.1.0-beta.2/install.sh \
-  --artifact "$(pwd -P)/duckos-beta2-download/duckos-v0.1.0-beta.2" --verify-artifact
+mkdir duckos-beta3-download
+tar -xzf "$ARCHIVE" -C duckos-beta3-download
+bash duckos-beta3-download/duckos-v0.1.0-beta.3/install.sh \
+  --artifact "$(pwd -P)/duckos-beta3-download/duckos-v0.1.0-beta.3" --verify-artifact
 sudo mkdir -m 0700 /root/duckos-install
-sudo cp -R duckos-beta2-download/duckos-v0.1.0-beta.2 /root/duckos-install/
-sudo chown -hR root:root /root/duckos-install/duckos-v0.1.0-beta.2
-sudo chmod -R go-w /root/duckos-install/duckos-v0.1.0-beta.2
+sudo cp -R duckos-beta3-download/duckos-v0.1.0-beta.3 /root/duckos-install/
+sudo chown -hR root:root /root/duckos-install/duckos-v0.1.0-beta.3
+sudo chmod -R go-w /root/duckos-install/duckos-v0.1.0-beta.3
 ```
 
 Stop if the staging directory already exists; use a new operator-reviewed
@@ -90,11 +91,11 @@ inventory, hashes, build metadata and architecture-specific ELF headers.
 ## Preflight and install
 
 ```bash
-sudo bash /root/duckos-install/duckos-v0.1.0-beta.2/install.sh \
-  --artifact /root/duckos-install/duckos-v0.1.0-beta.2 --check
-sudo bash /root/duckos-install/duckos-v0.1.0-beta.2/install.sh \
-  --artifact /root/duckos-install/duckos-v0.1.0-beta.2
-sudo systemctl status duck-agent duck-api duck-frr-launcher duck-wg-launcher --no-pager
+sudo bash /root/duckos-install/duckos-v0.1.0-beta.3/install.sh \
+  --artifact /root/duckos-install/duckos-v0.1.0-beta.3 --check
+sudo bash /root/duckos-install/duckos-v0.1.0-beta.3/install.sh \
+  --artifact /root/duckos-install/duckos-v0.1.0-beta.3
+sudo systemctl status duck-agent duck-api duck-frr-launcher duck-wg-launcher duck-nft-launcher --no-pager
 curl --fail http://127.0.0.1:8080/api/v1/health
 cat /opt/duckos/current/VERSION
 ```
@@ -104,10 +105,10 @@ proves API liveness only; authenticated `/api/v1/ready` must succeed as well.
 Use an enrolled session for API checks after Owner enrollment. Do not expose
 credentials in command arguments or logs.
 
-`BUILD-INFO.json` records the source commit and target; runtime identity remains
-`1.0.0-dev.<12-character-commit>`, separate from the public beta name.
-`/run/duckos-agent` must be `root:duckos 0750`. The Agent has zero effective
-Linux capabilities; the WireGuard launcher is limited to `CAP_NET_ADMIN`.
+`BUILD-INFO.json` records the source commit and target; runtime identity is
+`v0.1.0-beta.3`, with the full final release source SHA and `dirty=false`.
+`/run/duckos-agent` must be `root:duckos 0750`. The Agent runs as UID 0 with zero effective
+Linux capabilities; nft and WireGuard launchers are limited to `CAP_NET_ADMIN`.
 Native `frr.service` and `wg-quick@.service` are masked to avoid competing owners.
 
 ## Dashboard and enrollment
@@ -126,7 +127,7 @@ There is no automatic mDNS discovery or browser-trusted LAN TLS onboarding.
 
 ## CLI availability
 
-The archive contains six service binaries and the Web UI; it does not install
+The archive contains seven service binaries and the Web UI; it does not install
 the standalone `duck` CLI. Use the UI or authenticated API for routine access.
 See [CLI/API](cli-api.md) before following a guide that uses `duck`.
 
@@ -136,7 +137,7 @@ Keep the artifact and build identity. Inspect bounded status and journal output:
 
 ```bash
 sudo cat /var/lib/duckos/install-status
-sudo journalctl -u duck-agent -u duck-api -u duck-frr-launcher -u duck-wg-launcher --no-pager -n 100
+sudo journalctl -u duck-agent -u duck-api -u duck-frr-launcher -u duck-wg-launcher -u duck-nft-launcher --no-pager -n 100
 ```
 
 Do not delete installation paths or identities to make preflight pass.
@@ -147,7 +148,10 @@ The release tarball is an installer payload, not a signed `.duck` upgrade packag
 ## Build from source
 
 Use a clean checkout of the intended commit, then `make deps`, `make check` and
-`make build-all`. The official builder produces `dist/duckos-linux-amd64`,
+`make build-all`. For an official release, create a local tag on the frozen clean source commit
+and set `DUCKOS_RELEASE_VERSION=v0.1.0-beta.3` before invoking the builder.
+Do not move an existing tag. Without that variable, builds use an internal
+development identifier. The official builder produces `dist/duckos-linux-amd64`,
 `dist/duckos-linux-arm64` and `dist/duckos-linux-armv7`. Verify each with its
 supplied `install.sh --artifact <absolute-directory> --verify-artifact`.
 Dirty builds are refused for target installation.

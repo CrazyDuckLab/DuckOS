@@ -9,3 +9,12 @@
 *.woff binary
 *.woff2 binary
 *.duck binary
+
+
+# Defense in depth: local laboratory reports never belong in source archives
+.runtime-data export-ignore
+.runtime-data/** export-ignore
+lab-backups export-ignore
+lab-backups/** export-ignore
+lab-logs export-ignore
+lab-logs/** export-ignore

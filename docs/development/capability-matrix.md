@@ -1,8 +1,10 @@
 # DuckOS Capability Matrix — beta.3 / beta.4 planning baseline
 
-> **Beta.3 release gate: BLOCKED.** Kernel tests below describe component
-> qualification from a privileged test process, not the installed zero-capability
-> Agent. See [independent final audit](../qualification-beta3-final.md).
+> **Beta.3 release baseline:** the F1–F8 nft launcher fixes and accepted AMD64
+> Router Core qualification supersede the historical privilege-gap gate.
+> This older planning matrix mixes historical implementation labels and future
+> work; it is not an expanded release qualification claim. See the authoritative
+> [beta.3 scope and limits](../qualification-beta3-final.md).
 
 Status: living document, updated per subsystem during beta.3/beta.4 development.
 Baseline: `main` @ `3388271` (beta.2 release `feee7c0` + GitHub presentation commits).
@@ -76,5 +78,5 @@ Legend: **IMPLEMENTED** (backend + tests), **PARTIAL** (working but incomplete s
 ## Known limitations / pending live qualification
 
 - All beta.3 protocol listeners are unit + loopback-socket tested; **LAN-side live qualification (real SSDP clients, NAT-PMP/PCP renewals, IGD clients) is PENDING LIVE QUALIFICATION** and intentionally not executed against lab VMs in this task.
-- `nft` is exec'd by the agent process (beta.2 architecture). Works under the beta.2 launcher sandbox per beta.2 qualification; no new privileged surface was added in beta.3.
+- Beta.3 nft execution is owned by `duck-nft-launcher`; the UID-0 Agent retains zero effective capabilities. See the final qualification scope, not historical planning labels above.
 - IGD `GetGenericPortMappingEntry` returns mappings in Manager id order, not insertion order — acceptable for V1, documented for clients.
