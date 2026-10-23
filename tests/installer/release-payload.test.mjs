@@ -44,7 +44,7 @@ for (const [arch, [elfClass, machine]] of Object.entries(targets)) {
     }
     const result = spawnSync('/bin/bash', [path.join(dir, 'install.sh'), '--artifact', dir, '--verify-artifact'], { encoding: 'utf8', timeout: 30000 });
     assert.equal(result.error, undefined); assert.equal(result.status, 0, result.stdout + result.stderr);
-    const scratch = await fs.mkdtemp(path.join(os.tmpdir(), 'duckos-real-elf-'));
+    const scratch = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'duckos-real-elf-')));
     t.after(() => fs.rm(scratch, { recursive: true, force: true }));
     const copy = path.join(scratch, 'artifact'); await fs.cp(dir, copy, { recursive: true });
     const binaryPath = path.join(copy, 'bin/duck-api'); const original = await fs.readFile(binaryPath);
