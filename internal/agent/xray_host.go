@@ -179,19 +179,24 @@ func (h *XrayHost) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.mu.Unlock()
 	tail := strings.TrimPrefix(r.URL.EscapedPath(), XrayPath)
 	_, _, isNodeAuth := nodeAuthTail(tail)
-	// F-02: restore the original ingress peer across the Unix IPC
-	// hop. The Engine sets X-Duck-Peer ONLY on the canonical
-	// node-auth route with the host part of the PUBLIC request's TCP
-	// RemoteAddr; the header is never taken from client-supplied
-	// data and is always stripped here, so the Center never sees it
-	// and nothing can spoof a peer identity. Without this, every
-	// public client collapses into the single "@" socket peer and
-	// one unauthenticated source can exhaust the shared node-auth
-	// budget for all sources.
+	// F-02 (scope): trusted peer metadata is honored ONLY on the
+	// canonical authenticated node-auth route. The Engine sets
+	// X-Duck-Peer exclusively for that route with the host part of
+	// the PUBLIC request's TCP RemoteAddr; the header is never taken
+	// from client-supplied data and is ALWAYS stripped here on every
+	// route, so the Center never sees it and nothing can spoof a
+	// peer identity. Every non-node-auth IPC request keeps its
+	// original Unix IPC RemoteAddr — misplaced metadata is discarded
+	// without expanding any authority. Without the node-auth
+	// propagation, every public client would collapse into the
+	// single "@" socket peer and one unauthenticated source could
+	// exhaust the shared node-auth budget for all sources.
 	trustedPeer := ""
-	if h := r.Header.Get(NodeAuthPeerHeader); h != "" {
-		if ip := net.ParseIP(h); ip != nil {
-			trustedPeer = ip.String()
+	if isNodeAuth {
+		if h := r.Header.Get(NodeAuthPeerHeader); h != "" {
+			if ip := net.ParseIP(h); ip != nil {
+				trustedPeer = ip.String()
+			}
 		}
 	}
 	r.Header.Del(NodeAuthPeerHeader)

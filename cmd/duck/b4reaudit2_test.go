@@ -48,8 +48,29 @@ func b4rCLIFixture(t *testing.T) (*xnode.Manager, string, string, string, *xnode
 	return m, n.ID, old, next, identity, dir, h
 }
 
+// b4rArgs builds the secure (F-04) invocation: the current credential
+// travels ONLY through stdin (--credential-stdin).
 func b4rArgs(id, old, dir, endpoint string) []string {
-	return []string{"pull-rotation", "--id", id, "--credential", old, "--identity-dir", dir, "--endpoint", endpoint}
+	return []string{"pull-rotation", "--id", id, "--credential-stdin", "--identity-dir", dir, "--endpoint", endpoint}
+}
+
+// b4rRun invokes the real CLI with the current credential piped
+// through stdin (protected input).
+func b4rRun(args []string, cred string) error {
+	r, w, err := os.Pipe()
+	if err != nil {
+		return err
+	}
+	if _, err := w.WriteString(cred + "\n"); err != nil {
+		w.Close()
+		r.Close()
+		return err
+	}
+	w.Close()
+	oldStdin := os.Stdin
+	os.Stdin = r
+	defer func() { os.Stdin = oldStdin; r.Close() }()
+	return xrayNodesCmd(args)
 }
 
 // The audit blocker: the CLI must not report success while a RUNNING
@@ -67,7 +88,7 @@ func TestB401_CLILiveNodeRotationAdoptedByRunningServer(t *testing.T) {
 	defer tlsNode.Close()
 	adapter := xnode.NewNodeHTTPAdapter()
 	adapter.HTTPClient = tlsNode.Client()
-	if err := xrayNodesCmd(b4rArgs(id, old, dir, srv.URL)); err != nil {
+	if err := b4rRun(b4rArgs(id, old, dir, srv.URL), old); err != nil {
 		t.Fatal(err)
 	}
 	reopened, err := xnode.OpenNodeIdentity(dir)
@@ -114,7 +135,7 @@ func TestB401_RecoveryFinalizeAfterLostAck(t *testing.T) {
 		h.ServeHTTP(w, r)
 	}))
 	defer srv.Close()
-	if err := xrayNodesCmd(b4rArgs(id, old, dir, srv.URL)); err == nil {
+	if err := b4rRun(b4rArgs(id, old, dir, srv.URL), old); err == nil {
 		t.Fatal("false success after lost response")
 	}
 	local, err := xnode.OpenNodeIdentity(dir)
@@ -126,14 +147,14 @@ func TestB401_RecoveryFinalizeAfterLostAck(t *testing.T) {
 		t.Fatal("lost ack state wrong")
 	}
 	// A plain rerun must not silently recover anything.
-	if err := xrayNodesCmd(b4rArgs(id, old, dir, srv.URL)); err == nil {
+	if err := b4rRun(b4rArgs(id, old, dir, srv.URL), old); err == nil {
 		t.Fatal("plain rerun unexpectedly recovered the pending state")
 	}
 	// Controller-authoritative recovery: the tombstone replay
 	// returns CONFIRMED and only then is the local transition
 	// finalized.
 	recovered := append(b4rArgs(id, old, dir, srv.URL), "--finalize")
-	if err := xrayNodesCmd(recovered); err != nil {
+	if err := b4rRun(recovered, old); err != nil {
 		t.Fatalf("--finalize recovery failed: %v", err)
 	}
 	reopened, err := xnode.OpenNodeIdentity(dir)
@@ -161,7 +182,7 @@ func TestB401_RecoveryFailsClosedWithoutController(t *testing.T) {
 		t.Fatal(err)
 	}
 	args := append(b4rArgs(id, old, dir, "http://127.0.0.1:1"), "--finalize")
-	if err := xrayNodesCmd(args); err == nil {
+	if err := b4rRun(args, old); err == nil {
 		t.Fatal("offline finalize succeeded without controller proof")
 	}
 	reopened, err := xnode.OpenNodeIdentity(dir)
@@ -185,7 +206,7 @@ func TestB401_PendingWriteFailureAbortsBeforeConfirm(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(dir, "node-identity.json.tmp"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := xrayNodesCmd(b4rArgs(id, old, dir, srv.URL)); err == nil {
+	if err := b4rRun(b4rArgs(id, old, dir, srv.URL), old); err == nil {
 		t.Fatal("false success on pending persistence failure")
 	}
 	if !m.Authenticate(id, old) || m.Authenticate(id, next) {
@@ -209,7 +230,7 @@ func TestB401_LocalFinalizeUncertaintyReported(t *testing.T) {
 		return nil
 	})
 	defer restore()
-	if err := xrayNodesCmd(b4rArgs(id, old, dir, srv.URL)); err == nil {
+	if err := b4rRun(b4rArgs(id, old, dir, srv.URL), old); err == nil {
 		t.Fatal("false success on uncertain local finalize")
 	}
 	if !m.Authenticate(id, next) {
@@ -226,7 +247,7 @@ func TestB401_LocalFinalizeUncertaintyReported(t *testing.T) {
 	if !reopened.Accepts(next) {
 		t.Fatal("uncertain finalization lost the new credential locally")
 	}
-	if err := xrayNodesCmd(b4rArgs(id, old, dir, srv.URL)); err == nil {
+	if err := b4rRun(b4rArgs(id, old, dir, srv.URL), old); err == nil {
 		t.Fatal("rerun with the stale credential must not silently succeed")
 	}
 }
@@ -244,7 +265,7 @@ func TestB401_ConfirmUnavailableLeavesRecoverablePending(t *testing.T) {
 		h.ServeHTTP(w, r)
 	}))
 	defer srv.Close()
-	if err := xrayNodesCmd(b4rArgs(id, old, dir, srv.URL)); err == nil {
+	if err := b4rRun(b4rArgs(id, old, dir, srv.URL), old); err == nil {
 		t.Fatal("false success")
 	}
 	local, err := xnode.OpenNodeIdentity(dir)
@@ -294,7 +315,7 @@ func TestSecrets_CLIRotatesWithoutPrintingCredential(t *testing.T) {
 		t.Fatal(err)
 	}
 	os.Stdout = w
-	cmdErr := xrayNodesCmd(b4rArgs(id, old, dir, srv.URL))
+	cmdErr := b4rRun(b4rArgs(id, old, dir, srv.URL), old)
 	w.Close()
 	os.Stdout = stdout
 	out, _ := io.ReadAll(r)
@@ -329,7 +350,7 @@ func TestB401_TrustedTLSControllerPendingBeforeConfirm(t *testing.T) {
 	transport := http.DefaultTransport
 	http.DefaultTransport = srv.Client().Transport
 	defer func() { http.DefaultTransport = transport }()
-	if err := xrayNodesCmd(b4rArgs(id, old, dir, srv.URL)); err != nil {
+	if err := b4rRun(b4rArgs(id, old, dir, srv.URL), old); err != nil {
 		t.Fatal(err)
 	}
 	if !<-seenPending || m.Authenticate(id, old) || !m.Authenticate(id, next) {

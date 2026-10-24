@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -51,7 +52,7 @@ func TestFinalCLISuccessThenIdentityReadFault(t *testing.T) {
 	node := xnode.Node{ID: id, Endpoint: tls.URL}
 	controller := httptest.NewServer(h)
 	defer controller.Close()
-	if err := xrayNodesCmd(b4rArgs(id, old, dir, controller.URL)); err != nil {
+	if err := b4rRun(b4rArgs(id, old, dir, controller.URL), old); err != nil {
 		t.Fatal(err)
 	}
 	if m.Authenticate(id, old) || !m.Authenticate(id, next) {
@@ -78,38 +79,37 @@ func TestFinalCLISuccessThenIdentityReadFault(t *testing.T) {
 	}
 }
 
-// F-04: the current node credential supplied through the legacy
-// --credential form must be scrubbed from the actual running CLI
-// process arguments before any network I/O.
-func TestFinalCurrentCredentialProcessArguments(t *testing.T) {
+// F-04 (closure): legacy literal credential flags do not exist —
+// all four spellings are rejected without echoing the secret. This
+// replaces the obsolete TestFinalCurrentCredentialProcessArguments,
+// which assumed successful operation through the removed unsafe
+// interface.
+func TestFinalLegacyCredentialFlagsRejected(t *testing.T) {
 	_, id, old, _, _, dir, h := b4rCLIFixture(t)
-	entered := make(chan struct{})
-	release := make(chan struct{})
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "/pull") {
-			close(entered)
-			<-release
-		}
-		h.ServeHTTP(w, r)
-	}))
+	srv := httptest.NewServer(h)
 	defer srv.Close()
-	cmd := exec.Command(os.Args[0], "-test.run=^TestFinalCLIHelper$", "--", "xray", "nodes", "pull-rotation", "--id", id, "--identity-dir", dir, "--endpoint", srv.URL, "--credential", old)
-	cmd.Env = append(os.Environ(), "DUCK_FINAL_CLI_HELPER=1")
-	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	<-entered
-	out, psErr := exec.Command("/bin/ps", "-p", strconv.Itoa(cmd.Process.Pid), "-o", "args=").Output()
-	close(release)
-	runErr := cmd.Wait()
-	if psErr != nil {
-		t.Fatal(psErr)
-	}
-	if runErr != nil {
-		t.Fatal(runErr)
-	}
-	if strings.Contains(string(out), old) {
-		t.Fatal("current node credential is readable in actual running CLI process arguments (value suppressed)")
+	// All four legacy literal spellings are rejected with a generic
+	// migration message; the supplied argument contents are never
+	// echoed back into stdout/stderr.
+	for _, spelling := range []string{"--credential", "--credential=", "-credential", "-credential="} {
+		args := []string{"-test.run=^TestFinalCLIHelper$", "--", "xray", "nodes", "pull-rotation", "--id", id, "--identity-dir", dir, "--endpoint", srv.URL}
+		if strings.HasSuffix(spelling, "=") {
+			args = append(args, spelling+old)
+		} else {
+			args = append(args, spelling, old)
+		}
+		cmd := exec.Command(os.Args[0], args...)
+		cmd.Env = append(os.Environ(), "DUCK_FINAL_CLI_HELPER=1")
+		out, err := cmd.CombinedOutput()
+		if err == nil {
+			t.Fatalf("legacy literal credential spelling %q was accepted", spelling)
+		}
+		if strings.Contains(string(out), old) {
+			t.Fatalf("rejected legacy spelling %q echoed the credential in the output", spelling)
+		}
+		if !strings.Contains(string(out), "--credential-stdin") {
+			t.Fatalf("legacy rejection for %q lacks the migration hint", spelling)
+		}
 	}
 }
 
@@ -150,5 +150,60 @@ func TestFinalCurrentCredentialFromStdin(t *testing.T) {
 	}
 	if strings.Contains(string(out), old) {
 		t.Fatal("rejected positional credential echoed in the error output")
+	}
+}
+
+// F-04 (closure): the SUPPORTED invocation — separate CLI process,
+// current credential via stdin only — keeps the plaintext out of the
+// actual running process arguments for their whole lifetime and
+// completes a real rotation.
+func TestFinalStdinCredentialProcessArguments(t *testing.T) {
+	_, id, old, next, _, dir, h := b4rCLIFixture(t)
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/pull") {
+			close(entered)
+			<-release
+		}
+		h.ServeHTTP(w, r)
+	}))
+	defer srv.Close()
+	cmd := exec.Command(os.Args[0], "-test.run=^TestFinalCLIHelper$", "--", "xray", "nodes", "pull-rotation", "--id", id, "--identity-dir", dir, "--endpoint", srv.URL, "--credential-stdin")
+	cmd.Env = append(os.Environ(), "DUCK_FINAL_CLI_HELPER=1")
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.WriteString(stdin, old+"\n"); err != nil {
+		t.Fatal(err)
+	}
+	// The CLI reads the credential until EOF — close the pipe so the
+	// protected stdin read completes and the rotation proceeds.
+	if err := stdin.Close(); err != nil {
+		t.Fatal(err)
+	}
+	<-entered
+	out, psErr := exec.Command("/bin/ps", "-p", strconv.Itoa(cmd.Process.Pid), "-o", "args=").Output()
+	close(release)
+	runErr := cmd.Wait()
+	if psErr != nil {
+		t.Fatal(psErr)
+	}
+	if runErr != nil {
+		t.Fatal(runErr)
+	}
+	if strings.Contains(string(out), old) {
+		t.Fatal("current node credential is readable in actual running CLI process arguments (value suppressed)")
+	}
+	reopened, err := xnode.OpenNodeIdentity(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reopened.Accepts(old) || !reopened.Accepts(next) || reopened.HasPending() {
+		t.Fatal("stdin process flow did not complete the rotation")
 	}
 }

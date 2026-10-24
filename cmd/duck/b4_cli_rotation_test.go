@@ -83,17 +83,31 @@ func TestB401_CLIRotationDurableEndToEnd(t *testing.T) {
 	if err := os.WriteFile(tokenFile, []byte("b4-synthetic-operator-credential"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// THE ACTUAL CLI ENTRYPOINT: pull (old credential) → durable
-	// pending → confirm → local finalize.
-	if err := xrayNodesCmd([]string{
+	// THE ACTUAL CLI ENTRYPOINT: pull (old credential via protected
+	// stdin, F-04 contract) → durable pending → confirm → local
+	// finalize.
+	stdinR, stdinW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := stdinW.WriteString(old + "\n"); err != nil {
+		t.Fatal(err)
+	}
+	stdinW.Close()
+	oldStdin := os.Stdin
+	os.Stdin = stdinR
+	cmdErr := xrayNodesCmd([]string{
 		"pull-rotation",
 		"--id", node.ID,
-		"--credential", old,
+		"--credential-stdin",
 		"--endpoint", srv.URL,
 		"--token-file", tokenFile,
 		"--identity-dir", nodeDir,
-	}); err != nil {
-		t.Fatalf("CLI pull-rotation failed: %v", err)
+	})
+	os.Stdin = oldStdin
+	stdinR.Close()
+	if cmdErr != nil {
+		t.Fatalf("CLI pull-rotation failed: %v", cmdErr)
 	}
 	// Restart the controller from durable state.
 	restartedController := xnode.NewManager(nil)

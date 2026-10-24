@@ -51,6 +51,63 @@ func nodeCredentialHash(credential string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// credentialDigestLen is the size of the sha256 hex digests this
+// package writes into the identity document.
+const credentialDigestLen = 64
+
+// validCredentialDigest reports whether s is a well-formed credential
+// digest this package produces (lowercase hex sha256). Any other
+// digest format is unsupported.
+func validCredentialDigest(s string) bool {
+	if len(s) != credentialDigestLen {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// validate enforces the semantic invariants of an identity document
+// BEFORE any credential is accepted against it (F-01 integrity
+// validation). A syntactically valid JSON document that could never
+// have been produced by the identity writer must fail closed instead
+// of authenticating. Legitimate states are:
+//
+//   - zero document (not yet adopted);
+//   - adopted: valid CurrentHash, no pending fields;
+//   - transition: valid CurrentHash + valid PendingHash, with an
+//     OPTIONAL PendingCredential that must match PendingHash
+//     (hash-only pending documents written by earlier protocol
+//     versions remain valid — plaintext is NOT required).
+func (d NodeIdentityDocument) validate() error {
+	if d.CurrentHash == "" {
+		if d.PendingHash != "" || d.PendingCredential != "" {
+			return errors.New("xnode: identity document has pending state without an adopted current identity")
+		}
+		return nil
+	}
+	if !validCredentialDigest(d.CurrentHash) {
+		return errors.New("xnode: identity document has a malformed current credential digest")
+	}
+	if d.PendingHash == "" {
+		if d.PendingCredential != "" {
+			return errors.New("xnode: identity document has pending plaintext without a pending digest")
+		}
+		return nil
+	}
+	if !validCredentialDigest(d.PendingHash) {
+		return errors.New("xnode: identity document has a malformed pending credential digest")
+	}
+	if d.PendingCredential != "" && nodeCredentialHash(d.PendingCredential) != d.PendingHash {
+		return errors.New("xnode: identity document pending plaintext does not match the pending digest")
+	}
+	return nil
+}
+
 // NodeIdentity is the persistent credential holder of the node role.
 type NodeIdentity struct {
 	mu   sync.RWMutex
@@ -96,6 +153,8 @@ func (n *NodeIdentity) Adopt(credential string) error {
 
 // Accepts reports whether the credential authenticates the
 // coordinator right now (current or pending slot), constant-time.
+// A semantically invalid document authenticates nothing (F-01):
+// validation runs before any digest comparison.
 func (n *NodeIdentity) Accepts(credential string) bool {
 	if credential == "" {
 		return false
@@ -103,6 +162,9 @@ func (n *NodeIdentity) Accepts(credential string) bool {
 	n.mu.RLock()
 	defer n.mu.RUnlock()
 	doc := n.file.Get()
+	if doc.validate() != nil {
+		return false
+	}
 	digest := nodeCredentialHash(credential)
 	if doc.CurrentHash != "" && hmac.Equal([]byte(doc.CurrentHash), []byte(digest)) {
 		return true
@@ -187,6 +249,9 @@ func (n *NodeIdentity) PendingHashMatches(credential string) bool {
 	n.mu.RLock()
 	defer n.mu.RUnlock()
 	doc := n.file.Get()
+	if doc.validate() != nil {
+		return false
+	}
 	return doc.PendingHash != "" &&
 		hmac.Equal([]byte(doc.PendingHash), []byte(nodeCredentialHash(credential)))
 }
@@ -197,17 +262,24 @@ func (n *NodeIdentity) PendingHashMatches(credential string) bool {
 // (the duck CLI) is adopted by the RUNNING NodeServer immediately.
 //
 // FAIL-CLOSED (F-01): EVERY read/decode failure — missing file,
-// EACCES, EISDIR, invalid JSON, integrity mismatch — is propagated
-// to the caller. The authentication boundary must reject the request
-// instead of silently falling back to a possibly stale in-memory
-// credential: after a completed rotation a stale cache would
-// resurrect the old credential exactly when the authoritative state
-// is unreadable. Recovery is automatic: the next Reload that
-// succeeds re-establishes the authoritative state.
+// EACCES, EISDIR, invalid JSON — is propagated to the caller, and
+// the decoded document is then validated SEMANTICALLY before the
+// caller may accept any credential: pending state without an adopted
+// current identity, malformed digest formats and pending
+// plaintext/digest mismatches all fail the reload. The authentication
+// boundary must reject the request instead of silently falling back
+// to a possibly stale in-memory credential: after a completed
+// rotation a stale cache would resurrect the old credential exactly
+// when the authoritative state is unreadable or corrupt. Recovery is
+// automatic: the next Reload that returns a valid authoritative
+// document re-establishes authentication.
 func (n *NodeIdentity) Reload() error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	return n.file.Reload()
+	if err := n.file.Reload(); err != nil {
+		return err
+	}
+	return n.file.Get().validate()
 }
 
 // ConfirmPending verifies the presented new credential against the
