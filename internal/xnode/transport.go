@@ -397,17 +397,22 @@ func (s *NodeServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.seen[req.Nonce] = now
 	s.mu.Unlock()
 
-	// B4-01 runtime adoption: the durable identity document is the
-	// coordination point between the duck CLI (which may rotate the
-	// credential from another process) and THIS running server.
-	// Re-read it before every authentication decision so a rotation
-	// completed on disk is adopted by the live runtime immediately —
-	// a file update alone must never leave the running process on a
-	// stale in-memory credential (the audit's live-node desync). On
-	// a transient read error the last coherent in-memory state stays
-	// authoritative (fail-closed for the caller, no lock-out).
+	// B4-01 runtime adoption + F-01 fail-closed: the durable identity
+	// document is the coordination point between the duck CLI (which
+	// may rotate the credential from another process) and THIS
+	// running server. Re-read it before every authentication
+	// decision. If the authoritative state cannot be read or decoded
+	// (missing, unreadable, corrupt), the request is REJECTED — the
+	// stale in-memory credential is never accepted as authoritative,
+	// so a completed rotation cannot be undone by a storage fault.
+	// Recovery is automatic: as soon as the document is readable
+	// again, Reload succeeds and authentication resumes against the
+	// authoritative state. No secret material is logged.
 	if s.Identity != nil {
-		_ = s.Identity.Reload()
+		if err := s.Identity.Reload(); err != nil {
+			uniformControlReject(w)
+			return
+		}
 	}
 	credential := bearer(r)
 	if s.Identity != nil {

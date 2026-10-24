@@ -242,7 +242,7 @@ func renderThroughIPC(eng *engine.Engine, kind, subID string, format subscriptio
 	if format != "" && format != subscription.FormatBase64 {
 		rawQuery = "format=" + url.QueryEscape(string(format))
 	}
-	status, data, _, err := eng.XrayProxy(ctx, http.MethodGet, path, rawQuery, token, "", nil)
+	status, data, _, err := eng.XrayProxy(ctx, http.MethodGet, path, rawQuery, token, "", "", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -258,7 +258,7 @@ func validateThroughIPC(eng *engine.Engine, token, serviceToken string) (string,
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	body, _ := json.Marshal(map[string]string{"token": token})
-	status, data, _, err := eng.XrayProxy(ctx, http.MethodPost, "/api/v1/xray/center/delivery-validate", "", serviceToken, "", bytes.NewReader(body))
+	status, data, _, err := eng.XrayProxy(ctx, http.MethodPost, "/api/v1/xray/center/delivery-validate", "", serviceToken, "", "", bytes.NewReader(body))
 	if err != nil || status != http.StatusOK {
 		return "", false
 	}

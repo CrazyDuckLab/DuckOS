@@ -22,7 +22,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"os"
 	"sync"
 	"time"
 
@@ -195,24 +194,20 @@ func (n *NodeIdentity) PendingHashMatches(credential string) bool {
 // Reload re-reads the durable identity document from disk into the
 // in-memory mirror. The node control-plane calls this before every
 // authentication decision so a rotation completed by ANOTHER process
-// (the duck CLI) is adopted by the RUNNING NodeServer immediately:
-// updating the file alone must not leave the live runtime on a stale
-// in-memory credential. An unreadable document keeps the in-memory
-// state (fail-closed: the server keeps authenticating with what it
-// last knew rather than locking itself out on a transient I/O error).
+// (the duck CLI) is adopted by the RUNNING NodeServer immediately.
+//
+// FAIL-CLOSED (F-01): EVERY read/decode failure — missing file,
+// EACCES, EISDIR, invalid JSON, integrity mismatch — is propagated
+// to the caller. The authentication boundary must reject the request
+// instead of silently falling back to a possibly stale in-memory
+// credential: after a completed rotation a stale cache would
+// resurrect the old credential exactly when the authoritative state
+// is unreadable. Recovery is automatic: the next Reload that
+// succeeds re-establishes the authoritative state.
 func (n *NodeIdentity) Reload() error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	if err := n.file.Reload(); err != nil {
-		// A missing document means the identity was never written
-		// yet; the in-memory (zero or adopted) state stays
-		// authoritative in that case.
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
-		return err
-	}
-	return nil
+	return n.file.Reload()
 }
 
 // ConfirmPending verifies the presented new credential against the

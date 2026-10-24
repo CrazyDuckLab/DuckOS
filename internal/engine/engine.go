@@ -1047,13 +1047,21 @@ const WakeMaxBytes = 4 << 10
 // credential headers). The operator bearer token and the node
 // credential are independent principals; neither implies the other.
 //
+// peerIP carries the TRUSTED ingress peer of the public request (the
+// real TCP source host observed by the public API, never a
+// client-supplied header). It is forwarded as X-Duck-Peer ONLY for
+// the canonical node-auth path, so the Center's rate limiter keeps
+// per-peer budgets across the API→Agent Unix IPC hop instead of
+// collapsing every public client into the single "@" peer. A peerIP
+// that is not a valid IP address is never forwarded.
+//
 // rawQuery is the unparsed query string from the public
 // request (e.g. "server=ID&cursor=VAL"). It is forwarded
 // verbatim so Xray listing calls that pin a server or a
 // cursor survive the public→IPC boundary. An unparsable
 // or oversized rawQuery is rejected at this layer so
 // the Agent never sees a malformed envelope.
-func (e *Engine) XrayProxy(ctx context.Context, method, path, rawQuery, token, nodeCredential string, body io.Reader) (status int, data []byte, contentType string, err error) {
+func (e *Engine) XrayProxy(ctx context.Context, method, path, rawQuery, token, nodeCredential, peerIP string, body io.Reader) (status int, data []byte, contentType string, err error) {
 	if e == nil {
 		return 0, nil, "", errors.New("engine not configured")
 	}
@@ -1062,7 +1070,8 @@ func (e *Engine) XrayProxy(ctx context.Context, method, path, rawQuery, token, n
 		tail = path
 	}
 	target := "http://agent" + agent.XrayPath + "/xray/v1/" + strings.TrimPrefix(tail, "/")
-	if nodeCredential != "" && !IsXrayNodeAuthPath(path) {
+	isNodeAuth := IsXrayNodeAuthPath(path)
+	if nodeCredential != "" && !isNodeAuth {
 		return 0, nil, "", errors.New("node credentials are only accepted on the node-auth route")
 	}
 	if err := validateRawQuery(rawQuery); err != nil {
@@ -1080,6 +1089,13 @@ func (e *Engine) XrayProxy(ctx context.Context, method, path, rawQuery, token, n
 	}
 	if nodeCredential != "" {
 		req.Header.Set("X-Node-Credential", nodeCredential)
+		if isNodeAuth && net.ParseIP(peerIP) != nil {
+			// Trusted ingress peer metadata: derived by the public API
+			// from the actual TCP connection, never from
+			// client-supplied headers (X-Forwarded-For & co are
+			// deliberately ignored).
+			req.Header.Set(agent.NodeAuthPeerHeader, peerIP)
+		}
 	}
 	resp, err := e.client.Do(req)
 	if err != nil {

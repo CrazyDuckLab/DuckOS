@@ -98,7 +98,7 @@ type Engine interface {
 	// /users, ?cursor=VAL for /subscriptions).
 	// nodeCredential carries the X-Node-Credential value for the
 	// canonical node-auth route only (engine.IsXrayNodeAuthPath).
-	XrayProxy(ctx context.Context, method, path, rawQuery, token, nodeCredential string, body io.Reader) (status int, data []byte, contentType string, err error)
+	XrayProxy(ctx context.Context, method, path, rawQuery, token, nodeCredential, peerIP string, body io.Reader) (status int, data []byte, contentType string, err error)
 	// VaultProxy proxies the public /api/v1/vault/*
 	// request to the privileged Agent
 	// /agent/v1/vault/vault/v1/* IPC. DV04-VAULT
@@ -431,6 +431,7 @@ func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		token := identity.ForwardedToken(h.assertionKey, user)
 		nodeCredential := ""
+		nodePeer := ""
 		if nodeAuth {
 			// Dedicated least-privilege IPC principal: the forwarded
 			// token only authenticates this relay call to the Agent
@@ -439,8 +440,17 @@ func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request) {
 			// checked by the Center against the exact node id.
 			token = identity.ForwardedToken(h.assertionKey, identity.User{Username: "duck-api-node-auth", Role: identity.ReadOnly})
 			nodeCredential = r.Header.Get("X-Node-Credential")
+			// F-02 trusted ingress peer: the REAL TCP source host of
+			// THIS connection, observed server-side. Client-supplied
+			// peer headers (X-Forwarded-For, X-Real-IP, …) are never
+			// consulted; the value only feeds the Agent-side node-auth
+			// rate limiter so per-peer budgets survive the Unix IPC
+			// hop.
+			if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil && net.ParseIP(host) != nil {
+				nodePeer = host
+			}
 		}
-		h.handleXrayProxy(w, r, token, nodeCredential)
+		h.handleXrayProxy(w, r, token, nodeCredential, nodePeer)
 		return
 	}
 	if strings.HasPrefix(r.URL.Path, "/api/v1/vault/") || r.URL.Path == "/api/v1/vault" {
@@ -1038,7 +1048,7 @@ func (h *Handler) handleWireGuardProxy(w http.ResponseWriter, r *http.Request, t
 //	       -> Agent /agent/v1/xray/xray/v1/* -> XrayHost
 //	       -> xray.API -> RenderConfig + Runtime.Apply
 //	       -> /tmp/duckos-test/xray/xray run -c <path>
-func (h *Handler) handleXrayProxy(w http.ResponseWriter, r *http.Request, token, nodeCredential string) {
+func (h *Handler) handleXrayProxy(w http.ResponseWriter, r *http.Request, token, nodeCredential, nodePeer string) {
 	if r.ContentLength > 1<<20 {
 		problem(w, r, 413, errorCategoryFromCode("payload_too_large"), "payload_too_large", "Xray payload exceeds 1 MiB.")
 		return
@@ -1047,7 +1057,7 @@ func (h *Handler) handleXrayProxy(w http.ResponseWriter, r *http.Request, token,
 	if r.Body != nil {
 		body = io.LimitReader(r.Body, 1<<20)
 	}
-	status, data, contentType, err := h.engine.XrayProxy(r.Context(), r.Method, r.URL.Path, r.URL.RawQuery, token, nodeCredential, body)
+	status, data, contentType, err := h.engine.XrayProxy(r.Context(), r.Method, r.URL.Path, r.URL.RawQuery, token, nodeCredential, nodePeer, body)
 	if err != nil {
 		problem(w, r, 503, errorCategoryFromCode("agent_unavailable"), "agent_unavailable", err.Error())
 		return

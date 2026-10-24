@@ -141,6 +141,11 @@ func (m *Manager) ConfirmStagedRotation(nodeID, newCredential string) (RotationS
 		return RotationNone, errors.New("xnode: confirmation credential does not match the staged rotation")
 	}
 	prevHash := node.CredentialHash
+	// F-03: snapshot the PREVIOUS completed record so a definitive
+	// NOT_COMMITTED rollback restores the exact prior tombstone
+	// (a previous successful confirmation must survive an unrelated
+	// failed follow-up rotation, in memory exactly as on disk).
+	prevCompleted, hadPrevCompleted := m.completed[nodeID]
 	node.CredentialHash = staged.newHash
 	// The tombstone MUST be recorded BEFORE the durable snapshot is
 	// built: persistLocked serializes m.completed, and a tombstone
@@ -156,9 +161,15 @@ func (m *Manager) ConfirmStagedRotation(nodeID, newCredential string) (RotationS
 	if perr != nil {
 		if !res.Uncertain {
 			// NOT_COMMITTED: the durable state is unchanged and
-			// remains authoritative — roll the in-memory state back.
+			// remains authoritative — roll the in-memory state back
+			// as a whole: previous credential hash AND previous
+			// tombstone value (or no tombstone, if none existed).
 			node.CredentialHash = prevHash
-			delete(m.completed, nodeID)
+			if hadPrevCompleted {
+				m.completed[nodeID] = prevCompleted
+			} else {
+				delete(m.completed, nodeID)
+			}
 		}
 		// COMMIT_UNCERTAIN: the restrictive NEW state (hash +
 		// tombstone) is retained in memory and possibly on disk;

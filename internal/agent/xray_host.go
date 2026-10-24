@@ -42,6 +42,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -54,6 +55,18 @@ import (
 // nodeAuthTailMarker is the canonical node-auth route inside the
 // Xray IPC surface (after the /agent/v1/xray prefix is stripped).
 const nodeAuthTailMarker = "/xray/v1/center/node-auth/"
+
+// NodeAuthPeerHeader carries the TRUSTED ingress peer (the public
+// TCP source host observed by the public API) across the
+// strictly-authenticated API→Agent Unix IPC hop, so the Center's
+// node-auth rate limiter keeps per-peer budgets instead of seeing
+// the socket peer "@" for every public client. The Engine sets it
+// only for the canonical node-auth route and only with a value
+// derived from the actual TCP connection; client-supplied values of
+// this header (and spoofable proxies like X-Forwarded-For) are
+// never honored. The header is always stripped before the request
+// reaches the Center.
+const NodeAuthPeerHeader = "X-Duck-Peer"
 
 // XrayPath is the IPC route prefix for the production
 // Xray host. The prefix is the canonical mount point;
@@ -166,6 +179,22 @@ func (h *XrayHost) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.mu.Unlock()
 	tail := strings.TrimPrefix(r.URL.EscapedPath(), XrayPath)
 	_, _, isNodeAuth := nodeAuthTail(tail)
+	// F-02: restore the original ingress peer across the Unix IPC
+	// hop. The Engine sets X-Duck-Peer ONLY on the canonical
+	// node-auth route with the host part of the PUBLIC request's TCP
+	// RemoteAddr; the header is never taken from client-supplied
+	// data and is always stripped here, so the Center never sees it
+	// and nothing can spoof a peer identity. Without this, every
+	// public client collapses into the single "@" socket peer and
+	// one unauthenticated source can exhaust the shared node-auth
+	// budget for all sources.
+	trustedPeer := ""
+	if h := r.Header.Get(NodeAuthPeerHeader); h != "" {
+		if ip := net.ParseIP(h); ip != nil {
+			trustedPeer = ip.String()
+		}
+	}
+	r.Header.Del(NodeAuthPeerHeader)
 	if isNodeAuth {
 		if r.Method != http.MethodPost || r.URL.RawPath != "" {
 			xrayProblem(w, 405, "method_not_allowed", "Node auth is POST-only.")
@@ -201,6 +230,9 @@ func (h *XrayHost) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r2 := r.Clone(r.Context())
 	r2.URL.Path = tail
 	r2.URL.RawPath = ""
+	if trustedPeer != "" {
+		r2.RemoteAddr = trustedPeer
+	}
 	// B-007 (BETA.2): preserve the raw query string.
 	// The Xray /users listing requires ?server=ID and
 	// /subscriptions requires ?cursor=VAL; stripping the

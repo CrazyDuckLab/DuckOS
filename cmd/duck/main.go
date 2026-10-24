@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unsafe"
 
 	"github.com/CrazyDuckLab/DuckOS/internal/ximport"
 	"github.com/CrazyDuckLab/DuckOS/internal/xnode"
@@ -2184,7 +2185,8 @@ func xrayNodesCmd(args []string) error {
 		fs := flag.NewFlagSet("xray nodes pull-rotation", flag.ContinueOnError)
 		cf := addCommonFlags(fs)
 		id := fs.String("id", "", "Node id")
-		cred := fs.String("credential", "", "Current node credential")
+		cred := fs.String("credential", "", "Current node credential (LEGACY form: the value is scrubbed from the process arguments immediately after parsing; prefer --credential-stdin)")
+		credStdin := fs.Bool("credential-stdin", false, "Read the CURRENT node credential from stdin (protected input; never argv; use INSTEAD of --credential)")
 		identityDir := fs.String("identity-dir", "/var/lib/duckos-agent/xray/center/node-self", "Node identity directory (durable; the agent's xray catalog directory + /center/node-self)")
 		finalize := fs.Bool("finalize", false, "Recover an interrupted rotation: re-confirm the pending credential against the controller and finalize locally only on a proven controller commit")
 		finalizeStdin := fs.Bool("finalize-stdin", false, "Recover like --finalize, reading the pending new credential from stdin (protected input; never argv)")
@@ -2192,7 +2194,31 @@ func xrayNodesCmd(args []string) error {
 			return err
 		}
 		if fs.NArg() > 0 {
-			return fmt.Errorf("pull-rotation: unexpected argument %q: the pending credential is read from the local identity store or --finalize-stdin, never from the command line", fs.Arg(0))
+			// F-04: the rejected positional input may be secret-like;
+			// it is never echoed back into the error text.
+			return errors.New("pull-rotation: unexpected positional argument: credentials are supplied via --credential-stdin or the local identity store, never as command-line values")
+		}
+		// F-04: a legacy --credential VALUE must not stay readable in
+		// the process arguments (ps, /proc/<pid>/cmdline). The argv
+		// bytes are overwritten in place right after parsing, before
+		// any network I/O, so the plaintext never survives for other
+		// processes to observe. The in-process value is cloned first:
+		// the flag aliases the same argv bytes the scrub overwrites.
+		// The protected --credential-stdin form avoids argv entirely.
+		if *cred != "" {
+			private := strings.Clone(*cred)
+			cred = &private
+		}
+		scrubCredentialFromArgv()
+		if *credStdin {
+			if *cred != "" {
+				return errors.New("pull-rotation: use either --credential-stdin or --credential, not both")
+			}
+			raw, rerr := io.ReadAll(io.LimitReader(os.Stdin, 4096))
+			if rerr != nil {
+				return fmt.Errorf("pull-rotation: reading the current credential from stdin: %w", rerr)
+			}
+			*cred = strings.TrimSpace(string(raw))
 		}
 		if *id == "" || *identityDir == "" {
 			return errors.New("xray nodes pull-rotation: --id and --identity-dir are required")
@@ -2406,6 +2432,38 @@ func xrayGroupsCmd(args []string) error {
 // response credential (staged rotation pulls) when present.
 func isLoopbackHost(host string) bool {
 	return host == "127.0.0.1" || host == "::1" || host == "localhost"
+}
+
+// scrubArgvBytes overwrites the process argument bytes backing s in
+// place. os.Args strings alias the kernel's argv block, so the
+// overwrite is what process observers (ps, /proc/<pid>/cmdline)
+// see. Same-length replacement keeps the argv layout intact.
+func scrubArgvBytes(s string) {
+	if len(s) == 0 {
+		return
+	}
+	b := unsafe.Slice(unsafe.StringData(s), len(s))
+	for i := range b {
+		b[i] = 'x'
+	}
+}
+
+// scrubCredentialFromArgv removes the plaintext of a legacy
+// --credential VALUE (or --credential=VALUE) from the process
+// arguments. Called immediately after flag parsing and before any
+// network I/O, so a running pull-rotation never keeps the current
+// node credential readable in argv.
+func scrubCredentialFromArgv() {
+	for i := 1; i < len(os.Args); i++ {
+		if os.Args[i] == "--credential" && i+1 < len(os.Args) {
+			scrubArgvBytes(os.Args[i+1])
+			i++
+			continue
+		}
+		if v, ok := strings.CutPrefix(os.Args[i], "--credential="); ok {
+			scrubArgvBytes(v)
+		}
+	}
 }
 
 // nodeAuthDirect performs a node-auth call against an explicit

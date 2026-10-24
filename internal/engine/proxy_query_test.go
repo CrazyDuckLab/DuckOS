@@ -102,6 +102,7 @@ func TestEngine_XrayProxy_PreservesServerQuery(t *testing.T) {
 		"server=xr-edge-001",
 		"tok-owner",
 		"",
+		"",
 		nil)
 	if err != nil {
 		t.Fatalf("XrayProxy: %v", err)
@@ -141,6 +142,7 @@ func TestEngine_XrayProxy_PreservesCursor(t *testing.T) {
 		"/api/v1/xray/subscriptions",
 		"cursor=01HMK9E2GR9",
 		"tok-owner",
+		"",
 		"",
 		nil)
 	if err != nil {
@@ -235,7 +237,7 @@ func TestEngine_ProxyRejectsControlBytesInQuery(t *testing.T) {
 			var err error
 			switch name {
 			case "Xray":
-				_, _, _, err = e.XrayProxy(context.Background(), http.MethodGet, "/api/v1/xray/users", q, "tok", "", nil)
+				_, _, _, err = e.XrayProxy(context.Background(), http.MethodGet, "/api/v1/xray/users", q, "tok", "", "", nil)
 			case "WireGuard":
 				_, _, _, err = e.WireGuardProxy(context.Background(), http.MethodGet, "/api/v1/wireguard/peers", q, "tok", nil)
 			case "Vault":
@@ -254,7 +256,7 @@ func TestEngine_ProxyRejectsControlBytesInQuery(t *testing.T) {
 func TestEngine_ProxyRejectsOversizedQuery(t *testing.T) {
 	e := &Engine{client: &http.Client{Timeout: time.Second}, environment: "test"}
 	q := strings.Repeat("a", maxRawQueryBytes+1)
-	if _, _, _, err := e.XrayProxy(context.Background(), http.MethodGet, "/api/v1/xray/users", q, "tok", "", nil); err == nil {
+	if _, _, _, err := e.XrayProxy(context.Background(), http.MethodGet, "/api/v1/xray/users", q, "tok", "", "", nil); err == nil {
 		t.Fatalf("XrayProxy accepted oversized query")
 	}
 	if _, _, _, err := e.WireGuardProxy(context.Background(), http.MethodGet, "/api/v1/wireguard/peers", q, "tok", nil); err == nil {
@@ -276,7 +278,7 @@ func TestEngine_ProxyAcceptsEmptyQuery(t *testing.T) {
 	e := newEngineForTest(t, srv)
 	e.client.Transport = redirectHost(srv.URL)
 
-	if _, _, _, err := e.XrayProxy(context.Background(), http.MethodGet, "/api/v1/xray/servers", "", "tok", "", nil); err != nil {
+	if _, _, _, err := e.XrayProxy(context.Background(), http.MethodGet, "/api/v1/xray/servers", "", "tok", "", "", nil); err != nil {
 		t.Fatalf("XrayProxy(empty): %v", err)
 	}
 	select {
