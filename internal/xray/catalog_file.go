@@ -182,32 +182,52 @@ func (c *FileCatalog) UpsertServer(_ context.Context, server Server) error {
 func (c *FileCatalog) RemoveServer(_ context.Context, id string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	filtered := c.state.Servers[:0]
-	removed := false
-	for _, existing := range c.state.Servers {
-		if existing.ID == id {
-			removed = true
+	// Work on a copy: a rejected disk commit must not publish deletion in memory.
+	next := cloneFileState(c.state)
+	keptServers := next.Servers[:0]
+	found := false
+	for _, server := range next.Servers {
+		if server.ID == id {
+			found = true
 			continue
 		}
-		filtered = append(filtered, existing)
+		keptServers = append(keptServers, server)
 	}
-	if !removed {
+	if !found {
 		return errors.New("server not found")
 	}
-	c.state.Servers = filtered
-	// Cascade remove users / profiles / subscriptions
-	// that reference the deleted server.
-	c.state.Users = filterByServerID(c.state.Users, id)
-	c.state.Profiles = c.state.Profiles[:0] // profiles reference users, not servers directly; safe to keep
-	c.state.Subscriptions = c.state.Subscriptions[:0]
-	return c.commit(c.state)
-}
-
-func filterByServerID[T any](items []T, _ string) []T {
-	// Generic-free helper for the cascading rule. The
-	// concrete type assertions live in the typed
-	// cascading helpers below.
-	return items
+	next.Servers = keptServers
+	removedUsers := map[string]bool{}
+	keptUsers := next.Users[:0]
+	for _, user := range next.Users {
+		if user.ServerID == id {
+			removedUsers[user.ID] = true
+			continue
+		}
+		keptUsers = append(keptUsers, user)
+	}
+	next.Users = keptUsers
+	removedProfiles := map[string]bool{}
+	keptProfiles := next.Profiles[:0]
+	for _, profile := range next.Profiles {
+		if removedUsers[profile.UserID] {
+			removedProfiles[profile.ID] = true
+			continue
+		}
+		keptProfiles = append(keptProfiles, profile)
+	}
+	next.Profiles = keptProfiles
+	// Keep subscription identity and all profiles belonging to other servers.
+	for index, sub := range next.Subscriptions {
+		kept := make([]string, 0, len(sub.ProfileIDs))
+		for _, profileID := range sub.ProfileIDs {
+			if !removedProfiles[profileID] {
+				kept = append(kept, profileID)
+			}
+		}
+		next.Subscriptions[index].ProfileIDs = kept
+	}
+	return c.commit(next)
 }
 
 func (c *FileCatalog) UpsertUser(_ context.Context, user User) error {
