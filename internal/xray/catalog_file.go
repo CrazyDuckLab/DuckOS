@@ -14,15 +14,21 @@
 package xray
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"sync"
+	"syscall"
 	"time"
+
+	"github.com/CrazyDuckLab/DuckOS/internal/persist"
 )
 
 // FileCatalog is the on-disk Server/User/Profile/Subscription
@@ -30,10 +36,14 @@ import (
 // are serialised under a single mutex plus the per-write
 // file+directory fsync.
 type FileCatalog struct {
-	dir   string
-	path  string
-	mu    sync.Mutex
-	state fileState
+	dir           string
+	path          string
+	mu            sync.Mutex
+	state         fileState
+	degraded      error
+	pendingDigest [32]byte
+	// fault is an instance-local durability-stage oracle for fault tests.
+	fault func(string) error
 }
 
 type fileState struct {
@@ -43,25 +53,35 @@ type fileState struct {
 	Subscriptions []Subscription `json:"subscriptions"`
 }
 
-func cloneFileState(st fileState) fileState {
-	return fileState{
-		Servers:       append([]Server(nil), st.Servers...),
-		Users:         append([]User(nil), st.Users...),
-		Profiles:      append([]Profile(nil), st.Profiles...),
-		Subscriptions: append([]Subscription(nil), st.Subscriptions...),
+const maxCatalogBytes = 4 << 20
+
+func cloneFileState(st fileState) (fileState, error) {
+	raw, err := json.Marshal(st)
+	if err != nil {
+		return fileState{}, errors.New("xray catalog: invalid snapshot")
 	}
+	var out fileState
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return fileState{}, errors.New("xray catalog: invalid snapshot")
+	}
+	return out, nil
 }
 
+func (c *FileCatalog) cloneLocked() (fileState, error) {
+	if c.degraded != nil {
+		return fileState{}, c.degraded
+	}
+	return cloneFileState(c.state)
+}
 func (c *FileCatalog) Snapshot(_ context.Context) (fileState, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return cloneFileState(c.state), nil
+	return c.cloneLocked()
 }
-
 func (c *FileCatalog) Restore(_ context.Context, st fileState) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.commit(cloneFileState(st))
+	return c.commit(st)
 }
 
 // OpenFileCatalog prepares the durable catalog rooted at dir.
@@ -84,44 +104,175 @@ func OpenFileCatalog(dir string) (*FileCatalog, error) {
 	return c, nil
 }
 
+func readCatalog(path string) (fileState, []byte, error) {
+	var st fileState
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return st, nil, err
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		return st, nil, errors.New("xray catalog: not a regular file")
+	}
+	raw, err := io.ReadAll(io.LimitReader(f, maxCatalogBytes+1))
+	if err != nil || len(raw) > maxCatalogBytes {
+		return st, nil, errors.New("xray catalog: read failed or size limit exceeded")
+	}
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || trimmed[0] != '{' {
+		return st, nil, errors.New("xray catalog: invalid document")
+	}
+	if err := json.Unmarshal(raw, &st); err != nil {
+		return st, nil, errors.New("xray catalog: corrupt document")
+	}
+	return st, raw, nil
+}
 func (c *FileCatalog) reload() error {
-	data, err := os.ReadFile(c.path)
+	st, _, err := readCatalog(c.path)
 	if errors.Is(err, os.ErrNotExist) {
 		c.state = fileState{}
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("xray catalog: read: %w", err)
-	}
-	if len(data) == 0 {
-		c.state = fileState{}
-		return nil
-	}
-	var st fileState
-	if err := json.Unmarshal(data, &st); err != nil {
-		return fmt.Errorf("xray catalog: corrupt json: %w", err)
+		return err
 	}
 	c.state = st
 	return nil
 }
-
-func (c *FileCatalog) commit(state fileState) error {
-	data, err := json.MarshalIndent(state, "", "  ")
+func syncCatalogDir(dir string) error {
+	f, err := os.Open(dir)
 	if err != nil {
-		return fmt.Errorf("xray catalog: encode: %w", err)
+		return err
+	}
+	err = f.Sync()
+	closeErr := f.Close()
+	if err != nil {
+		return err
+	}
+	return closeErr
+}
+func (c *FileCatalog) stage(name string) error {
+	if c.fault != nil {
+		return c.fault(name)
+	}
+	return nil
+}
+func (c *FileCatalog) commit(next fileState) error {
+	if c.degraded != nil {
+		return c.degraded
+	}
+	data, err := json.MarshalIndent(next, "", "  ")
+	if err != nil || len(data) > maxCatalogBytes {
+		return errors.New("xray catalog: encoding or size limit failure")
+	}
+	// Sever all caller-owned nested pointers/maps/slices before publication.
+	var isolated fileState
+	if err := json.Unmarshal(data, &isolated); err != nil {
+		return errors.New("xray catalog: invalid state")
 	}
 	tmp := c.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return fmt.Errorf("xray catalog: tmp write: %w", err)
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC|syscall.O_NOFOLLOW, 0600)
+	if err != nil {
+		return fmt.Errorf("xray catalog: temporary open: %w", err)
+	}
+	renamed := false
+	defer func() {
+		_ = f.Close()
+		if !renamed {
+			_ = os.Remove(tmp)
+		}
+	}()
+	if err := f.Chmod(0600); err != nil {
+		return err
+	}
+	if err := c.stage("write"); err != nil {
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		return err
+	}
+	if err := c.stage("file-sync"); err != nil {
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		return err
+	}
+	if err := c.stage("close"); err != nil {
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if err := c.stage("rename"); err != nil {
+		return err
 	}
 	if err := os.Rename(tmp, c.path); err != nil {
-		return fmt.Errorf("xray catalog: rename: %w", err)
+		return err
 	}
-	if dir, err := os.Open(c.dir); err == nil {
-		_ = dir.Sync()
-		_ = dir.Close()
+	renamed = true
+	// From this point the new state is visible. Never overwrite it with a stale
+	// snapshot on an uncertain outcome; refuse reads and writes until reconcile.
+	c.state = isolated
+	c.pendingDigest = sha256.Sum256(data)
+	err = c.stage("directory-sync")
+	if err == nil {
+		err = syncCatalogDir(c.dir)
 	}
-	c.state = state
+	if err != nil {
+		c.degraded = fmt.Errorf("%w: xray catalog directory sync", persist.ErrUncertain)
+		return c.degraded
+	}
+	c.pendingDigest = [32]byte{}
+	return nil
+}
+
+// Degraded exposes only a non-secret diagnosis for the existing storage UI.
+func (c *FileCatalog) Degraded() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.degraded != nil {
+		return "catalog commit uncertain; runtime must remain stopped until reconciliation"
+	}
+	return ""
+}
+
+// ReconcileStorage never imports a different/older document. It confirms the
+// exact renamed snapshot and its durability before admitting new operations.
+func (c *FileCatalog) ReconcileStorage() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.degraded == nil {
+		return nil
+	}
+	st, raw, err := readCatalog(c.path)
+	if err != nil {
+		return err
+	}
+	if sha256.Sum256(raw) != c.pendingDigest {
+		return errors.New("xray catalog: reconcile snapshot mismatch; remain fail-closed")
+	}
+	f, err := os.OpenFile(c.path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return err
+	}
+	syncErr := f.Sync()
+	closeErr := f.Close()
+	if syncErr != nil {
+		return syncErr
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	if err := c.stage("directory-sync"); err != nil {
+		return err
+	}
+	if err := syncCatalogDir(c.dir); err != nil {
+		return err
+	}
+	c.state = st
+	c.degraded = nil
+	c.pendingDigest = [32]byte{}
 	return nil
 }
 
@@ -135,7 +286,11 @@ func (c *FileCatalog) Dir() string { return c.dir }
 func (c *FileCatalog) GetSubscription(_ context.Context, id string) (Subscription, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	for _, s := range c.state.Subscriptions {
+	snapshot, err := c.cloneLocked()
+	if err != nil {
+		return Subscription{}, err
+	}
+	for _, s := range snapshot.Subscriptions {
 		if s.ID == id {
 			return s, nil
 		}
@@ -147,7 +302,11 @@ func (c *FileCatalog) GetSubscription(_ context.Context, id string) (Subscriptio
 func (c *FileCatalog) GetProfile(_ context.Context, id string) (Profile, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	for _, p := range c.state.Profiles {
+	snapshot, err := c.cloneLocked()
+	if err != nil {
+		return Profile{}, err
+	}
+	for _, p := range snapshot.Profiles {
 		if p.ID == id {
 			return p, nil
 		}
@@ -165,25 +324,32 @@ func (c *FileCatalog) UpsertServer(_ context.Context, server Server) error {
 	server.UpdatedAt = nowUTC()
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	next, err := c.cloneLocked()
+	if err != nil {
+		return err
+	}
 	found := false
-	for i, existing := range c.state.Servers {
+	for i, existing := range next.Servers {
 		if existing.ID == server.ID {
-			c.state.Servers[i] = server
+			next.Servers[i] = server
 			found = true
 			break
 		}
 	}
 	if !found {
-		c.state.Servers = append(c.state.Servers, server)
+		next.Servers = append(next.Servers, server)
 	}
-	return c.commit(c.state)
+	return c.commit(next)
 }
 
 func (c *FileCatalog) RemoveServer(_ context.Context, id string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	// Work on a copy: a rejected disk commit must not publish deletion in memory.
-	next := cloneFileState(c.state)
+	next, err := c.cloneLocked()
+	if err != nil {
+		return err
+	}
 	keptServers := next.Servers[:0]
 	found := false
 	for _, server := range next.Servers {
@@ -236,8 +402,12 @@ func (c *FileCatalog) UpsertUser(_ context.Context, user User) error {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	next, err := c.cloneLocked()
+	if err != nil {
+		return err
+	}
 	found := false
-	for i, existing := range c.state.Users {
+	for i, existing := range next.Users {
 		if existing.ID == user.ID {
 			// B-006 (BETA.2): preserve CreatedAt from
 			// the existing record. A common failure
@@ -251,7 +421,7 @@ func (c *FileCatalog) UpsertUser(_ context.Context, user User) error {
 				user.CreatedAt = existing.CreatedAt
 			}
 			user.UpdatedAt = nowUTC()
-			c.state.Users[i] = user
+			next.Users[i] = user
 			found = true
 			break
 		}
@@ -261,17 +431,21 @@ func (c *FileCatalog) UpsertUser(_ context.Context, user User) error {
 			user.CreatedAt = nowUTC()
 		}
 		user.UpdatedAt = nowUTC()
-		c.state.Users = append(c.state.Users, user)
+		next.Users = append(next.Users, user)
 	}
-	return c.commit(c.state)
+	return c.commit(next)
 }
 
 func (c *FileCatalog) RemoveUser(_ context.Context, id string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	filtered := c.state.Users[:0]
+	next, err := c.cloneLocked()
+	if err != nil {
+		return err
+	}
+	filtered := next.Users[:0]
 	removed := false
-	for _, existing := range c.state.Users {
+	for _, existing := range next.Users {
 		if existing.ID == id {
 			removed = true
 			continue
@@ -281,18 +455,30 @@ func (c *FileCatalog) RemoveUser(_ context.Context, id string) error {
 	if !removed {
 		return errors.New("user not found")
 	}
-	c.state.Users = filtered
+	next.Users = filtered
 	// Cascade remove profiles that reference the deleted
 	// user; a profile without a parent is a catalog
 	// invariant violation.
-	pruned := c.state.Profiles[:0]
-	for _, p := range c.state.Profiles {
+	removedProfiles := map[string]bool{}
+	pruned := next.Profiles[:0]
+	for _, p := range next.Profiles {
 		if p.UserID != id {
 			pruned = append(pruned, p)
+		} else {
+			removedProfiles[p.ID] = true
 		}
 	}
-	c.state.Profiles = pruned
-	return c.commit(c.state)
+	next.Profiles = pruned
+	for i, sub := range next.Subscriptions {
+		kept := make([]string, 0, len(sub.ProfileIDs))
+		for _, pid := range sub.ProfileIDs {
+			if !removedProfiles[pid] {
+				kept = append(kept, pid)
+			}
+		}
+		next.Subscriptions[i].ProfileIDs = kept
+	}
+	return c.commit(next)
 }
 
 func (c *FileCatalog) UpsertProfile(_ context.Context, profile Profile) error {
@@ -305,26 +491,34 @@ func (c *FileCatalog) UpsertProfile(_ context.Context, profile Profile) error {
 	profile.UpdatedAt = nowUTC()
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	next, err := c.cloneLocked()
+	if err != nil {
+		return err
+	}
 	found := false
-	for i, existing := range c.state.Profiles {
+	for i, existing := range next.Profiles {
 		if existing.ID == profile.ID {
-			c.state.Profiles[i] = profile
+			next.Profiles[i] = profile
 			found = true
 			break
 		}
 	}
 	if !found {
-		c.state.Profiles = append(c.state.Profiles, profile)
+		next.Profiles = append(next.Profiles, profile)
 	}
-	return c.commit(c.state)
+	return c.commit(next)
 }
 
 func (c *FileCatalog) RemoveProfile(_ context.Context, id string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	filtered := c.state.Profiles[:0]
+	next, err := c.cloneLocked()
+	if err != nil {
+		return err
+	}
+	filtered := next.Profiles[:0]
 	removed := false
-	for _, existing := range c.state.Profiles {
+	for _, existing := range next.Profiles {
 		if existing.ID == id {
 			removed = true
 			continue
@@ -334,11 +528,11 @@ func (c *FileCatalog) RemoveProfile(_ context.Context, id string) error {
 	if !removed {
 		return errors.New("profile not found")
 	}
-	c.state.Profiles = filtered
+	next.Profiles = filtered
 	// Cascade subscriptions that reference the deleted
 	// profile.
-	pruned := c.state.Subscriptions[:0]
-	for _, s := range c.state.Subscriptions {
+	pruned := next.Subscriptions[:0]
+	for _, s := range next.Subscriptions {
 		keep := make([]string, 0, len(s.ProfileIDs))
 		for _, pid := range s.ProfileIDs {
 			if pid != id {
@@ -348,8 +542,8 @@ func (c *FileCatalog) RemoveProfile(_ context.Context, id string) error {
 		s.ProfileIDs = keep
 		pruned = append(pruned, s)
 	}
-	c.state.Subscriptions = pruned
-	return c.commit(c.state)
+	next.Subscriptions = pruned
+	return c.commit(next)
 }
 
 func (c *FileCatalog) UpsertSubscription(_ context.Context, sub Subscription) error {
@@ -362,26 +556,34 @@ func (c *FileCatalog) UpsertSubscription(_ context.Context, sub Subscription) er
 	sub.UpdatedAt = nowUTC()
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	next, err := c.cloneLocked()
+	if err != nil {
+		return err
+	}
 	found := false
-	for i, existing := range c.state.Subscriptions {
+	for i, existing := range next.Subscriptions {
 		if existing.ID == sub.ID {
-			c.state.Subscriptions[i] = sub
+			next.Subscriptions[i] = sub
 			found = true
 			break
 		}
 	}
 	if !found {
-		c.state.Subscriptions = append(c.state.Subscriptions, sub)
+		next.Subscriptions = append(next.Subscriptions, sub)
 	}
-	return c.commit(c.state)
+	return c.commit(next)
 }
 
 func (c *FileCatalog) RemoveSubscription(_ context.Context, id string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	filtered := c.state.Subscriptions[:0]
+	next, err := c.cloneLocked()
+	if err != nil {
+		return err
+	}
+	filtered := next.Subscriptions[:0]
 	removed := false
-	for _, existing := range c.state.Subscriptions {
+	for _, existing := range next.Subscriptions {
 		if existing.ID == id {
 			removed = true
 			continue
@@ -391,15 +593,19 @@ func (c *FileCatalog) RemoveSubscription(_ context.Context, id string) error {
 	if !removed {
 		return errors.New("subscription not found")
 	}
-	c.state.Subscriptions = filtered
-	return c.commit(c.state)
+	next.Subscriptions = filtered
+	return c.commit(next)
 }
 
 func (c *FileCatalog) ListServers(_ context.Context) ([]Server, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	out := make([]Server, len(c.state.Servers))
-	copy(out, c.state.Servers)
+	snapshot, err := c.cloneLocked()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Server, len(snapshot.Servers))
+	copy(out, snapshot.Servers)
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out, nil
 }
@@ -407,8 +613,12 @@ func (c *FileCatalog) ListServers(_ context.Context) ([]Server, error) {
 func (c *FileCatalog) ListUsers(_ context.Context, serverID string) ([]User, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	out := make([]User, 0, len(c.state.Users))
-	for _, u := range c.state.Users {
+	snapshot, err := c.cloneLocked()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]User, 0, len(snapshot.Users))
+	for _, u := range snapshot.Users {
 		if serverID == "" || u.ServerID == serverID {
 			out = append(out, u)
 		}
@@ -422,8 +632,12 @@ func (c *FileCatalog) ListUsers(_ context.Context, serverID string) ([]User, err
 func (c *FileCatalog) ListProfiles(_ context.Context) ([]Profile, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	out := make([]Profile, len(c.state.Profiles))
-	copy(out, c.state.Profiles)
+	snapshot, err := c.cloneLocked()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Profile, len(snapshot.Profiles))
+	copy(out, snapshot.Profiles)
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out, nil
 }
@@ -431,8 +645,12 @@ func (c *FileCatalog) ListProfiles(_ context.Context) ([]Profile, error) {
 func (c *FileCatalog) ListSubscriptions(_ context.Context) ([]Subscription, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	out := make([]Subscription, len(c.state.Subscriptions))
-	copy(out, c.state.Subscriptions)
+	snapshot, err := c.cloneLocked()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Subscription, len(snapshot.Subscriptions))
+	copy(out, snapshot.Subscriptions)
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out, nil
 }
@@ -441,7 +659,11 @@ func (c *FileCatalog) ListSubscriptions(_ context.Context) ([]Subscription, erro
 func (c *FileCatalog) Profile(_ context.Context, id string) (Profile, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	for _, p := range c.state.Profiles {
+	snapshot, err := c.cloneLocked()
+	if err != nil {
+		return Profile{}, err
+	}
+	for _, p := range snapshot.Profiles {
 		if p.ID == id {
 			return p, nil
 		}
@@ -452,7 +674,11 @@ func (c *FileCatalog) Profile(_ context.Context, id string) (Profile, error) {
 func (c *FileCatalog) Subscription(_ context.Context, id string) (Subscription, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	for _, s := range c.state.Subscriptions {
+	snapshot, err := c.cloneLocked()
+	if err != nil {
+		return Subscription{}, err
+	}
+	for _, s := range snapshot.Subscriptions {
 		if s.ID == id {
 			return s, nil
 		}
@@ -463,7 +689,11 @@ func (c *FileCatalog) Subscription(_ context.Context, id string) (Subscription, 
 func (c *FileCatalog) Server(_ context.Context, id string) (Server, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	for _, existing := range c.state.Servers {
+	snapshot, err := c.cloneLocked()
+	if err != nil {
+		return Server{}, err
+	}
+	for _, existing := range snapshot.Servers {
 		if existing.ID == id {
 			return existing, nil
 		}
@@ -474,7 +704,11 @@ func (c *FileCatalog) Server(_ context.Context, id string) (Server, error) {
 func (c *FileCatalog) User(_ context.Context, id string) (User, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	for _, existing := range c.state.Users {
+	snapshot, err := c.cloneLocked()
+	if err != nil {
+		return User{}, err
+	}
+	for _, existing := range snapshot.Users {
 		if existing.ID == id {
 			return existing, nil
 		}

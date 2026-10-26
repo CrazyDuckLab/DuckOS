@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/CrazyDuckLab/DuckOS/internal/identity"
+	"github.com/CrazyDuckLab/DuckOS/internal/persist"
 )
 
 // Access is the narrow contract the Xray API uses for authorisation.
@@ -65,8 +66,10 @@ type API struct {
 	// stub that skips the materialise step. A nil Apply
 	// is the safe default for tests that only exercise
 	// CRUD.
-	Apply  func(ctx context.Context, servers []Server, users []User) error
-	Prefix string
+	Apply func(ctx context.Context, servers []Server, users []User) error
+	// FailClosed stops the serving runtime when the authoritative catalog outcome is uncertain.
+	FailClosed func() error
+	Prefix     string
 	// Center, when wired, serves the Xray Center surface under
 	// <Prefix>center/* (nodes, groups, tokens, policies, stats,
 	// backup, diagnostics) with its own authorisation gate. The
@@ -107,6 +110,7 @@ type catalogSnapshotter interface {
 func (a *API) mutateCatalog(ctx context.Context, mut func() error) (resultErr error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	mutated := false
 	var snap fileState
 	var snapper catalogSnapshotter
 	if s, ok := a.Catalog.(catalogSnapshotter); ok {
@@ -118,18 +122,28 @@ func (a *API) mutateCatalog(ctx context.Context, mut func() error) (resultErr er
 		}
 	}
 	defer func() {
-		if resultErr == nil || snapper == nil {
+		if errors.Is(resultErr, persist.ErrUncertain) {
+			if a.FailClosed != nil {
+				_ = a.FailClosed()
+			}
+			return
+		}
+		if resultErr == nil || snapper == nil || !mutated {
 			return
 		}
 		rollbackCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := snapper.Restore(rollbackCtx, snap); err != nil {
+			if a.FailClosed != nil {
+				_ = a.FailClosed()
+			}
 			resultErr = errors.New("xray recovery required: catalog rollback failed")
 		}
 	}()
 	if err := mut(); err != nil {
 		return err
 	}
+	mutated = true
 	if a.Apply == nil {
 		return nil
 	}

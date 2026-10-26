@@ -1084,6 +1084,9 @@ func enableXrayCenter(catalogDir string, access identityAccess, cat *xray.FileCa
 		// observable and recoverable through the authenticated API.
 		StorageStatus: func() map[string]string {
 			out := map[string]string{}
+			if d := cat.Degraded(); d != "" {
+				out["xray-catalog"] = d
+			}
 			if d := nodeMgr.Degraded(); d != "" {
 				out["nodes"] = d
 			}
@@ -1096,6 +1099,9 @@ func enableXrayCenter(catalogDir string, access identityAccess, cat *xray.FileCa
 			return out
 		},
 		ReconcileStorage: func() (string, error) {
+			if err := cat.ReconcileStorage(); err != nil {
+				return "", err
+			}
 			// R-03: reconciliation reads AUTHORITATIVE storage —
 			// each durable file is re-read from DISK (not from the
 			// in-memory mirror) before the merge; an unreadable or
@@ -1225,10 +1231,11 @@ func enableXrayService(catalogDir string, access identityAccess, secrets *agent.
 		rt.SetResolver(secrets.XrayResolver())
 	}
 	api := &xray.API{
-		Access:  access,
-		Catalog: cat,
-		Apply:   rt.ApplyWith,
-		Prefix:  "/xray/v1/",
+		Access:     access,
+		Catalog:    cat,
+		Apply:      rt.ApplyWith,
+		FailClosed: rt.Stop,
+		Prefix:     "/xray/v1/",
 	}
 	// Xray Center: durable node registry, subscription groups,
 	// delivery tokens, routing policies, quota enforcement and
