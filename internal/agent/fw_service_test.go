@@ -39,6 +39,7 @@ func (acceptAccess) Authorize(string, identity.Permission) (identity.User, error
 // (fw_live_test.go).
 type fakeFwLauncher struct{ stageDir string }
 
+func (f fakeFwLauncher) Available() bool        { return true }
 func (f fakeFwLauncher) Check([]byte) error     { return nil }
 func (f fakeFwLauncher) CheckJSON([]byte) error { return nil }
 
@@ -63,6 +64,9 @@ func newTestFwService(t *testing.T) (*FirewallRulesService, string) {
 		t.Fatalf("store dir: %v", err)
 	}
 	stage := filepath.Join(dir, "stage")
+	prevLauncher := nftClient
+	nftClient = func() fwLauncherTransport { return fakeFwLauncher{stageDir: stage} }
+	t.Cleanup(func() { nftClient = prevLauncher })
 	svc, err := NewFirewallRulesService(
 		store,
 		stage,
@@ -78,9 +82,7 @@ func newTestFwService(t *testing.T) (*FirewallRulesService, string) {
 	svc.adapter.readbackFn = func(string) ([]json.RawMessage, bool, error) {
 		return fwrSnapshotFromStage(stage)
 	}
-	prevLauncher := nftClient
-	nftClient = func() fwLauncherTransport { return fakeFwLauncher{stageDir: stage} }
-	t.Cleanup(func() { nftClient = prevLauncher; svc.Close() })
+	t.Cleanup(svc.Close)
 	return svc, dir
 }
 
