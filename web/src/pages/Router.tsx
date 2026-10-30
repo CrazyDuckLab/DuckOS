@@ -113,7 +113,6 @@ const KIND_FOR_PAGE: Record<string, SupportedObjectKind> = {
   P054: "dns.zone",
   P055: "dns.zone",
   P056: "dhcp.subnet",
-  P050: "xray.user",
   P047: "wireguard.server",
   P048: "wireguard.peer",
   P049: "xray.server",
