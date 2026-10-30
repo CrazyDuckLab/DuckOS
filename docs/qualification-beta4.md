@@ -19,6 +19,10 @@ Development build identifiers are not official release versions.
   EN/RU/DE/ES regressions cover the intended Center page.
 - Linux firewall unit tests install their fake launcher before service startup.
   No production retry or privilege boundary is weakened.
+- Complete signed update packages preserve helper executability and normalize
+  file/directory modes despite UMask=0077. Bounded gzip tar fits the existing
+  incoming cap; signatures, payload digests and expanded-size limits remain
+  mandatory. Legacy raw tar is retained. See [update contract](update-system.md).
 
 This is a descendant of the accepted beta.4 checkpoint. It is not RC9 relabelled.
 Apple-style UI / beta.5, later metadata IPC and unrelated feature development

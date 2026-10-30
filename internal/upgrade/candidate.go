@@ -3,6 +3,7 @@ package upgrade
 import (
 	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -38,13 +39,47 @@ func ownedDirectory(dir string, mode os.FileMode) error {
 	return nil
 }
 
-func walkPayload(pkg *Package, visit func(string, []byte) error) error {
-	r := tar.NewReader(bytes.NewReader(pkg.Payload))
+// Incoming signed packages remain subject to the existing 64 MiB store/IPC caps.
+// Bound each expanded file to that same memory budget, and stream the archive.
+const maxReleaseFileBytes int64 = 64 << 20
+
+func walkPayload(pkg *Package, visit func(string, []byte, os.FileMode) error) error {
+	return walkPayloadBounded(pkg, MaxPayloadBytes, maxReleaseFileBytes, visit)
+}
+
+func walkPayloadBounded(pkg *Package, maxExpanded, maxFile int64, visit func(string, []byte, os.FileMode) error) error {
+	compressed := bytes.NewReader(pkg.Payload)
+	var input io.Reader = compressed
+	var gz *gzip.Reader
+	if bytes.HasPrefix(pkg.Payload, []byte{0x1f, 0x8b}) {
+		var err error
+		gz, err = gzip.NewReader(compressed)
+		if err != nil {
+			return err
+		}
+		defer gz.Close()
+		gz.Multistream(false)
+		input = gz
+	}
+	// Include tar headers/padding in the expansion bound. The extra byte proves
+	// overflow without allocating an expanded archive in memory.
+	bounded := &io.LimitedReader{R: input, N: maxExpanded + 1}
+	r := tar.NewReader(bounded)
 	seen := map[string]bool{}
 	var size int64
 	for count := 0; ; count++ {
 		h, err := r.Next()
 		if err == io.EOF {
+			// Consume the gzip trailer as well: tar EOF alone does not verify its CRC.
+			if _, err := io.Copy(io.Discard, bounded); err != nil {
+				return err
+			}
+			if bounded.N == 0 {
+				return errors.New("upgrade: expanded payload too large")
+			}
+			if gz != nil && compressed.Len() != 0 {
+				return errors.New("upgrade: trailing compressed payload")
+			}
 			break
 		}
 		if err != nil {
@@ -58,18 +93,24 @@ func walkPayload(pkg *Package, visit func(string, []byte) error) error {
 		if h.Typeflag == tar.TypeDir {
 			continue
 		}
-		if h.Typeflag != tar.TypeReg || h.Size < 0 || h.Size > MaxPayloadBytes {
+		if h.Typeflag != tar.TypeReg || h.Size < 0 || h.Size > maxFile {
 			return errors.New("upgrade: unsupported archive entry")
 		}
 		size += h.Size
-		if size > MaxPayloadBytes {
+		if size > maxExpanded {
 			return errors.New("upgrade: expanded payload too large")
 		}
 		b, err := io.ReadAll(io.LimitReader(r, h.Size+1))
 		if err != nil || int64(len(b)) != h.Size {
 			return errors.New("upgrade: incomplete archive file")
 		}
-		if err := visit(name, b); err != nil {
+		mode := os.FileMode(0644)
+		// Preserve executable files, without propagating set-id or writable bits.
+		// API/Agent retain the legacy executable default for older signed packages.
+		if h.Mode&0111 != 0 || name == "bin/duck-agent" || name == "bin/duck-api" {
+			mode = 0755
+		}
+		if err := visit(name, b, mode); err != nil {
 			return err
 		}
 	}
@@ -95,17 +136,15 @@ func (s *Supervisor) prepare(id string, pkg *Package) error {
 	}
 	// Only this newly-created staging tree may be discarded on failure.
 	defer os.RemoveAll(tmp)
-	err = walkPayload(pkg, func(name string, b []byte) error {
+	err = walkPayload(pkg, func(name string, b []byte, mode os.FileMode) error {
 		file := filepath.Join(tmp, filepath.FromSlash(name))
 		if err := os.MkdirAll(filepath.Dir(file), 0755); err != nil {
 			return err
 		}
-		mode := os.FileMode(0644)
 		if name == "bin/duck-agent" || name == "bin/duck-api" {
 			if len(b) < 4 || !bytes.Equal(b[:4], []byte{0x7f, 'E', 'L', 'F'}) {
 				return errors.New("upgrade: native ELF executable required")
 			}
-			mode = 0755
 		}
 		f, err := os.OpenFile(file, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
 		if err != nil {
@@ -113,6 +152,11 @@ func (s *Supervisor) prepare(id string, pkg *Package) error {
 		}
 		defer f.Close()
 		if _, err = f.Write(b); err != nil {
+			return err
+		}
+		// The supervisor runs with UMask=0077; published release files must still
+		// be accessible to the unprivileged API service after the atomic switch.
+		if err := f.Chmod(mode); err != nil {
 			return err
 		}
 		return f.Sync()
@@ -132,6 +176,9 @@ func (s *Supervisor) prepare(id string, pkg *Package) error {
 			return e
 		}
 		if d.IsDir() {
+			if err := os.Chmod(p, 0755); err != nil {
+				return err
+			}
 			return syncReleaseDir(p)
 		}
 		return nil
@@ -215,7 +262,7 @@ func (s *Supervisor) verifiedBuild(id string) (BuildIdentity, error) {
 	if err := ownedDirectory(dir, 0755); err != nil {
 		return BuildIdentity{}, err
 	}
-	err = walkPayload(pkg, func(name string, want []byte) error {
+	err = walkPayload(pkg, func(name string, want []byte, mode os.FileMode) error {
 		full := filepath.Join(dir, filepath.FromSlash(name))
 		resolved, err := filepath.EvalSymlinks(full)
 		if err != nil || resolved != full {
@@ -227,7 +274,7 @@ func (s *Supervisor) verifiedBuild(id string) (BuildIdentity, error) {
 		}
 		defer f.Close()
 		info, err := f.Stat()
-		if err != nil || !info.Mode().IsRegular() || info.Size() != int64(len(want)) {
+		if err != nil || !info.Mode().IsRegular() || info.Size() != int64(len(want)) || info.Mode().Perm() != mode {
 			return errors.New("upgrade: release file changed")
 		}
 		h := sha256.New()

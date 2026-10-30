@@ -28,7 +28,7 @@
 </p>
 
 
-> **v0.1.0-beta.4: Xray Center release preparation.**
+> **v0.1.0-beta.4: Xray Center prerelease.**
 > This tree preserves the accepted Router Core and Xray Center security lineage.
 > Publication requires exact-source installation, systemd, upgrade, rollback,
 > traffic and artifact gates. See [beta.4 scope and evidence](docs/qualification-beta4.md).

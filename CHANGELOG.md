@@ -2,7 +2,7 @@
 
 ## v0.1.0-beta.4
 
-Xray Center prerelease candidate; publication depends on the recorded exact-source gates.
+Xray Center prerelease; exact-source qualification is recorded with the GitHub release.
 
 - Integrated server, client, subscription and node management from the accepted beta.4 lineage.
 - Preserved fail-closed identity, authenticated trusted peer scope, durable revocation and protected-stdin CLI rotation/recovery.
@@ -10,6 +10,7 @@ Xray Center prerelease candidate; publication depends on the recorded exact-sour
 - Restored the intended P050 Center route, with four-locale regression coverage.
 - Retained Router Core F1–F8 security fixes and the ELF32/ELF64 installer correction.
 - Removed laboratory reports from the current source snapshot while preserving Git history.
+- Fixed full signed-update payload staging: bounded gzip tar, executable helpers, explicit modes under the private supervisor umask and mode readback. Incoming size and signature gates remain enforced.
 
 See [scope and evidence](docs/qualification-beta4.md). Cross-builds do not imply physical ARM qualification.
 

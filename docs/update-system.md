@@ -1,18 +1,57 @@
 # DuckOS update system
 
-Status: target specification with implemented update foundations; not a qualified beta.2 upgrade path
+Status: beta.4 implemented foundations plus the broader target specification
 
 **Beta.2 is fresh-install-only. No beta.1 → beta.2 in-place upgrade is qualified.**
 The public tarballs are installer payloads, not signed `.duck` updates.
-Last updated: 2026-09-07
+Last updated: 2026-10-31
 
-This document defines the safety contract for DuckOS software updates. It does
-not claim that an updater, package format, signing service, migration runner, or
-release repository exists yet. Until tests produce evidence under
-[`testing.md`](testing.md), every behavior below is a requirement rather than an
-implementation claim.
+This document defines the safety contract for DuckOS software updates. The
+beta.4 implementation is described separately below. Broader migration and
+recovery requirements remain a target until supported by exact-source evidence
+under [`testing.md`](testing.md); they are not implementation claims.
 
 The words **MUST**, **MUST NOT**, **SHOULD**, and **MAY** are normative.
+
+## Beta.4 implemented foundation and package limits
+
+The independent root-only `duck-updater` supervisor implements signed local
+staging, authenticated runtime health, Active/Previous selection and rollback.
+This implementation is narrower than the full target specification below:
+only schema 1 → 1 and packages without host dependency changes are supported.
+There is no public update signing service, production signing key, automatic
+Internet update channel or general state/schema migration qualification.
+Public GitHub `.tar.gz` assets are fresh-install payloads, **not signed `.duck`
+updates**. Their SHA256SUMS do not replace Ed25519 package authentication.
+
+The format-1 envelope is a 20-byte header (`DUCK1ARC`, big-endian version and
+signed-body length), followed by the 64-byte Ed25519 signature, manifest JSON
+and payload. The signature authenticates the manifest; its SHA-256 digest and
+byte count authenticate every payload byte. The payload is a rootless tar or a
+single gzip-compressed rootless tar, detected from its authenticated bytes.
+Legacy raw tar remains supported. Gzip checksum/truncation errors, concatenated
+streams and trailing compressed bytes are rejected. Expansion is streamed with
+a 2 GiB limit including tar framing and a 64 MiB limit per regular file.
+The existing 64 MiB incoming store/IPC limits remain unchanged; base64/JSON
+framing also counts toward the IPC limit. Full release packages therefore use
+gzip compression. A package must include the complete runtime payload, not just
+API and Agent. Executable bits are preserved as 0755 and other files as 0644;
+set-id and group/world-write permissions are never propagated. Staging applies
+these modes explicitly despite the supervisor's private UMask=0077 and verifies
+file modes and digests again before selection.
+
+First enrollment of an installed beta.3 release requires an operator-controlled
+trust bootstrap: verify the beta.4 archive independently, provision its
+independent supervisor at `/usr/libexec/duckos/duck-updater`, provision the
+operator's trusted public key and health keys, and supply a correctly signed
+full baseline package byte-identical to the installed release. Older supervisors
+do not understand compressed tar payloads. `--enroll-installed` verifies the
+baseline against the current selection and authenticated live processes before
+recording Active; it does not replace installed payload files. Do not generate
+an arbitrary key and present it as an official DuckOS release key. Laboratory
+fixtures use disposable test trust only, never shipped or accepted as public
+release signing authority. Do not enable the updater without valid operator
+trust and a verified rollback baseline.
 
 ## Scope
 
@@ -50,9 +89,8 @@ boundary are explicit in [Host-level Debian changes](#host-level-debian-changes)
 
 Release directories are conceptually placed below
 `/opt/duckos/releases/<release-id>/`, with an atomic selection mechanism such as
-`/opt/duckos/current`. The exact release identifier and pointer implementation
-remain open, but activation MUST be atomic from the perspective of service
-startup and crash recovery.
+`/opt/duckos/current`. The foundation uses a validated release ID and a relative `current` symlink.
+Activation MUST be atomic from the perspective of service startup and crash recovery.
 
 ## Non-negotiable invariants
 
@@ -108,8 +146,9 @@ design permits lifecycle actions, their vocabulary, privileges, inputs,
 outputs, timeouts, audit record, architecture support, idempotency, and rollback
 semantics require a separate security decision.
 
-The exact serialization, compression, signing algorithm, key rotation model,
-and offline trust bootstrap are open decisions.
+The foundation serialization, compression and Ed25519 verification are described
+above. Public signing authority, production key rotation and distribution of
+operator trust remain deployment decisions.
 
 ## Durable state machine
 

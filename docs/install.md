@@ -6,7 +6,8 @@
 > separate owner decision; download commands apply after the release exists.
 > See [qualification](qualification-beta3-final.md).
 
-**Beta software. FRESH-INSTALL-ONLY. No qualified beta.1/beta.2 → beta.4 in-place upgrade.**
+**Beta software. The public archive installer is FRESH-INSTALL-ONLY.
+No qualified beta.1/beta.2 → beta.4 in-place upgrade.**
 Use a fresh Debian 13 host with systemd, an isolated test network, and an
 out-of-band console. Do not remove an existing installation to bypass preflight.
 Keep your management interface outside network changes.
@@ -17,7 +18,10 @@ Use a public asset only after its exact-source release qualification is recorded
 The installer performs fresh installation and refuses an existing installation;
 re-running it is not an upgrade method. A tarball is not a signed `.duck` update.
 Beta.3 → beta.4 upgrade and rollback require the authenticated update contract,
-trusted signing keys and recovery evidence; no signature bypass is supported.
+trusted signing keys, provisioning of the beta.4 independent supervisor and
+recovery evidence; no signature bypass is supported. Public tarballs do not
+provision production update trust. See the operator bootstrap requirements in
+[the update contract](update-system.md#beta4-implemented-foundation-and-package-limits).
 See [beta.4 qualification](qualification-beta4.md) and [updates](update-system.md).
 
 ## Select and verify the download
