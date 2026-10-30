@@ -1,63 +1,39 @@
-# DuckOS v0.1.0-beta.2 limitations
+# DuckOS v0.1.0-beta.4 limitations
 
-> **Beta.3 network core is unpublished.** Direct nftables adapters cannot
-> operate under the installed Agent empty capability bounding set. NAT-PMP wire
-> fixes have isolated Linux socket evidence; they do not qualify the complete
-> Agent-to-kernel mapping path. See [independent audit](qualification-beta3-final.md).
+**Prerelease; fresh installation only.** No beta.1/beta.2 → beta.4 in-place
+upgrade is qualified. Do not use an installer archive as a signed `.duck` update.
+There is no public OTA channel. Keep console access and an isolated test network.
 
-**Beta software. Fresh installation required. No qualified beta.1 → beta.2
-in-place upgrade.** Use an isolated network and preserve console access.
+Only native Linux AMD64 received the accepted Router Core qualification:
+regressions, firewall/NAT packet tests, installer, real systemd startup,
+authenticated readiness, service restart and VM reboot persistence. ARM64 and
+ARMv7 have cross-build and artifact checks without native hardware qualification.
+Physical power loss, arbitrary hardware, every install/upgrade failure and
+universal client interoperability remain unqualified. See
+[qualification](qualification-beta3-final.md) and [compatibility](compatibility.md).
 
-## Platforms and qualification
+The Agent is UID 0 with zero effective capabilities. Separate nft and WireGuard
+launchers carry CAP_NET_ADMIN; FRR has its own constrained launcher. F1–F8
+remediation closes the recorded nft launcher defects without broadening Agent
+capabilities. This is not a completed product security audit.
 
-AMD64, ARM64 and ARMv7 are official release targets with build/artifact
-verification. Only AMD64 received the complete final two-node live matrix on
-Debian 13 VMs. ARMv7 is `GOARCH=arm GOARM=7`; the physical ODROID XU4 was excluded.
-Cross-build and artifact evidence does not prove native hardware behavior.
-See [compatibility](compatibility.md) and [the report](../beta2-final-report.md).
+Port Mapping is disabled until operator/trusted-LAN admission. NAT-PMP, PCP
+ANNOUNCE/MAP and UPnP IGD/SSDP frontend sources are included; full PCP, PEER,
+unsupported options, IPv6 frontends and every third-party client are not claimed.
+External-address observation has no complete multi-WAN qualification.
+Typed firewall rules are forward-only; input/output filtering and the wider
+networking/UI catalog are not qualified by that fact alone.
 
-## Networking
+Xray-core remains pinned to 26.3.27. Xray Center beta.4, Subscription Center,
+Stealth Admin, profile expansion and separate PPPoE/L2TP development are excluded.
+Historical WireGuard, Xray and FRR beta.2 evidence is not a new full beta.4 matrix.
 
-Beta.2 qualified two simultaneous WireGuard tunnels and real Xray VLESS/TLS and
-VLESS/REALITY client traffic on AMD64. These are subsystem-specific results,
-not a claim that every page in the V1 catalog is a qualified network workflow.
-Safe Apply, explicit confirmation and management protection remain required.
-Do not infer a complete multi-WAN, DHCP/DNS, NetBird or arbitrary hardware matrix
-from the release highlights.
+The archive has seven service binaries, not the standalone `duck` CLI. Use the
+source-built CLI only with its documented contract. Automatic LAN TLS onboarding,
+mDNS discovery and a physical Wi-Fi/modem matrix are absent. API liveness is not
+readiness or verified network health. Recovery can fail; retain out-of-band access.
 
-FRR live H10 BGP advertise/withdraw/restart passed on AMD64 at the current
-qualified source. FRR is an optional Debian dependency: the installer attempts
-to provision it and reports it unavailable if that fails. This evidence does
-not qualify every FRR protocol or deployment topology.
-
-Port Mapping includes the backend, Trusted LAN Registry, nftables lifecycle,
-TTL expiry, revoke and cleanup. **UPnP IGD, SSDP/M-SEARCH, NAT-PMP and PCP network
-protocol frontends are not included.**
-Wake-on-LAN and Speed Lab are bounded by configured network/target policy.
-
-## Installation, updates and recovery
-
-- The supported installer requires fresh Debian 13 with systemd and matching architecture.
-- Existing DuckOS installation paths/units are refused; do not bypass preflight.
-- The release tarball is not a signed `.duck` upgrade package.
-- There is no public OTA channel and no qualified beta.1 → beta.2 upgrade.
-- Reboot/service recovery was exercised on the AMD64 lab VMs. Physical power-loss,
-  hardware variance and wider install-path qualification remain separate work.
-
-## Management and UI
-
-- Use SSH local-forward to loopback; automatic LAN HTTPS onboarding and mDNS are absent.
-- Easy and Full modes share the configuration model and support EN/RU/DE/ES.
-- API reachability alone does not prove network health. Missing/stale observations
-  remain visible; an incomplete headline is not proof of a broken network.
-- Doctor provides deterministic findings; a generative remediation assistant is absent.
-- Wi-Fi chipset and modem/LTE support are not established by the final VM matrix.
-
-## Security and reporting
-
-The Agent has zero effective Linux capabilities. WireGuard privileged mutations
-use the separate CAP_NET_ADMIN-only launcher; FRR has its own constrained launcher.
-Vault-backed secrets and RBAC fixes are part of beta.2, without claiming a complete
-product security audit. Never publish private keys, credentials or session data.
-Use repository issue templates for sanitized bugs and [SECURITY.md](../SECURITY.md)
-for vulnerabilities.
+The current source snapshot excludes laboratory reports. Previously published
+history can still contain historical private topology; snapshot cleanup does not
+erase it. No active credential compromise is demonstrated by that finding.
+Sanitize bug reports and follow [SECURITY.md](../SECURITY.md) for vulnerabilities.

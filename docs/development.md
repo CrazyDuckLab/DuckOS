@@ -1,6 +1,6 @@
 # DuckOS development workflow
 
-Status: beta.2 source and Linux qualification workflow
+Status: beta.3 release preparation and Linux qualification workflow
 Last updated: 2026-10-13
 
 This document defines local builds and how exact source revisions move from
@@ -86,7 +86,7 @@ Run the complete `make check` suite on Linux: several packages and tests require
 Linux kernel interfaces. macOS supports editing, frontend/installer checks and
 cross-builds; `GOOS=linux go vet ./...` provides cross-target static analysis,
 not native runtime evidence. Do not treat clean-host witness refusals on an
-installed target as passes. See [current qualification](qualification-beta2.md).
+installed target as passes. See [current qualification](qualification-beta3-final.md).
 
 `bash scripts/bootstrap.sh` downloads SHA-256-pinned Go 1.27.1 and Node 24.20.0
 into ignored `.tools/`. It supports macOS and Linux amd64/arm64, requires curl,
@@ -108,6 +108,9 @@ All package versions are exact. `web/package-lock.json` records transitive
 integrity; no Go module dependencies are currently needed. Toolchain archives
 and checksum provenance are in `scripts/bootstrap.sh`. Dependency review uses
 `npm --prefix web audit`; this is separate from release security qualification.
+
+See the [release identity contract](release-identity.md): API/Agent embed identity;
+helpers are identified by artifact metadata and verified per-file checksums.
 
 Each payload includes binaries, static UI, installer, unit templates, VERSION,
 BUILD-INFO.json, and a complete SHA256SUMS inventory. Metadata identifies commit,

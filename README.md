@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/CrazyDuckLab/DuckOS/releases/tag/v0.1.0-beta.2"><img src="https://img.shields.io/github/v/release/CrazyDuckLab/DuckOS?include_prereleases&amp;style=flat-square&amp;color=d4a83f&amp;label=release" alt="Current GitHub release, including prereleases"></a>
+  <a href="https://github.com/CrazyDuckLab/DuckOS/releases/tag/v0.1.0-beta.4"><img src="https://img.shields.io/github/v/release/CrazyDuckLab/DuckOS?include_prereleases&amp;style=flat-square&amp;color=d4a83f&amp;label=release" alt="Current GitHub release, including prereleases"></a>
   <a href="https://github.com/CrazyDuckLab/DuckOS/actions/workflows/verify.yml"><img src="https://img.shields.io/github/actions/workflow/status/CrazyDuckLab/DuckOS/verify.yml?branch=main&amp;style=flat-square&amp;label=CI" alt="Actual main-branch CI status"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--only-318779?style=flat-square" alt="GPL-3.0-only license"></a>
   <a href="docs/install.md"><img src="https://img.shields.io/badge/host-Debian_13-315b6c?style=flat-square&amp;logo=debian&amp;logoColor=white" alt="Debian 13 host"></a>
@@ -27,15 +27,13 @@
   <a href="docs/roadmap.md">Roadmap</a>
 </p>
 
-> **v0.1.0-beta.2 is a published prerelease. Fresh installation only.**
-> AMD64 has two-node live qualification; ARM64 and ARMv7 have official builds and
-> artifact verification, without the equivalent live matrix. Use an isolated
-> evaluation network and console access. No qualified beta.1 → beta.2 upgrade.
 
-> **Beta.3 network-core candidate: publication blocked.** Protocol and firewall
-> component tests do not establish operation under the installed Agent privilege
-> boundary. See the [independent release audit](docs/qualification-beta3-final.md).
-> The current published release remains beta.2.
+> **v0.1.0-beta.4: Xray Center release preparation.**
+> This tree preserves the accepted Router Core and Xray Center security lineage.
+> Publication requires exact-source installation, systemd, upgrade, rollback,
+> traffic and artifact gates. See [beta.4 scope and evidence](docs/qualification-beta4.md).
+> Earlier AMD64 Router Core qualification does not establish a complete beta.4
+> or ARM hardware qualification matrix.
 
 ## Networking you can inspect
 
@@ -48,22 +46,35 @@ and verification remain distinct. No mandatory cloud account or SaaS dependency.
 than a reachable API. The interface keeps missing evidence visible, and Safe Apply
 retains a confirmation window and rollback path.
 
-DuckOS installs onto an existing Linux host. The beta.2 archives are installer
+DuckOS installs onto an existing Linux host. The beta.4 archives are installer
 payloads, not bootable system images or firmware for arbitrary consumer routers.
 
-## What ships
+## Beta.4 changes
 
-| Area | Beta.2 capabilities | Evidence boundary |
+- Xray Center connects server, client, subscription and node management to the
+  authenticated API / Engine. Node rotation and recovery use protected stdin.
+- Identity state, trusted peer scope and durable revocation fail closed.
+- Catalog commits use durable atomic writes; uncertain outcomes stop the runtime.
+  Removing a server preserves unrelated catalog objects.
+- P050 opens the intended Xray Center UI in EN, RU, DE and ES.
+- [Release identity](docs/release-identity.md) binds all seven service executables;
+  the standalone `duck` CLI remains separately source-built.
+
+Apple-style UI / beta.5 and unrelated RC9 features are excluded.
+
+## Inherited Router Core
+
+| Area | Beta.3 capabilities | Evidence boundary |
 |---|---|---|
 | **Networking & tunnels** | WireGuard servers/peers; Xray **26.3.27**, VLESS/TLS and REALITY; FRR launcher and BGP | **Qualified on AMD64** for the recorded tunnel/traffic scenarios and FRR H10 advertise/withdraw/restart |
 | **Configuration & recovery** | Declarative network objects, Safe Apply, durable journal, management protection and boot recovery | **Implemented**, with targeted AMD64 recovery evidence; the whole networking catalog is not a qualified workflow matrix |
 | **Identity & operator experience** | Owner enrollment, sessions, RBAC, Vault-backed materialization; Easy / Full UI; EN · RU · DE · ES | **Implemented**; `duck` CLI is separately source-built and is not installed by the archive |
 | **Diagnostics & device actions** | Doctor, inspectable observations, Speed Lab and Wake-on-LAN | **Implemented**; bounded Speed Lab probes and SSRF refusals **qualified on AMD64** |
-| **Port Mapping** | Backend, Trusted LAN Registry, nftables lifecycle, TTL, revoke and cleanup | **Backend available**; UPnP IGD, SSDP/M-SEARCH, NAT-PMP and PCP frontends are **planned, not shipped** |
+| **Port Mapping** | Backend, Trusted LAN Registry, nftables lifecycle, TTL, revoke and cleanup | **Implemented** protocol frontends include NAT-PMP, PCP ANNOUNCE/MAP and UPnP IGD/SSDP; every client and IPv6 are not qualified |
 
 **Implemented ≠ observed ≠ verified ≠ qualified.** A UI entry alone proves none
 of those. This prerelease is for evaluation; experimental or unqualified paths
-remain outside the stated live evidence. [Read the qualification summary](docs/qualification-beta2.md)
+remain outside the stated live evidence. [Read the qualification summary](docs/qualification-beta3-final.md)
 and [complete limitations](docs/beta-limitations.md).
 
 ## Inside DuckOS
@@ -79,7 +90,8 @@ in user space. They have different runtime paths.
 - **One public boundary.** UI and ordinary CLI/API operations enter the Engine's
   authenticated semantic path. The browser never calls Agent IPC.
 - **Capabilities stay explicit.** `duck-agent` has zero effective Linux
-  capabilities. `duck-wg-launcher` has only `CAP_NET_ADMIN`; FRR has its own bounded
+  capabilities while running as UID 0. `duck-nft-launcher` and `duck-wg-launcher`
+  have only `CAP_NET_ADMIN`; FRR has its own bounded
   launcher and scoped daemon lifecycle.
 - **Secrets stay behind the boundary.** Xray configuration materializes through
   the protected Vault path, keeping runtime secret resolution on the host.
@@ -114,8 +126,8 @@ matters. This is a workflow illustration, not an additional transaction-state en
 **Two modes. One configuration model.** Easy Mode offers an overview; Full Mode
 opens up the technical detail. Global search and contextual help connect the two.
 
-These are **authentic historical beta.1 captures**, not current beta.2 screenshots.
-They illustrate the interface and do not establish beta.2 feature readiness.
+These are **authentic historical beta.1 captures**, not current beta.4 screenshots.
+They illustrate the interface and do not establish beta.4 feature readiness.
 [Capture provenance](docs/assets/screenshots/README.md).
 
 ![DuckOS Easy Mode — authentic historical beta.1 capture](docs/assets/screenshots/01-easy-home.png)
@@ -138,9 +150,9 @@ interface intact.
 
 **1 · Choose the build.** Check `uname -m` and `dpkg --print-architecture`.
 
-| Host | Archive suffix | Beta.2 evidence |
+| Host | Archive suffix | Beta.3 evidence |
 |---|---|---|
-| `x86_64` / `amd64` | `amd64` | Build, artifact verification and two-node live qualification |
+| `x86_64` / `amd64` | `amd64` | Build/artifact verification and native AMD64 Router Core qualification |
 | `aarch64` / `arm64` | `arm64` | Build and artifact verification |
 | `armv7l` / `armhf` | `armv7` | Build and artifact verification; Go target is `arm` with `GOARM=7` |
 
@@ -148,8 +160,8 @@ interface intact.
 
 ```bash
 ARCH=amd64
-ARCHIVE="duckos-v0.1.0-beta.2-linux-${ARCH}.tar.gz"
-BASE=https://github.com/CrazyDuckLab/DuckOS/releases/download/v0.1.0-beta.2
+ARCHIVE="duckos-v0.1.0-beta.4-linux-${ARCH}.tar.gz"
+BASE=https://github.com/CrazyDuckLab/DuckOS/releases/download/v0.1.0-beta.4
 curl --fail --location --output "$ARCHIVE" "$BASE/$ARCHIVE"
 curl --fail --location --output SHA256SUMS "$BASE/SHA256SUMS"
 sha256sum --check --ignore-missing SHA256SUMS
@@ -163,8 +175,8 @@ for prerequisites, extraction and **root-owned staging**. Once that staging is
 complete, the supported commands are:
 
 ```bash
-sudo bash /root/duckos-install/duckos-v0.1.0-beta.2/install.sh   --artifact /root/duckos-install/duckos-v0.1.0-beta.2 --check
-sudo bash /root/duckos-install/duckos-v0.1.0-beta.2/install.sh   --artifact /root/duckos-install/duckos-v0.1.0-beta.2
+sudo bash /root/duckos-install/duckos-v0.1.0-beta.4/install.sh   --artifact /root/duckos-install/duckos-v0.1.0-beta.4 --check
+sudo bash /root/duckos-install/duckos-v0.1.0-beta.4/install.sh   --artifact /root/duckos-install/duckos-v0.1.0-beta.4
 ```
 
 **4 · Enroll the Owner.** Forward the loopback management listener from your
@@ -178,14 +190,14 @@ Open `http://127.0.0.1:8080` and complete [Owner enrollment](docs/user/getting-s
 Read the bootstrap credential privately on the host when prompted. Never post
 it in issues or logs. There is no automatic LAN HTTPS onboarding or mDNS discovery.
 
-[Download beta.2](https://github.com/CrazyDuckLab/DuckOS/releases/tag/v0.1.0-beta.2) ·
+[Beta.3 release (available after publication)](https://github.com/CrazyDuckLab/DuckOS/releases/tag/v0.1.0-beta.4) ·
 [Installation guide](docs/install.md) · [CLI/API availability](docs/cli-api.md) ·
 [Troubleshooting](docs/troubleshooting.md)
 
 ## Where the flock is headed
 
 The next work is about deeper operator workflows and broader deployment evidence.
-This direction is **provisional**: no dates, completed beta.3 work or hardware
+This direction is **provisional**: no dates or additional hardware
 qualification are promised.
 
 ![Provisional DuckOS direction: published beta.2, deeper operator workflows, broader deployment](docs/assets/presentation/roadmap.svg)
@@ -201,7 +213,7 @@ not beta.2 support claims. Physical ODROID-XU4 was not in final beta.2 qualifica
 | [Installation](docs/install.md) | [Platform overview](docs/platform-overview.md) | [Development](docs/development.md) |
 | [User guide](docs/user/README.md) | [Architecture](docs/architecture.md) | [Contributing](CONTRIBUTING.md) |
 | [CLI / API](docs/cli-api.md) | [Security model](docs/security-model.md) | [Report a bug](https://github.com/CrazyDuckLab/DuckOS/issues/new/choose) |
-| [Troubleshooting](docs/troubleshooting.md) | [Qualification](docs/qualification-beta2.md) | [Community conduct](CODE_OF_CONDUCT.md) |
+| [Troubleshooting](docs/troubleshooting.md) | [Qualification](docs/qualification-beta3-final.md) | [Community conduct](CODE_OF_CONDUCT.md) |
 | [Recovery](docs/user/recovery.md) | [Limitations](docs/beta-limitations.md) | [Release notes](docs/release-notes.md) |
 
 [Full documentation index](docs/README.md) · [Changelog](CHANGELOG.md) ·

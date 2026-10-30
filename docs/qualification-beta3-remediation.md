@@ -1,3 +1,7 @@
+> **Historical report:** the final Router Core qualification and supersession
+> are recorded in [qualification-beta3-final.md](qualification-beta3-final.md).
+> Earlier SHA-specific findings below remain historical evidence.
+
 # Beta.3 remediation — qualification evidence
 
 Branch: `fix/beta3-release-blockers` (based on frozen `41921c3`).

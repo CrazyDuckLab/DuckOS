@@ -1,8 +1,14 @@
 # DuckOS security policy
 
-> The unpublished beta.3 candidate is blocked by the Agent-to-nftables privilege
-> boundary. No extra capabilities have been granted to the Agent. See
-> [independent candidate audit](docs/qualification-beta3-final.md).
+Beta.4 preserves the accepted Xray Center security checkpoint and the UID-0 /
+zero-capability Agent model. The owner explicitly accepted B4-04 on 2026-10-30.
+UID 0 retains residual access to root-owned files: zero capabilities do not
+make this a non-root sandbox. See [beta.4 qualification](docs/qualification-beta4.md).
+
+> **Beta.3 security baseline:** the nft privilege-boundary fixes F1–F8 are
+> present in the qualified Router Core. The Agent is UID 0 with zero effective
+> capabilities, not a non-root process. The separate nft launcher holds only
+> CAP_NET_ADMIN. See [qualification and limits](docs/qualification-beta3-final.md).
 
 This page covers the supported versions of DuckOS, the current
 implementation-level security model at a high level, and how to
@@ -13,7 +19,7 @@ and engineering controls are in [`docs/security-model.md`](docs/security-model.m
 
 | Version | Supported |
 |---|---|
-| `v0.1.0-beta.2` (public beta) | **Best-effort community support** during the public beta. Security-relevant fixes land in the next beta or stable. See [`docs/beta-limitations.md`](docs/beta-limitations.md) for what is and is not wired to live data in this beta. |
+| `v0.1.0-beta.3` (prerelease candidate; support upon publication) | **Best-effort community support** during the public beta. Security-relevant fixes land in the next beta or stable. See [`docs/beta-limitations.md`](docs/beta-limitations.md) for what is and is not wired to live data in this beta. |
 | Source code at any commit | Not a supported release. Use the qualified artifact only. |
 | Internal / unlabelled builds | Not supported. |
 
@@ -55,7 +61,7 @@ the high-level, public-facing summary.
 - There is **no** built-in MFA, passkey, or WebAuthn support in this
   beta. The Owner password is the only factor.
 - Owner reset exists in the source-built CLI, which is not installed by the
-  beta.2 archive. Follow [CLI availability](docs/cli-api.md) and the recovery
+  beta.3 archive. Follow [CLI availability](docs/cli-api.md) and the recovery
   guide; stop the API before offline recovery. It is logged in the audit log.
 
 ### Privilege separation
@@ -82,6 +88,11 @@ Linux kernel + systemd + networkd + nftables + dnsmasq + frr + WireGuard + Xray
   operations only.
 - The Linux adapters are the only path that mutates `/etc`, kernel
   state, network configuration, or service lifecycle.
+
+Historical laboratory topology remains reachable in old Git objects; removing
+runtime reports from this snapshot does not erase that history. No active
+credential compromise is established by the topology finding. Publication
+requires explicit owner acceptance of residual historical disclosure.
 
 ### Safe Apply and rollback
 

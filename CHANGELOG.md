@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.1.0-beta.4
+
+Xray Center prerelease candidate; publication depends on the recorded exact-source gates.
+
+- Integrated server, client, subscription and node management from the accepted beta.4 lineage.
+- Preserved fail-closed identity, authenticated trusted peer scope, durable revocation and protected-stdin CLI rotation/recovery.
+- Backported durable catalog commit / uncertain-outcome protection and server deletion isolation.
+- Restored the intended P050 Center route, with four-locale regression coverage.
+- Retained Router Core F1–F8 security fixes and the ELF32/ELF64 installer correction.
+- Removed laboratory reports from the current source snapshot while preserving Git history.
+
+See [scope and evidence](docs/qualification-beta4.md). Cross-builds do not imply physical ARM qualification.
+
+
+## v0.1.0-beta.3
+
+Prerelease candidate; publication requires owner authorization. Router Core F1–F8
+security fixes, bounded privileged nft launcher, strict payload validation,
+PCP/NAT-PMP corrections and startup/recovery hardening. Documentation and
+release-snapshot cleanup preserve Router Core application source identity with the qualified
+`2e0c5afa089649a3238c543a82624075a9bc816e` baseline.
+The release also corrects the installer ELF32/ELF64 verifier (T-01) and documents
+the existing artifact-level identity contract (T-02); helper executables are unchanged.
+See [release notes](docs/release-notes.md) for actual qualification and limits.
+
 ## v0.1.0-beta.2
 
 Beta prerelease; fresh installation only. No qualified beta.1 → beta.2 in-place upgrade.

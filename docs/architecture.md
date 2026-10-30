@@ -1,11 +1,28 @@
 # DuckOS architecture
 
-> **Beta.3 implementation gap:** the new firewall and mapping adapters invoke
-> nftables directly while duck-agent retains zero capabilities and
-> NoNewPrivileges=yes. Privileged root component tests do not close this gap.
-> A bounded privileged execution design and installed-boundary qualification
-> are required; do not broaden Agent capabilities. See
-> [independent audit](qualification-beta3-final.md).
+## Beta.4 Xray Center boundary
+
+The accepted Center/node lineage is `5c1d707cd5b2e9da28eafdb67f10946a682a43de`.
+UI and CLI use authenticated public API / Engine semantics; node credentials
+are validated through bounded Agent / Center operations. Missing or corrupt
+identity state never falls back to stale credentials. Durable revocation and
+completion records survive reopen. Catalog persistence distinguishes an
+uncommitted write from an uncertain durable outcome; uncertainty stops the
+runtime rather than resurrecting stale authority.
+
+The Agent remains UID 0 with zero capabilities. SO_PEERCRED-bound launcher IPC
+and the existing nft / WireGuard / FRR privilege boundaries remain intact.
+Apple-style UI and later RC9 metadata IPC architecture are outside this release.
+See [qualification](qualification-beta4.md) for evidence boundaries.
+
+
+> **Beta.3 qualified Router Core:** the UID-0 Agent retains zero effective
+> capabilities and `NoNewPrivileges=yes`. nftables operations use the bounded
+> `duck-nft-launcher` with `CAP_NET_ADMIN` only and `NoNewPrivileges=yes`.
+> SO_PEERCRED authenticates the Unix peer; strict text/JSON validation confines
+> mutation to `inet duckos`, `inet duckos_fw`, `inet duckos_upnp`; global reads
+> are filtered server-side. Queue, connection, execution and deadline limits
+> bound resource use. See [qualification and limits](qualification-beta3-final.md).
 
 Status: target architecture; current implementation snapshot is recorded in the source tree (`internal/`) and ADRs in `docs/adr/`
 

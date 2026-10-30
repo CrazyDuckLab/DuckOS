@@ -1,9 +1,12 @@
 # DuckOS security model
 
-> **Beta.3 release gate:** zero-capability Agent execution of nftables fails.
-> The new adapters must not be described as production-qualified. A bounded,
-> authenticated privileged mechanism requires its own review and failure/recovery
-> tests before release. See [independent audit](qualification-beta3-final.md).
+> **Beta.3 qualified Router Core:** the UID-0 Agent retains zero effective
+> capabilities and `NoNewPrivileges=yes`. nftables operations use the bounded
+> `duck-nft-launcher` with `CAP_NET_ADMIN` only and `NoNewPrivileges=yes`.
+> SO_PEERCRED authenticates the Unix peer; strict text/JSON validation confines
+> mutation to `inet duckos`, `inet duckos_fw`, `inet duckos_upnp`; global reads
+> are filtered server-side. Queue, connection, execution and deadline limits
+> bound resource use. See [qualification and limits](qualification-beta3-final.md).
 
 Status: living threat model; partial identity/observation implementation
 Related decision: [ADR-0002](adr/0002-agent-privilege-boundary.md)

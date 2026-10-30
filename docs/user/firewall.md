@@ -1,30 +1,17 @@
 # Firewall
 
-DuckOS uses **nftables** as the firewall backend. The **Firewall** page
-in Full Mode shows the observed firewall state and the canonical model.
+Beta.3 uses nftables through the bounded privileged nft launcher. The UID-0
+Agent keeps zero effective capabilities. Ownership is split between
+`inet duckos` (network Safe Apply), `inet duckos_fw` (typed forward rules) and
+`inet duckos_upnp` (NAT mappings). Foreign objects are outside the mutation scope.
 
-## Concepts
+Typed rules are forward-only. Their controller keeps a durable journal, applies
+an atomic batch, checks semantic readback and requires confirmation; timeout or
+failure retains a rollback path. Empty candidates remove the owned table.
+Preserve the management interface and keep console access. The network forwarding
+guard is owned by the network Safe Apply path; do not release it manually.
 
-- **Tables** — DuckOS owns the `inet duckos` table.
-- **Chains** — `input`, `forward`, `output`, plus the
-  `duckos_apply_guard` chain that Safe Apply installs.
-- **Forwarding guard** — the temporary chain that refuses to forward
-  non-drop traffic during a Safe Apply. The guard is what makes a
-  mid-Apply state safe by construction.
-- **Policy** — a small number of canonical chains. The system does
-  not invent arbitrary chains at runtime.
-
-## Safe Apply integration
-
-Every firewall change goes through Safe Apply. The forwarding guard
-chain is installed at Apply start, the new rules are committed, the
-guard is released only after confirmation. If anything goes wrong,
-the snapshot taken at Apply start is restored.
-
-See [`safe-apply.md`](safe-apply.md) for the lifecycle and
-[`docs/architecture.md`](../architecture.md) for the firewall adapter.
-
-## What the V1 beta does NOT do
-
-- It does not yet write firewall rules through the public UI. The page
-  renders observed state.
+Kernel packet and coexistence tests are part of accepted AMD64 Router Core
+qualification. This does not qualify every UI workflow, input/output filtering,
+arbitrary policy or physical hardware. See [Safe Apply](safe-apply.md),
+[recovery](recovery.md) and [qualification](../qualification-beta3-final.md).
