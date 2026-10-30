@@ -1,6 +1,6 @@
 # DuckOS v0.1.0-beta.4 limitations
 
-**Prerelease; fresh installation only.** No beta.1/beta.2 → beta.4 in-place
+**Prerelease; the public archive installer supports fresh installation only.** No beta.1/beta.2 → beta.4 in-place
 upgrade is qualified. Do not use an installer archive as a signed `.duck` update.
 There is no public OTA channel. Keep console access and an isolated test network.
 
@@ -24,8 +24,10 @@ External-address observation has no complete multi-WAN qualification.
 Typed firewall rules are forward-only; input/output filtering and the wider
 networking/UI catalog are not qualified by that fact alone.
 
-Xray-core remains pinned to 26.3.27. Xray Center beta.4, Subscription Center,
-Stealth Admin, profile expansion and separate PPPoE/L2TP development are excluded.
+Xray-core remains pinned to 26.3.27. The accepted beta.4 Xray Center includes
+server, client, subscription and node management. Later RC9 / beta.5 interfaces,
+Stealth Admin, profile expansion beyond that checkpoint and separate PPPoE/L2TP
+development are excluded.
 Historical WireGuard, Xray and FRR beta.2 evidence is not a new full beta.4 matrix.
 
 The archive has seven service binaries, not the standalone `duck` CLI. Use the
