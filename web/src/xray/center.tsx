@@ -146,9 +146,12 @@ const en: Dict = {
   nodeGroups: "Groups",
   rotateCommitted:
     "Rotation STAGED (PENDING). Staging alone does not rotate anything: the old credential stays valid until the node pulls the staged credential and confirms it to the controller. On the node, in Bash (the credential is typed invisibly, travels only through stdin — never shell history or process arguments — and is cleared afterwards even when the command fails; replace <id> with the node ID, keeping the quotes): read -s -p 'Current node credential: ' NODE_CRED && printf '%s\\n' \"$NODE_CRED\" | duck xray nodes pull-rotation --id '<id>' --credential-stdin; unset NODE_CRED. If the input is interrupted, run unset NODE_CRED. In Zsh, replace the read part with: read -s 'NODE_CRED?Current node credential: '. Until the node confirms, this rotation can be cancelled safely.",
-  rotateStatePending: "Rotation state: PENDING (old credential still valid; node has not pulled).",
-  rotateStateDelivered: "Rotation state: DELIVERED (node pulled the staged credential; awaiting confirmation).",
-  rotateStateConfirmed: "Rotation state: CONFIRMED (controller committed; old credential invalidated).",
+  rotateStatePending:
+    "Rotation state: PENDING (old credential still valid; node has not pulled).",
+  rotateStateDelivered:
+    "Rotation state: DELIVERED (node pulled the staged credential; awaiting confirmation).",
+  rotateStateConfirmed:
+    "Rotation state: CONFIRMED (controller committed; old credential invalidated).",
   rotateCancel: "Cancel staged rotation",
   rotateCredentialOnce:
     "New node credential — copy it now; it will never be shown again.",
@@ -223,9 +226,12 @@ const ru: Dict = {
   nodeGroups: "Группы",
   rotateCommitted:
     "Ротация ОЖИДАЕТ (PENDING). Само создание стадии ничего не ротирует: старый креденшал действителен, пока узел не заберёт новый и не подтвердит его контроллеру. На узле, в Bash (креденшал вводится невидимо, передаётся только через stdin — ни в историях команд, ни в аргументах процессов — и очищается после выполнения, даже при ошибке; замените <id> на идентификатор узла, сохранив кавычки): read -s -p 'Текущий креденшал узла: ' NODE_CRED && printf '%s\\n' \"$NODE_CRED\" | duck xray nodes pull-rotation --id '<id>' --credential-stdin; unset NODE_CRED. Если ввод был прерван, выполните unset NODE_CRED. В Zsh замените часть read на: read -s 'NODE_CRED?Текущий креденшал узла: '. До подтверждения узлом ротацию можно безопасно отменить.",
-  rotateStatePending: "Состояние ротации: PENDING (старый креденшал действителен; узел ещё не забрал).",
-  rotateStateDelivered: "Состояние ротации: DELIVERED (узел забрал креденшал; ожидается подтверждение).",
-  rotateStateConfirmed: "Состояние ротации: CONFIRMED (контроллер закоммитил; старый креденшал недействителен).",
+  rotateStatePending:
+    "Состояние ротации: PENDING (старый креденшал действителен; узел ещё не забрал).",
+  rotateStateDelivered:
+    "Состояние ротации: DELIVERED (узел забрал креденшал; ожидается подтверждение).",
+  rotateStateConfirmed:
+    "Состояние ротации: CONFIRMED (контроллер закоммитил; старый креденшал недействителен).",
   rotateCancel: "Отменить отложенную ротацию",
   rotateCredentialOnce:
     "Новый креденшал узла — скопируйте сейчас; повторно показан не будет.",

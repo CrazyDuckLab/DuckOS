@@ -137,7 +137,6 @@ async function renderedGuidance(locale: (typeof locales)[number]) {
   return guidance;
 }
 
-
 // The rendered command is identical across locales except the
 // (localized) interactive prompt strings.
 const readPrompts: Record<(typeof locales)[number], string> = {
@@ -162,7 +161,7 @@ const bashTemplate = (prompt: string) =>
   "read -s -p '" +
   prompt +
   "' NODE_CRED && " +
-  'printf \'%s\\n\' "$NODE_CRED" | duck xray nodes pull-rotation ' +
+  "printf '%s\\n' \"$NODE_CRED\" | duck xray nodes pull-rotation " +
   "--id '<id>' --credential-stdin; unset NODE_CRED";
 
 describe("Rotation guidance uses the protected stdin contract", () => {
@@ -224,11 +223,10 @@ describe("Rotation guidance uses the protected stdin contract", () => {
 });
 
 describe("Rendered Bash guidance is valid, working shell", () => {
-
-    "read -s -p '" +
+  "read -s -p '" +
     prompt +
     "' NODE_CRED && " +
-    'printf \'%s\\n\' "$NODE_CRED" | duck xray nodes pull-rotation ' +
+    "printf '%s\\n' \"$NODE_CRED\" | duck xray nodes pull-rotation " +
     "--id '<id>' --credential-stdin; unset NODE_CRED";
 
   it("the Bash command passes bash -n in every locale variant", async () => {
@@ -263,7 +261,7 @@ describe("Rendered Bash guidance is valid, working shell", () => {
       stub,
       "#!/bin/bash\ncat > " +
         JSON.stringify(join(dir, "stdin.txt")) +
-        '\nprintf \'%s\\n\' "$*" > ' +
+        "\nprintf '%s\\n' \"$*\" > " +
         JSON.stringify(join(dir, "argv.txt")) +
         "\nexit " +
         duckExit +
@@ -273,7 +271,14 @@ describe("Rendered Bash guidance is valid, working shell", () => {
     const script = bashTemplate(readPrompts.en).replace("'<id>'", `'${id}'`);
     const out = execFileSync(
       "/bin/bash",
-      ["-c", 'PATH=' + JSON.stringify(dir) + ':$PATH; ' + script + '; printf \'%s\' "${NODE_CRED+SET}"'],
+      [
+        "-c",
+        "PATH=" +
+          JSON.stringify(dir) +
+          ":$PATH; " +
+          script +
+          "; printf '%s' \"${NODE_CRED+SET}\"",
+      ],
       { input: "SECRET-INPUT-VALUE\n" },
     );
     return { dir, out };

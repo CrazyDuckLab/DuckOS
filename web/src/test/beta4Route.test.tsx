@@ -27,6 +27,8 @@ for (const locale of ["en", "ru", "de", "es"] as const) {
     await waitFor(() => expect(requests.mock.calls.length).toBeGreaterThan(0));
     const paths = requests.mock.calls.map((args) => String(args[0]));
     expect(paths.some((path) => path.startsWith("/api/v1/xray"))).toBe(true);
-    expect(paths.some((path) => path.startsWith("/api/v1/objects"))).toBe(false);
+    expect(paths.some((path) => path.startsWith("/api/v1/objects"))).toBe(
+      false,
+    );
   });
 }

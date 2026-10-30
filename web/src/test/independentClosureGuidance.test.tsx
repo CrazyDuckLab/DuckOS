@@ -102,7 +102,11 @@ function nodesClient(
       } as FetchResult<unknown>);
     },
     fetchXrayRotationState: () =>
-      Promise.resolve({ ok: true, data: { state: "PENDING" }, age: 0 } as FetchResult<unknown>),
+      Promise.resolve({
+        ok: true,
+        data: { state: "PENDING" },
+        age: 0,
+      } as FetchResult<unknown>),
     xraySuspendNode: () => {
       calls.suspend = (calls.suspend ?? 0) + 1;
       return overrides.suspendFails
@@ -139,10 +143,23 @@ describe("Independent security closure guidance", () => {
   for (const locale of ["en", "ru", "de", "es"] as const) {
     it(`staged rotation guidance uses the supported safe input in ${locale}`, async () => {
       const { client } = nodesClient([activeNode]);
-      render(<XrayCenterPage page={pageStub} bundle={{} as never} client={client} locale={locale} />);
+      render(
+        <XrayCenterPage
+          page={pageStub}
+          bundle={{} as never}
+          client={client}
+          locale={locale}
+        />,
+      );
       await waitFor(() => expect(screen.getByText("edge-1")).toBeTruthy());
-      fireEvent.click(screen.getByText(locale === "ru" ? "Ротация креденшала" : "Rotate credential"));
-      await waitFor(() => expect(screen.getByText("NEW-CRED-VALUE")).toBeTruthy());
+      fireEvent.click(
+        screen.getByText(
+          locale === "ru" ? "Ротация креденшала" : "Rotate credential",
+        ),
+      );
+      await waitFor(() =>
+        expect(screen.getByText("NEW-CRED-VALUE")).toBeTruthy(),
+      );
       const guidance = screen.getByText(/pull-rotation/).textContent ?? "";
       expect(guidance).not.toMatch(/--credential(?:\s|=)/);
       expect(guidance).toContain("--credential-stdin");

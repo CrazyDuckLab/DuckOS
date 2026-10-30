@@ -102,7 +102,11 @@ function nodesClient(
       } as FetchResult<unknown>);
     },
     fetchXrayRotationState: () =>
-      Promise.resolve({ ok: true, data: { state: "PENDING" }, age: 0 } as FetchResult<unknown>),
+      Promise.resolve({
+        ok: true,
+        data: { state: "PENDING" },
+        age: 0,
+      } as FetchResult<unknown>),
     xraySuspendNode: () => {
       calls.suspend = (calls.suspend ?? 0) + 1;
       return overrides.suspendFails
