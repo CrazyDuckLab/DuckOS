@@ -73,7 +73,6 @@ func TestClosureServerProcessHelper(t *testing.T) {
 	os.Exit(0)
 }
 
-
 func TestClosureCLIHelper(t *testing.T) {
 	if os.Getenv("DUCK_FINAL_CLI_HELPER") != "1" {
 		return
