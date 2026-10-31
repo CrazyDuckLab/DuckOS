@@ -42,7 +42,8 @@ file modes and digests again before selection.
 
 Authorized beta.4 stage uploads have bounded 30-second receive and 65-second
 response deadlines; the Engine stage round trip is capped at 32 seconds, within
-the Agent server budget. Other request deadlines and byte caps are unchanged.
+the trusted Agent stage route's 35-second response budget (30 seconds to
+receive). Other request deadlines and byte caps are unchanged.
 Older beta.3 clients may report a timeout while a signed candidate finishes
 staging. Reconcile the durable candidate/status and exact trusted package before
 explicit activation; never treat an upload error as activation or blindly retry

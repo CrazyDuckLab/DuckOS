@@ -683,6 +683,18 @@ func (h *Handler) serveUpgradeStage(w http.ResponseWriter, r *http.Request) {
 		writeUpgradeProblem(w, 503, "upgrade_unavailable", "Upgrade orchestrator is not configured.")
 		return
 	}
+	// The trusted IPC peer has already passed admission. A full signed package
+	// can outlive lifecycle.Serve's 12s default response budget, just as at the
+	// public API. Keep every other Agent route on its existing deadline.
+	controller := http.NewResponseController(w)
+	if err := controller.SetReadDeadline(time.Now().Add(30 * time.Second)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+		writeUpgradeProblem(w, 503, "upgrade_unavailable", "Stage receive deadline unavailable.")
+		return
+	}
+	if err := controller.SetWriteDeadline(time.Now().Add(35 * time.Second)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+		writeUpgradeProblem(w, 503, "upgrade_unavailable", "Stage response deadline unavailable.")
+		return
+	}
 	oa.Stage(r.Context(), w, r)
 }
 
