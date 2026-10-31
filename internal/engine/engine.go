@@ -934,7 +934,21 @@ func (e *Engine) upgradeProxy(ctx context.Context, path string, payload []byte) 
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := e.client.Do(req)
+	// Full signed packages need a longer bounded stage budget than read-only
+	// observation calls. Keep the shared transport and all other operations intact.
+	client := e.client
+	if path == agent.UpgradeStagePath {
+		stageClient := *e.client
+		stageClient.Timeout = 32 * time.Second
+		if transport, ok := e.client.Transport.(*http.Transport); ok {
+			stageTransport := transport.Clone()
+			stageTransport.ResponseHeaderTimeout = 30 * time.Second
+			stageClient.Transport = stageTransport
+			defer stageTransport.CloseIdleConnections()
+		}
+		client = &stageClient
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, errors.New("Agent is unavailable")
 	}

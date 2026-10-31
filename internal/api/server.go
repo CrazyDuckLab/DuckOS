@@ -694,6 +694,18 @@ func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request) {
 			problem(w, r, 413, errorCategoryFromCode("payload_too_large"), "payload_too_large", "Stage payload exceeds the public cap.")
 			return
 		}
+		// Authentication and the declared size cap have already passed. Extend
+		// only this upload: 30s to receive, then the Engine's bounded 32s stage.
+		// Other public routes retain lifecycle.Serve's short default deadlines.
+		controller := http.NewResponseController(w)
+		if err := controller.SetReadDeadline(time.Now().Add(30 * time.Second)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+			problem(w, r, 503, errorCategoryFromCode("agent_unavailable"), "agent_unavailable", "Stage receive deadline unavailable.")
+			return
+		}
+		if err := controller.SetWriteDeadline(time.Now().Add(65 * time.Second)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+			problem(w, r, 503, errorCategoryFromCode("agent_unavailable"), "agent_unavailable", "Stage response deadline unavailable.")
+			return
+		}
 		body, err := io.ReadAll(io.LimitReader(r.Body, engine.UpgradeStageMaxBytes+1))
 		if err != nil {
 			problem(w, r, 400, errorCategoryFromCode("invalid_request"), "invalid_request", "Could not read stage payload.")

@@ -10,6 +10,7 @@ Xray Center prerelease; exact-source qualification is recorded with the GitHub r
 - Restored the intended P050 Center route, with four-locale regression coverage.
 - Retained Router Core F1–F8 security fixes and the ELF32/ELF64 installer correction.
 - Removed laboratory reports from the current source snapshot while preserving Git history.
+- Gave authorized full-package stage uploads bounded operation-specific deadlines; read-only and activation/rollback deadlines remain unchanged.
 - Fixed full signed-update payload staging: bounded gzip tar, executable helpers, explicit modes under the private supervisor umask and mode readback. Incoming size and signature gates remain enforced.
 
 See [scope and evidence](docs/qualification-beta4.md). Cross-builds do not imply physical ARM qualification.

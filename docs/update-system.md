@@ -40,6 +40,15 @@ set-id and group/world-write permissions are never propagated. Staging applies
 these modes explicitly despite the supervisor's private UMask=0077 and verifies
 file modes and digests again before selection.
 
+Authorized beta.4 stage uploads have bounded 30-second receive and 65-second
+response deadlines; the Engine stage round trip is capped at 32 seconds, within
+the Agent server budget. Other request deadlines and byte caps are unchanged.
+Older beta.3 clients may report a timeout while a signed candidate finishes
+staging. Reconcile the durable candidate/status and exact trusted package before
+explicit activation; never treat an upload error as activation or blindly retry
+an uncertain operation. API sessions are process-local: reauthenticate with the
+existing Owner account after service restart, upgrade or rollback.
+
 First enrollment of an installed beta.3 release requires an operator-controlled
 trust bootstrap: verify the beta.4 archive independently, provision its
 independent supervisor at `/usr/libexec/duckos/duck-updater`, provision the
